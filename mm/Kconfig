@@ -876,3 +876,12 @@ config MULTIPLE_KSWAPD
 	 (echo <num> > /proc/sys/vm/kswapd_threads)
 
 	 Values not in the range of 1..16 are ignored.
+
+config DIRECT_SWAPPINESS
+	bool "direct swappiness"
+	default n
+	help
+	  set direct swappiness rate, higher means more swap and slowly.
+	  echo ratio > proc/sys/vm/direct_swapiness  default_value 60
+	  cat /sys/module/memplus_core/parameters/memory_plus_enabled
+	  default_value 0

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note
+
+header-y += boot_mode.h
+header-y += op_rf_cable_monitor.h
+header-y += oem_force_dump.h
+header-y += param_rw.h
+header-y += project_info.h
+header-y += op_misc.h
+header-y += op_common.h
+header-y += op_freezer.h

@@ -2403,10 +2403,18 @@ static bool has_cpu_slab(int cpu, void *info)
 	return c->page || slub_percpu_partial(c);
 }
 
+#ifdef CONFIG_SLABTRACE_DEBUG
+void flush_all(struct kmem_cache *s)
+{
+	on_each_cpu_cond(has_cpu_slab, flush_cpu_slab, s, 1, GFP_ATOMIC);
+}
+EXPORT_SYMBOL(flush_all);
+#else
 static void flush_all(struct kmem_cache *s)
 {
 	on_each_cpu_cond(has_cpu_slab, flush_cpu_slab, s, 1, GFP_ATOMIC);
 }
+#endif
 
 /*
  * Use the cpu notifier to insure that the cpu slabs are flushed when

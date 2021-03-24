@@ -107,6 +107,7 @@ static inline void backlight_unregister_fb(struct backlight_device *bd)
 }
 #endif /* CONFIG_FB */
 
+/*
 static void backlight_generate_event(struct backlight_device *bd,
 				     enum backlight_update_reason reason)
 {
@@ -127,6 +128,7 @@ static void backlight_generate_event(struct backlight_device *bd,
 	kobject_uevent_env(&bd->dev.kobj, KOBJ_CHANGE, envp);
 	sysfs_notify(&bd->dev.kobj, NULL, "actual_brightness");
 }
+*/
 
 static ssize_t bl_power_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
@@ -193,9 +195,7 @@ int backlight_device_set_brightness(struct backlight_device *bd,
 		}
 	}
 	mutex_unlock(&bd->ops_lock);
-
-	backlight_generate_event(bd, BACKLIGHT_UPDATE_SYSFS);
-
+	//backlight_generate_event(bd, BACKLIGHT_UPDATE_SYSFS);
 	return rc;
 }
 EXPORT_SYMBOL(backlight_device_set_brightness);
@@ -331,7 +331,7 @@ void backlight_force_update(struct backlight_device *bd,
 	if (bd->ops && bd->ops->get_brightness)
 		bd->props.brightness = bd->ops->get_brightness(bd);
 	mutex_unlock(&bd->ops_lock);
-	backlight_generate_event(bd, reason);
+	//backlight_generate_event(bd, reason);
 }
 EXPORT_SYMBOL(backlight_force_update);
 

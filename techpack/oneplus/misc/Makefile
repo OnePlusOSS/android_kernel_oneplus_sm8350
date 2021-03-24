@@ -1,0 +1,17 @@
+obj-$(CONFIG_OEM_FORCE_DUMP) += oem_force_dump.o
+obj-$(CONFIG_PARAM_READ_WRITE) += param_read_write.o
+obj-$(CONFIG_PROJECT_INFO)   += project_info.o
+obj-$(CONFIG_OEM_ABOARD)   += oem_aboard.o
+obj-$(CONFIG_COMMON_SCRIPT)   += common_script.o
+obj-$(CONFIG_OEM_BOOT_MODE) += boot_mode.o
+obj-$(CONFIG_RF_CABLE_DETECT) += op_rf_cable_monitor.o
+obj-$(CONFIG_PSTORE_DEVICE_INFO) += device_info.o
+obj-$(CONFIG_BOOTLOADER_LOG)	+= bootloader_log.o
+#obj-$(CONFIG_WB_KERNEL_LOG) += wb_kernel_log.o
+obj-$(CONFIG_GPIO_SWITCH)  += gpio_switch.o
+obj-$(CONFIG_REGULATOR_DEMO)	+= regulator_demo.o
+obj-$(CONFIG_GKI_DEMO_CALL)  += gki_demo_call.o
+obj-$(CONFIG_GKI_DEMO_DEFINE)  += gki_demo_define.o
+obj-$(CONFIG_OP_CMDLINE)  += op_cmdline.o
+obj-$(CONFIG_SIM_HOLDER_DETECT) += sim_holder_detect.o
+obj-$(CONFIG_DUMP_REASON) += dump_reason.o

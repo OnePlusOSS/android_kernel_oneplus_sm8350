@@ -17,6 +17,10 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
+#include <linux/delay.h>
+#if IS_ENABLED(TECHPACK_ONEPLUS)
+#include <linux/oem/oem_force_dump.h>
+#endif
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -252,6 +256,14 @@ void kernel_restart(char *cmd)
 		pr_emerg("Restarting system\n");
 	else
 		pr_emerg("Restarting system with command '%s'\n", cmd);
+
+	if (((cmd != NULL && cmd[0] != '\0') &&
+				!strcmp(cmd, "dm-verity device corrupted"))) {
+		panic("dm-verity device corrupted force dump");
+		pr_emerg("Restarting system painc\n");
+		msleep(10000);
+	}
+
 	kmsg_dump(KMSG_DUMP_RESTART);
 	machine_restart(cmd);
 }

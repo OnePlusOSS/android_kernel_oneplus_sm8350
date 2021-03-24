@@ -135,7 +135,7 @@ _kgsl_pool_get_page(struct kgsl_page_pool *pool)
 }
 
 /* Returns the number of pages in all kgsl page pools */
-static int kgsl_pool_size_total(void)
+int kgsl_pool_size_total(void)
 {
 	int i;
 	int total = 0;

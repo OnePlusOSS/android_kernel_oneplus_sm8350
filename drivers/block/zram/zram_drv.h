@@ -86,6 +86,7 @@ struct zram_stats {
 	atomic64_t bd_count;		/* no. of pages in backing device */
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
+	atomic64_t bd_free;
 #endif
 };
 
@@ -126,4 +127,9 @@ struct zram {
 	struct dentry *debugfs_dir;
 #endif
 };
+
+void ksys_sync(void);
+#ifdef CONFIG_ZWB_HANDLE
+extern struct task_struct *zwb_clear_tsk;
+#endif
 #endif

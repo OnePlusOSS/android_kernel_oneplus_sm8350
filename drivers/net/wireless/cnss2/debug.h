@@ -44,6 +44,9 @@ extern void *cnss_ipc_log_long_context;
 					 ##__VA_ARGS__);		\
 	} while (0)
 
+#define cnss_pr_buf(_fmt, ...)						\
+	cnss_ipc_log_long_string("%scnss: " _fmt, "", ##__VA_ARGS__)	\
+
 #ifdef CONFIG_CNSS2_DEBUG
 #define CNSS_ASSERT(_condition) do {					\
 		if (!(_condition)) {					\

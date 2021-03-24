@@ -21,8 +21,18 @@
 #include <linux/pm_runtime.h>
 #include <linux/sched.h>
 #include <linux/clkdev.h>
+#include <linux/proc_fs.h>
 
 #include "clk.h"
+#include "qcom/clk-regmap.h"
+
+#ifdef CONFIG_CLK_LIST_SHOW
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/proc_fs.h>
+#include "qcom/vdd-class.h"
+#include "../soc/qcom/rpmh_master_stat.h"
+#endif
 
 static DEFINE_SPINLOCK(enable_lock);
 static DEFINE_MUTEX(prepare_lock);
@@ -32,6 +42,9 @@ static struct task_struct *enable_owner;
 
 static int prepare_refcnt;
 static int enable_refcnt;
+#if defined(CONFIG_COMMON_CLK_QCOM_DEBUG) || defined(CONFIG_CLK_LIST_SHOW)
+static unsigned int debug_suspend_flag;
+#endif
 
 static HLIST_HEAD(clk_root_list);
 static HLIST_HEAD(clk_orphan_list);
@@ -86,7 +99,7 @@ struct clk_core {
 	struct hlist_node	child_node;
 	struct hlist_head	clks;
 	unsigned int		notifier_count;
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || defined(CONFIG_CLK_LIST_SHOW)
 	struct dentry		*dentry;
 	struct hlist_node	debug_node;
 #endif
@@ -2953,10 +2966,11 @@ EXPORT_SYMBOL_GPL(clk_is_match);
 
 /***        debugfs support        ***/
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || defined(CONFIG_CLK_LIST_SHOW)
 #include <linux/debugfs.h>
 
 static struct dentry *rootdir;
+static struct proc_dir_entry *procdir;
 static int inited = 0;
 static DEFINE_MUTEX(clk_debug_lock);
 static HLIST_HEAD(clk_debug_list);
@@ -3359,7 +3373,7 @@ static void clk_debug_unregister(struct clk_core *core)
 	mutex_unlock(&clk_debug_lock);
 }
 
-#ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
+#if defined(CONFIG_COMMON_CLK_QCOM_DEBUG) || defined(CONFIG_CLK_LIST_SHOW)
 #define clock_debug_output(m, c, fmt, ...)		\
 do {							\
 	if (m)						\
@@ -3384,13 +3398,21 @@ static int clock_debug_print_clock(struct clk_core *c, struct seq_file *s)
 
 	do {
 		c = clk->core;
+#ifndef CONFIG_COMMON_CLK_QCOM_DEBUG
+		if (clk_list_rate_vdd_level(c->hw, c->rate) > 0)
+#else
 		if (c->ops->list_rate_vdd_level)
+#endif
 			clock_debug_output(s, 1, "%s%s:%u:%u [%ld, %d]", start,
 				c->name,
 				c->prepare_count,
 				c->enable_count,
 				c->rate,
+#ifndef CONFIG_COMMON_CLK_QCOM_DEBUG
+				clk_list_rate_vdd_level(c->hw, c->rate));
+#else
 				c->ops->list_rate_vdd_level(c->hw, c->rate));
+#endif
 		else
 			clock_debug_output(s, 1, "%s%s:%u:%u [%ld]", start,
 				c->name,
@@ -3455,17 +3477,49 @@ static u32 debug_suspend;
  */
 void clock_debug_print_enabled(void)
 {
-	if (likely(!debug_suspend))
-		return;
+	if (IS_ENABLED(CONFIG_DEBUG_FS)) {
+		if (likely(!debug_suspend))
+			return;
 
-	if (!mutex_trylock(&clk_debug_lock))
-		return;
+		if (!mutex_trylock(&clk_debug_lock))
+			return;
 
-	clock_debug_print_enabled_clocks(NULL);
+		clock_debug_print_enabled_clocks(NULL);
 
-	mutex_unlock(&clk_debug_lock);
+		mutex_unlock(&clk_debug_lock);
+	} else {
+		if (debug_suspend_flag == 1) {
+			pr_info("Enable debug_suspend mode: clk list.");
+			clock_debug_print_enabled_clocks(NULL);
+		} else if (debug_suspend_flag == 2) {
+			pr_info("Enable debug_suspend mode: RPMh.");
+		} else if (debug_suspend_flag == 3) {
+			pr_info("Enable debug_suspend mode: Both clk and RPMh.");
+			clock_debug_print_enabled_clocks(NULL);
+		} else
+			return;
+	}
 }
 EXPORT_SYMBOL(clock_debug_print_enabled);
+
+static ssize_t debug_suspend_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, sizeof(buf), "%d\n", debug_suspend_flag);
+}
+
+static ssize_t debug_suspend_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	if (kstrtouint(buf, 10, &debug_suspend_flag))
+		return -EINVAL;
+
+	pr_info("debug_suspend flag: %d", debug_suspend_flag);
+	return count;
+}
+
+static struct kobj_attribute debug_suspend_attribute =
+__ATTR(debug_suspend, 0644, debug_suspend_show, debug_suspend_store);
 
 static void clk_state_subtree(struct clk_core *c)
 {
@@ -3475,9 +3529,14 @@ static void clk_state_subtree(struct clk_core *c)
 	if (!c)
 		return;
 
+#ifdef CONFIG_CLK_LIST_SHOW
+	vdd_level = clk_list_rate_vdd_level(c->hw, c->rate);
+	if (vdd_level < 0)
+		vdd_level = 0;
+#else
 	if (c->ops->list_rate_vdd_level)
 		vdd_level = c->ops->list_rate_vdd_level(c->hw, c->rate);
-
+#endif
 	trace_clk_state(c->name, c->prepare_count, c->enable_count,
 						c->rate, vdd_level);
 
@@ -3527,32 +3586,42 @@ static const struct file_operations clk_state_fops = {
 static int __init clk_debug_init(void)
 {
 	struct clk_core *core;
+	int ret;
 
-	rootdir = debugfs_create_dir("clk", NULL);
+	if (IS_ENABLED(CONFIG_DEBUG_FS)) {
+		rootdir = debugfs_create_dir("clk", NULL);
 
-	debugfs_create_file("clk_summary", 0444, rootdir, &all_lists,
-			    &clk_summary_fops);
-	debugfs_create_file("clk_dump", 0444, rootdir, &all_lists,
-			    &clk_dump_fops);
-	debugfs_create_file("clk_orphan_summary", 0444, rootdir, &orphan_list,
-			    &clk_summary_fops);
-	debugfs_create_file("clk_orphan_dump", 0444, rootdir, &orphan_list,
-			    &clk_dump_fops);
+		debugfs_create_file("clk_summary", 0444, rootdir, &all_lists,
+				    &clk_summary_fops);
+		debugfs_create_file("clk_dump", 0444, rootdir, &all_lists,
+				    &clk_dump_fops);
+		debugfs_create_file("clk_orphan_summary", 0444, rootdir, &orphan_list,
+				    &clk_summary_fops);
+		debugfs_create_file("clk_orphan_dump", 0444, rootdir, &orphan_list,
+				    &clk_dump_fops);
 
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
-	debugfs_create_file("clk_enabled_list", 0444, rootdir,
-			    &clk_debug_list, &clk_enabled_list_fops);
-	debugfs_create_u32("debug_suspend", 0644, rootdir, &debug_suspend);
-	debugfs_create_file("trace_clocks", 0444, rootdir, &all_lists,
-			    &clk_state_fops);
+		debugfs_create_file("clk_enabled_list", 0444, rootdir,
+				    &clk_debug_list, &clk_enabled_list_fops);
+		debugfs_create_u32("debug_suspend", 0644, rootdir, &debug_suspend);
+		debugfs_create_file("trace_clocks", 0444, rootdir, &all_lists,
+				    &clk_state_fops);
 #endif
 
-	mutex_lock(&clk_debug_lock);
-	hlist_for_each_entry(core, &clk_debug_list, debug_node)
-		clk_debug_create_one(core, rootdir);
+		mutex_lock(&clk_debug_lock);
+		hlist_for_each_entry(core, &clk_debug_list, debug_node)
+			clk_debug_create_one(core, rootdir);
 
-	inited = 1;
-	mutex_unlock(&clk_debug_lock);
+		inited = 1;
+		mutex_unlock(&clk_debug_lock);
+	}
+
+	ret = sysfs_create_file(power_kobj, &debug_suspend_attribute.attr);
+	if (ret < 0)
+		pr_err("Failed to create debug_suspend sysfs.");
+
+	procdir = proc_mkdir("power", NULL);
+	proc_create("clk_enabled_list", 0444, procdir, &clk_enabled_list_fops);
 
 	return 0;
 }
@@ -3595,6 +3664,103 @@ static void clk_core_reparent_orphans_nolock(void)
 			__clk_core_update_orphan_hold_state(orphan);
 		}
 	}
+}
+
+static struct proc_dir_entry *proc_clkdir;
+
+static int proc_clock_rate_show(struct seq_file *file, void *data)
+{
+	struct clk_core *core = PDE_DATA(file_inode(file->file));
+	u64 val;
+
+	val = clk_get_rate(core->hw->clk);
+
+	seq_printf(file, "%d\n", val);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(proc_clock_rate);
+
+static int proc_clk_enable_count_show(struct seq_file *file, void *data)
+{
+	struct clk_core *core = PDE_DATA(file_inode(file->file));
+
+	seq_printf(file, "%d\n", core->enable_count);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(proc_clk_enable_count);
+
+static int proc_list_rates_show(struct seq_file *s, void *unused)
+{
+	struct clk_core *core = PDE_DATA(file_inode(s->file));
+	struct clk_hw *hw = core->hw;
+  	struct clk_regmap *rclk = to_clk_regmap(hw);
+  	struct clk_vdd_class_data *vdd_data = &rclk->vdd_data;
+  	struct clk_vdd_class *vdd_class = vdd_data->vdd_class;
+  	int i = 0, level;
+  	unsigned long rate, rate_max = 0;
+
+  	/* Find max frequency supported within voltage constraints. */
+  	if (!vdd_class) {
+  		rate_max = ULONG_MAX;
+  	} else {
+  		for (level = 0; level < vdd_data->num_rate_max; level++)
+  			if (vdd_data->rate_max[level])
+  				rate_max = vdd_data->rate_max[level];
+  	}
+
+  	/*
+  	 * List supported frequencies <= rate_max. Higher frequencies may
+  	 * appear in the frequency table, but are not valid and should not
+  	 * be listed.
+  	 */
+  	while (!IS_ERR_VALUE(rate = rclk->ops->list_rate(hw, i++, rate_max))) {
+  		if (rate <= 0)
+  			break;
+  		seq_printf(s, "%lu\n", rate);
+  	}
+
+  	return 0;
+}
+
+static int proc_list_rates_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, proc_list_rates_show, inode->i_private);
+}
+
+static const struct file_operations proc_list_rates_fops = {
+	.open		= proc_list_rates_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
+static int proc_add_clk(struct clk_core *core)
+{
+	struct proc_dir_entry *dentry;
+
+	if (!proc_clkdir) {
+		proc_clkdir = proc_mkdir("clk", NULL);
+		if (!proc_clkdir)
+			return -ENOMEM;
+	}
+
+	dentry = proc_mkdir(core->name, proc_clkdir);
+	if (!dentry)
+		goto out;
+
+	proc_create_data("clk_rate", 0444, dentry, &proc_clock_rate_fops, core);
+
+	proc_create_data("clk_list_rates",
+		0444, dentry, &proc_list_rates_fops, core);
+
+	proc_create_data("clk_enable_count", 0444, dentry,
+		&proc_clk_enable_count_fops, core);
+out:
+	return 0;
 }
 
 /**
@@ -3773,6 +3939,9 @@ unlock:
 		hlist_del_init(&core->child_node);
 
 	clk_prepare_unlock();
+
+	if (!strncmp("gcc_ufs_phy_axi_clk_src", core->name, 23))
+		proc_add_clk(core);
 
 	if (!ret)
 		clk_debug_register(core);

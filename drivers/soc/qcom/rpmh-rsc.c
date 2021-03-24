@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/wait.h>
 
 #include <soc/qcom/cmd-db.h>
 #include <soc/qcom/tcs.h>
@@ -127,22 +128,16 @@ static int tcs_invalidate(struct rsc_drv *drv, int type)
 
 	tcs = get_tcs_of_type(drv, type);
 
-	spin_lock(&tcs->lock);
-	if (bitmap_empty(tcs->slots, MAX_TCS_SLOTS)) {
-		spin_unlock(&tcs->lock);
+	if (bitmap_empty(tcs->slots, MAX_TCS_SLOTS))
 		return 0;
-	}
 
 	for (m = tcs->offset; m < tcs->offset + tcs->num_tcs; m++) {
-		if (!tcs_is_free(drv, m)) {
-			spin_unlock(&tcs->lock);
+		if (!tcs_is_free(drv, m))
 			return -EAGAIN;
-		}
 		write_tcs_reg_sync(drv, RSC_DRV_CMD_ENABLE, m, 0);
 		write_tcs_reg_sync(drv, RSC_DRV_CMD_WAIT_FOR_CMPL, m, 0);
 	}
 	bitmap_zero(tcs->slots, MAX_TCS_SLOTS);
-	spin_unlock(&tcs->lock);
 
 	return 0;
 }
@@ -315,6 +310,7 @@ skip:
 		spin_lock(&drv->lock);
 		clear_bit(i, drv->tcs_in_use);
 		spin_unlock(&drv->lock);
+		wake_up(&drv->tcs_wait);
 		if (req)
 			rpmh_tx_done(req, err);
 	}
@@ -396,54 +392,20 @@ static int find_free_tcs(struct tcs_group *tcs)
 	return -EBUSY;
 }
 
-static int tcs_write(struct rsc_drv *drv, const struct tcs_request *msg)
+static int claim_tcs_for_req(struct rsc_drv *drv, struct tcs_group *tcs,
+			     const struct tcs_request *msg)
 {
-	struct tcs_group *tcs;
-	int tcs_id;
-	unsigned long flags;
 	int ret;
 
-	tcs = get_tcs_for_msg(drv, msg);
-	if (IS_ERR(tcs))
-		return PTR_ERR(tcs);
-
-	spin_lock_irqsave(&tcs->lock, flags);
-	spin_lock(&drv->lock);
-	if (msg->state == RPMH_ACTIVE_ONLY_STATE && drv->in_solver_mode) {
-		ret = -EINVAL;
-		spin_unlock(&drv->lock);
-		goto done_write;
-	}
 	/*
 	 * The h/w does not like if we send a request to the same address,
 	 * when one is already in-flight or being processed.
 	 */
 	ret = check_for_req_inflight(drv, tcs, msg);
-	if (ret) {
-		spin_unlock(&drv->lock);
-		goto done_write;
-	}
+	if (ret)
+		return ret;
 
-	tcs_id = find_free_tcs(tcs);
-	if (tcs_id < 0) {
-		ret = tcs_id;
-		spin_unlock(&drv->lock);
-		goto done_write;
-	}
-
-	tcs->req[tcs_id - tcs->offset] = msg;
-	set_bit(tcs_id, drv->tcs_in_use);
-
-	if (msg->state == RPMH_ACTIVE_ONLY_STATE && tcs->type != ACTIVE_TCS)
-		enable_tcs_irq(drv, tcs_id, true);
-	spin_unlock(&drv->lock);
-
-	__tcs_buffer_write(drv, tcs_id, 0, msg);
-	__tcs_trigger(drv, tcs_id, true);
-
-done_write:
-	spin_unlock_irqrestore(&tcs->lock, flags);
-	return ret;
+	return find_free_tcs(tcs);
 }
 
 /**
@@ -458,32 +420,34 @@ done_write:
  */
 int rpmh_rsc_send_data(struct rsc_drv *drv, const struct tcs_request *msg)
 {
-	int ret;
+	struct tcs_group *tcs;
+	int tcs_id;
+	unsigned long flags;
 
-	if (!msg || !msg->cmds || !msg->num_cmds ||
-	    msg->num_cmds > MAX_RPMH_PAYLOAD) {
-		WARN_ON(1);
+	if (msg->state == RPMH_ACTIVE_ONLY_STATE && drv->in_solver_mode)
 		return -EINVAL;
-	}
 
-	do {
-		ret = tcs_write(drv, msg);
-		if (ret == -EBUSY) {
-#ifdef QCOM_RPMH_QGKI_DEBUG
-			bool irq_sts;
+	tcs = get_tcs_for_msg(drv, msg);
+	if (IS_ERR(tcs))
+		return PTR_ERR(tcs);
 
-			irq_get_irqchip_state(drv->irq, IRQCHIP_STATE_PENDING,
-					      &irq_sts);
-			pr_info_ratelimited("DRV:%s TCS Busy, retrying RPMH message send: addr=%#x interrupt status=%s\n",
-					    drv->name, msg->cmds[0].addr,
-					    irq_sts ?
-					    "PENDING" : "NOT PENDING");
-#endif /* QCOM_RPMH_QGKI_DEBUG */
-			udelay(10);
-		}
-	} while (ret == -EBUSY);
+	spin_lock_irqsave(&drv->lock, flags);
 
-	return ret;
+	wait_event_lock_irq(drv->tcs_wait,
+			(tcs_id = claim_tcs_for_req(drv, tcs, msg)) >= 0,
+			drv->lock);
+
+	tcs->req[tcs_id - tcs->offset] = msg;
+	set_bit(tcs_id, drv->tcs_in_use);
+	if (msg->state == RPMH_ACTIVE_ONLY_STATE && tcs->type != ACTIVE_TCS)
+		enable_tcs_irq(drv, tcs_id, true);
+	spin_unlock_irqrestore(&drv->lock, flags);
+
+	__tcs_buffer_write(drv, tcs_id, 0, msg);
+	__tcs_trigger(drv, tcs_id, true);
+
+	return 0;
+
 }
 
 static int find_match(const struct tcs_group *tcs, const struct tcs_cmd *cmd,
@@ -548,19 +512,16 @@ static int tcs_ctrl_write(struct rsc_drv *drv, const struct tcs_request *msg)
 {
 	struct tcs_group *tcs;
 	int tcs_id = 0, cmd_id = 0;
-	unsigned long flags;
 	int ret;
 
 	tcs = get_tcs_for_msg(drv, msg);
 	if (IS_ERR(tcs))
 		return PTR_ERR(tcs);
 
-	spin_lock_irqsave(&tcs->lock, flags);
 	/* find the TCS id and the command in the TCS to write to */
 	ret = find_slots(tcs, msg, &tcs_id, &cmd_id);
 	if (!ret)
 		__tcs_buffer_write(drv, tcs_id, cmd_id, msg);
-	spin_unlock_irqrestore(&tcs->lock, flags);
 
 	return ret;
 }
@@ -829,7 +790,6 @@ static int rpmh_probe_tcs_config(struct platform_device *pdev,
 		tcs->type = tcs_cfg[i].type;
 		tcs->num_tcs = tcs_cfg[i].n;
 		tcs->ncpt = ncpt;
-		spin_lock_init(&tcs->lock);
 
 		if (!tcs->num_tcs || tcs->type == CONTROL_TCS)
 			continue;
@@ -902,6 +862,7 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 
 	spin_lock_init(&drv->lock);
 	drv->in_solver_mode = false;
+	init_waitqueue_head(&drv->tcs_wait);
 	bitmap_zero(drv->tcs_in_use, MAX_TCS_NR);
 
 	irq = platform_get_irq(pdev, drv->id);

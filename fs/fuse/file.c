@@ -33,10 +33,15 @@ static struct page **fuse_pages_alloc(unsigned int npages, gfp_t flags,
 }
 
 static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
-			  int opcode, struct fuse_open_out *outargp)
+			  int opcode, struct fuse_open_out *outargp,
+			  struct fuse_shortcircuit *sct)
 {
 	struct fuse_open_in inarg;
 	FUSE_ARGS(args);
+	int ret;
+#ifdef CONFIG_FUSE_DECOUPLING
+	char *iname = NULL;
+#endif
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.flags = file->f_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
@@ -51,7 +56,20 @@ static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
 	args.out_args[0].size = sizeof(*outargp);
 	args.out_args[0].value = outargp;
 
-	return fuse_simple_request(fc, &args);
+#ifdef CONFIG_FUSE_DECOUPLING
+	if (opcode == FUSE_OPEN)
+		iname = inode_name(file_inode(file));
+	args.iname = iname;
+#endif
+
+	ret = fuse_simple_request(fc, &args);
+#ifdef CONFIG_FUSE_DECOUPLING
+	if (args.iname)
+		__putname(args.iname);
+#endif
+	*sct = args.sct;
+
+	return ret;
 }
 
 struct fuse_release_args {
@@ -144,14 +162,15 @@ int fuse_do_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
 	/* Default for no-open */
 	ff->open_flags = FOPEN_KEEP_CACHE | (isdir ? FOPEN_CACHE_DIR : 0);
 	if (isdir ? !fc->no_opendir : !fc->no_open) {
+		struct fuse_shortcircuit sct;
 		struct fuse_open_out outarg;
 		int err;
 
-		err = fuse_send_open(fc, nodeid, file, opcode, &outarg);
+		err = fuse_send_open(fc, nodeid, file, opcode, &outarg, &sct);
 		if (!err) {
 			ff->fh = outarg.fh;
 			ff->open_flags = outarg.open_flags;
-
+			ff->sct = sct;
 		} else if (err != -ENOSYS) {
 			fuse_file_free(ff);
 			return err;
@@ -280,6 +299,8 @@ void fuse_release_common(struct file *file, bool isdir)
 	struct fuse_file *ff = file->private_data;
 	struct fuse_release_args *ra = ff->release_args;
 	int opcode = isdir ? FUSE_RELEASEDIR : FUSE_RELEASE;
+
+	fuse_shortcircuit_release(ff);
 
 	fuse_prepare_release(fi, ff, file->f_flags, opcode);
 
@@ -1572,7 +1593,9 @@ static ssize_t fuse_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (is_bad_inode(file_inode(file)))
 		return -EIO;
 
-	if (!(ff->open_flags & FOPEN_DIRECT_IO))
+	if (ff->sct.filp)
+		return fuse_shortcircuit_read_iter(iocb, to);
+	else if (!(ff->open_flags & FOPEN_DIRECT_IO))
 		return fuse_cache_read_iter(iocb, to);
 	else
 		return fuse_direct_read_iter(iocb, to);
@@ -1586,7 +1609,9 @@ static ssize_t fuse_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (is_bad_inode(file_inode(file)))
 		return -EIO;
 
-	if (!(ff->open_flags & FOPEN_DIRECT_IO))
+	if (ff->sct.filp)
+		return fuse_shortcircuit_write_iter(iocb, from);
+	else if (!(ff->open_flags & FOPEN_DIRECT_IO))
 		return fuse_cache_write_iter(iocb, from);
 	else
 		return fuse_direct_write_iter(iocb, from);
@@ -2300,7 +2325,9 @@ static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct fuse_file *ff = file->private_data;
 
-	if (ff->open_flags & FOPEN_DIRECT_IO) {
+	if (ff->sct.filp)
+		return fuse_shortcircuit_mmap(file, vma);
+	else if (ff->open_flags & FOPEN_DIRECT_IO) {
 		/* Can't provide the coherency needed for MAP_SHARED */
 		if (vma->vm_flags & VM_MAYSHARE)
 			return -ENODEV;

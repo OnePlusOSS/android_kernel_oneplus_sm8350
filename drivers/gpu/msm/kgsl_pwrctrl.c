@@ -14,6 +14,9 @@
 #include "kgsl_pwrscale.h"
 #include "kgsl_sysfs.h"
 #include "kgsl_trace.h"
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
 #include "kgsl_util.h"
 
 #define UPDATE_BUSY_VAL		1000000
@@ -1603,6 +1606,10 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 	pm_runtime_enable(&pdev->dev);
 
 	timer_setup(&pwr->minbw_timer, kgsl_minbw_timer, 0);
+
+#ifdef CONFIG_HOUSTON
+	ht_register_kgsl_pwrctrl(pwr);
+#endif
 
 	return 0;
 }

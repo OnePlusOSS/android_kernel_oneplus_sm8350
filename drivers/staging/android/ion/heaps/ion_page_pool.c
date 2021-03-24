@@ -28,6 +28,10 @@ static void ion_page_pool_free_pages(struct ion_page_pool *pool,
 static void ion_page_pool_add(struct ion_page_pool *pool, struct page *page)
 {
 	mutex_lock(&pool->mutex);
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	zone_page_state_add(1L << pool->order, page_zone(page),
+			    NR_IONCACHE_PAGES);
+#endif
 	if (PageHighMem(page)) {
 		list_add_tail(&page->lru, &pool->high_items);
 		pool->high_count++;
@@ -54,6 +58,11 @@ static struct page *ion_page_pool_remove(struct ion_page_pool *pool, bool high)
 		page = list_first_entry(&pool->low_items, struct page, lru);
 		pool->low_count--;
 	}
+
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	zone_page_state_add(-(1L << pool->order), page_zone(page),
+			    NR_IONCACHE_PAGES);
+#endif
 
 	list_del(&page->lru);
 	mod_node_page_state(page_pgdat(page), NR_KERNEL_MISC_RECLAIMABLE,

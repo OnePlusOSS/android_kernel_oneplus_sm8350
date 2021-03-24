@@ -632,8 +632,8 @@ int hh_rm_console_write(hh_vmid_t vmid, const char *buf, size_t size)
 	kfree(req_payload);
 
 	if (IS_ERR(resp)) {
-		pr_err("%s: Unable to send CONSOLE_WRITE to RM: %d\n", __func__,
-			PTR_ERR(resp));
+		//pr_err("%s: Unable to send CONSOLE_WRITE to RM: %d\n", __func__,
+			//PTR_ERR(resp));
 		return PTR_ERR(resp);
 	}
 

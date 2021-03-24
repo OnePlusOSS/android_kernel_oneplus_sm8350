@@ -45,6 +45,8 @@
 #include <linux/swapops.h>
 #include <linux/swap_cgroup.h>
 
+#include <linux/suspend.h>
+
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
 static void free_swap_count_continuations(struct swap_info_struct *);
@@ -86,7 +88,11 @@ PLIST_HEAD(swap_active_head);
  * is held and the locking order requires swap_lock to be taken
  * before any swap_info_struct->lock.
  */
+#ifdef CONFIG_MEMEX_STANDALONE
+struct plist_head *swap_avail_heads;
+#else
 static struct plist_head *swap_avail_heads;
+#endif
 static DEFINE_SPINLOCK(swap_avail_lock);
 
 struct swap_info_struct *swap_info[MAX_SWAPFILES];
@@ -98,6 +104,10 @@ static DECLARE_WAIT_QUEUE_HEAD(proc_poll_wait);
 static atomic_t proc_poll_event = ATOMIC_INIT(0);
 
 atomic_t nr_rotate_swap = ATOMIC_INIT(0);
+
+static struct notifier_block pm_notifier;
+char swapoff_flag;
+static DEFINE_SPINLOCK(swapoff_lock);
 
 static struct swap_info_struct *swap_type_to_swap_info(int type)
 {
@@ -2539,6 +2549,10 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	if (IS_ERR(victim))
 		goto out;
 
+	spin_lock(&swapoff_lock);
+	swapoff_flag |= 0x01;
+	spin_unlock(&swapoff_lock);
+
 	mapping = victim->f_mapping;
 	spin_lock(&swap_lock);
 	plist_for_each_entry(p, &swap_active_head, list) {
@@ -2687,6 +2701,9 @@ out_dput:
 	filp_close(victim, NULL);
 out:
 	putname(pathname);
+	spin_lock(&swapoff_lock);
+	swapoff_flag &= 0x00;
+	spin_unlock(&swapoff_lock);
 	return err;
 }
 
@@ -3766,9 +3783,27 @@ void mem_cgroup_throttle_swaprate(struct mem_cgroup *memcg, int node,
 }
 #endif
 
+static int swapoff_pm_notifier(struct notifier_block *notifier, unsigned long pm_event, void *unused)
+{
+	switch (pm_event) {
+	case PM_SUSPEND_PREPARE:
+		spin_lock(&swapoff_lock);
+		if (swapoff_flag & 0x01) {
+			pr_info("stop suspending until swapoff is done");
+			spin_unlock(&swapoff_lock);
+			return NOTIFY_BAD;
+		}
+		spin_unlock(&swapoff_lock);
+	default:
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
 static int __init swapfile_init(void)
 {
 	int nid;
+	int retval;
 
 	swap_avail_heads = kmalloc_array(nr_node_ids, sizeof(struct plist_head),
 					 GFP_KERNEL);
@@ -3779,6 +3814,11 @@ static int __init swapfile_init(void)
 
 	for_each_node(nid)
 		plist_head_init(&swap_avail_heads[nid]);
+
+	pm_notifier.notifier_call = swapoff_pm_notifier;
+	retval = register_pm_notifier(&pm_notifier);
+	if (retval)
+		pr_err("swap error registering pm notifier %d\n", retval);
 
 	return 0;
 }

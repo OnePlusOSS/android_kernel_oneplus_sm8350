@@ -4,6 +4,51 @@
  */
 
 #include "nfc_common.h"
+#define BUF_NFC_SIZE 1024
+
+
+
+
+
+
+static ssize_t nfc_ven_store(struct device *dev, struct device_attribute *attr,const char *buf, size_t size)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct nfc_dev *nfc_dev = i2c_get_clientdata(client);
+
+	pr_debug("%s : enter", __func__);
+	if (gpio_get_value(nfc_dev->gpio.ven)) {
+		gpio_set_value(nfc_dev->gpio.ven, 0);
+		pr_info("%s : set ven low\n", __func__);
+	} else {
+		gpio_set_value(nfc_dev->gpio.ven, 1);
+		pr_info("%s : set ven high\n", __func__);
+	}
+    return size;
+}
+
+static DEVICE_ATTR(nfc_ven, 0200, NULL, nfc_ven_store);
+
+static ssize_t hw_info_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	int result = 1;
+	int ret = 0;
+	struct i2c_client *client = to_i2c_client(dev);
+	struct nfc_dev *nfc_dev = i2c_get_clientdata(client);
+
+	pr_info("%s :i2c check enter\n", __func__);
+	result = nfcc_hw_check(nfc_dev);
+	ret = scnprintf(buf, BUF_NFC_SIZE, "%d\n", result ? 0 : 1);
+	return ret;
+}
+static ssize_t hw_info_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t len)
+{
+	return 0;
+}
+
+static DEVICE_ATTR(hw_info, 0644, hw_info_show, hw_info_store);
 
 /**
  * i2c_disable_irq()
@@ -365,13 +410,14 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		pr_err("LDO config failed\n");
 		goto err_ldo_config_failed;
 	}
-
-	ret = nfcc_hw_check(nfc_dev);
-	if (ret) {
-		pr_err("nfc hw check failed ret %d\n", ret);
-		goto err_nfcc_hw_check;
-	}
-
+	//ret = nfcc_hw_check(nfc_dev);
+	//if (ret) {
+	//	pr_err("nfc hw check failed ret %d\n", ret);
+	//	goto err_nfcc_hw_check;
+	//}
+	nfc_dev->nqx_info.info.chip_type = NFCC_SN100_B;
+	device_create_file(&client->dev, &dev_attr_hw_info);
+	device_create_file(&client->dev,&dev_attr_nfc_ven);
 	device_init_wakeup(&client->dev, true);
 	i2c_dev->irq_wake_up = false;
 	nfc_dev->is_ese_session_active = false;
@@ -379,11 +425,6 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	pr_info("%s success\n", __func__);
 	return 0;
 
-err_nfcc_hw_check:
-	if (nfc_dev->reg) {
-		nfc_ldo_unvote(nfc_dev);
-		regulator_put(nfc_dev->reg);
-	}
 err_ldo_config_failed:
 	free_irq(client->irq, nfc_dev);
 err_nfc_misc_remove:

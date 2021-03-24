@@ -1808,19 +1808,18 @@ static void ufshcd_parse_pm_levels(struct ufs_hba *hba)
 static void ufs_qcom_override_pa_h8time(struct ufs_hba *hba)
 {
 	int ret;
-	u32 loc_tx_h8time_cap = 0;
+	u32 pa_h8time = 0;
 
-	ret = ufshcd_dme_get(hba, UIC_ARG_MIB_SEL(TX_HIBERN8TIME_CAPABILITY,
-				UIC_ARG_MPHY_TX_GEN_SEL_INDEX(0)),
-				&loc_tx_h8time_cap);
+	ret = ufshcd_dme_get(hba, UIC_ARG_MIB(PA_HIBERN8TIME),
+				&pa_h8time);
 	if (ret) {
-		dev_err(hba->dev, "Failed getting max h8 time: %d\n", ret);
+		dev_err(hba->dev, "Failed getting PA_HIBERN8TIME time: %d\n", ret);
 		return;
 	}
 
 	/* 1 implies 100 us */
 	ret = ufshcd_dme_set(hba, UIC_ARG_MIB(PA_HIBERN8TIME),
-				loc_tx_h8time_cap + 1);
+				pa_h8time + 1);
 	if (ret)
 		dev_err(hba->dev, "Failed updating PA_HIBERN8TIME: %d\n", ret);
 
@@ -2186,6 +2185,7 @@ static void ufs_qcom_save_host_ptr(struct ufs_hba *hba)
  * It will read the opcode, idn and buf_length parameters, and, put the
  * response in the buffer field while updating the used size in buf_length.
  */
+#if !defined(CONFIG_UFSFEATURE)
 static int
 ufs_qcom_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 {
@@ -2425,6 +2425,7 @@ ufs_qcom_ioctl(struct scsi_device *dev, unsigned int cmd, void __user *buffer)
 
 	return err;
 }
+#endif
 
 static int tag_to_cpu(struct ufs_hba *hba, unsigned int tag)
 {
@@ -2834,6 +2835,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 
 	ufs_qcom_init_sysfs(hba);
 
+#if !defined(CONFIG_UFSFEATURE)
 	/* Provide SCSI host ioctl API */
 	hba->host->hostt->ioctl = (int (*)(struct scsi_device *, unsigned int,
 				   void __user *))ufs_qcom_ioctl;
@@ -2841,6 +2843,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	hba->host->hostt->compat_ioctl = (int (*)(struct scsi_device *,
 					  unsigned int,
 					  void __user *))ufs_qcom_ioctl;
+#endif
 #endif
 
 	ufs_qcom_save_host_ptr(hba);

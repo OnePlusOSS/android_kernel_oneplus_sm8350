@@ -80,6 +80,10 @@ static inline void totalram_pages_set(long val)
 extern void * high_memory;
 extern int page_cluster;
 
+#ifdef CONFIG_GLOOM_VA_FEATURE
+extern unsigned long dbg_pm[8];
+#endif
+
 #ifdef CONFIG_SYSCTL
 extern int sysctl_legacy_va_layout;
 #else

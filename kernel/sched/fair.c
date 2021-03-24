@@ -27,6 +27,33 @@
 
 #include "walt.h"
 
+#ifdef CONFIG_OPCHAIN
+#include <oneplus/uxcore/opchain_helper.h>
+#endif /*CONFIG_OPCHAIN*/
+
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+#include <linux/oem/oneplus_healthinfo.h>
+#endif
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
+#ifdef CONFIG_TPP
+#include <linux/oem/tpp.h>
+#endif
+#ifdef CONFIG_IM
+#include <linux/oem/im.h>
+#endif
+#ifdef CONFIG_CONTROL_CENTER
+#include <linux/oem/control_center.h>
+#endif
+#ifdef CONFIG_TPD
+#include <linux/oem/tpd.h>
+#endif
+
+#ifdef CONFIG_ONEPLUS_FG_OPT
+extern unsigned int ht_fuse_boost;
+#endif
+
 #ifdef CONFIG_SMP
 static inline bool task_fits_max(struct task_struct *p, int cpu);
 #endif /* CONFIG_SMP */
@@ -47,6 +74,12 @@ static inline bool task_fits_max(struct task_struct *p, int cpu);
 unsigned int sysctl_sched_latency			= 6000000ULL;
 static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+extern void ohm_schedstats_record(int sched_type, struct task_struct *task, u64 delta);
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+extern void  update_stuck_trace_info(struct task_struct *tsk, int trace_type, unsigned int cpu, u64 delta);
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 /*
  * The initial- and re-scaling of tunables is configurable
  *
@@ -581,6 +614,36 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 #endif
 }
 
+#ifdef CONFIG_UXCHAIN
+static u64 get_min_vruntime(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	struct rb_node *leftmost = rb_first_cached(&cfs_rq->tasks_timeline);
+
+	u64 vruntime = cfs_rq->min_vruntime;
+
+	if (curr) {
+		if (curr->on_rq)
+			vruntime = curr->vruntime;
+		else
+			curr = NULL;
+	}
+
+	if (leftmost) {
+		struct sched_entity *se;
+
+		se = rb_entry(leftmost, struct sched_entity, run_node);
+
+		if (!curr)
+			vruntime = se->vruntime;
+		else
+			vruntime = min_vruntime(vruntime, se->vruntime);
+	}
+
+	return min_vruntime(cfs_rq->min_vruntime, vruntime);
+}
+#endif
+
 /*
  * Enqueue an entity into the rb-tree:
  */
@@ -857,6 +920,10 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	struct sched_entity *curr = cfs_rq->curr;
 	u64 now = rq_clock_task(rq_of(cfs_rq));
 	u64 delta_exec;
+#ifdef CONFIG_ONEPLUS_TASKLOAD_INFO
+	u64 window_index = sample_window.window_index;
+	bool index = ODD(window_index);
+#endif
 
 	if (unlikely(!curr))
 		return;
@@ -879,9 +946,42 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	if (entity_is_task(curr)) {
 		struct task_struct *curtask = task_of(curr);
 
+#ifdef CONFIG_ONEPLUS_TASKLOAD_INFO
+		if (window_index != curtask->tli[index].task_sample_index) {
+			curtask->tli[index].task_sample_index = window_index;
+			curtask->tli[index].write_bytes = 0;
+			curtask->tli[index].read_bytes = 0;
+			if (current_is_fg()) {
+				curtask->tli[index].runtime[1] = delta_exec;
+				curtask->tli[index].runtime[0] = 0;
+			} else {
+				curtask->tli[index].runtime[0] = delta_exec;
+				curtask->tli[index].runtime[1] = 0;
+			}
+			curtask->tli[index].tli_overload_flag = 0;
+		} else {
+			if (current_is_fg()) {
+				curtask->tli[index].runtime[1] += delta_exec;
+				if (curtask->tli[index].runtime[1] >
+					ohm_runtime_thresh_fg)
+					curtask->tli[index].tli_overload_flag |=
+						TASK_CPU_OVERLOAD_FG_FLAG;
+			} else {
+				curtask->tli[index].runtime[0] += delta_exec;
+				if (curtask->tli[index].runtime[0] >
+					ohm_runtime_thresh_bg)
+					curtask->tli[index].tli_overload_flag |=
+						TASK_CPU_OVERLOAD_BG_FLAG;
+			}
+		}
+#endif
+
 		trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
 		cgroup_account_cputime(curtask, delta_exec);
 		account_group_exec_runtime(curtask, delta_exec);
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+		update_stuck_trace_info(curtask, STUCK_TRACE_RUNNING, cpu_of(rq_of(cfs_rq)), delta_exec);
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 	}
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
@@ -932,6 +1032,9 @@ update_stats_wait_end(struct cfs_rq *cfs_rq, struct sched_entity *se)
 			__schedstat_set(se->statistics.wait_start, delta);
 			return;
 		}
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+		update_stuck_trace_info(p, STUCK_TRACE_RUNNABLE, 0, delta);
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 		trace_sched_stat_wait(p, delta);
 	}
 
@@ -940,6 +1043,10 @@ update_stats_wait_end(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	__schedstat_inc(se->statistics.wait_count);
 	__schedstat_add(se->statistics.wait_sum, delta);
 	__schedstat_set(se->statistics.wait_start, 0);
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	ohm_schedstats_record(OHM_SCHED_SCHEDLATENCY,
+			current, (delta >> 20));
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 }
 
 static inline void
@@ -972,6 +1079,9 @@ update_stats_enqueue_sleeper(struct cfs_rq *cfs_rq, struct sched_entity *se)
 		if (tsk) {
 			account_scheduler_latency(tsk, delta >> 10, 1);
 			trace_sched_stat_sleep(tsk, delta);
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			update_stuck_trace_info(tsk, STUCK_TRACE_SSTATE, 0, delta);
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 		}
 	}
 	if (block_start) {
@@ -991,8 +1101,20 @@ update_stats_enqueue_sleeper(struct cfs_rq *cfs_rq, struct sched_entity *se)
 				__schedstat_add(se->statistics.iowait_sum, delta);
 				__schedstat_inc(se->statistics.iowait_count);
 				trace_sched_stat_iowait(tsk, delta);
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+				ohm_schedstats_record(OHM_SCHED_IOWAIT,
+						current, (delta >> 20));
+#endif/*CONFIG_ONEPLUS_HEALTHINFO*/
+
 			}
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			if (!tsk->in_iowait)
+				ohm_schedstats_record(OHM_SCHED_DSTATE, tsk, (delta >> 20));
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			update_stuck_trace_info(tsk, STUCK_TRACE_DSTATE, 0, delta);
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 			trace_sched_stat_blocked(tsk, delta);
 			trace_sched_blocked_reason(tsk);
 
@@ -3859,6 +3981,15 @@ bias_to_this_cpu(struct task_struct *p, int cpu, int start_cpu)
 	bool start_cap_test = (capacity_orig_of(cpu) >=
 					capacity_orig_of(start_cpu));
 
+#ifdef CONFIG_TPD
+	cpumask_t mask = CPU_MASK_ALL;
+
+	if (is_tpd_enable() && is_tpd_task(p)) {
+		tpd_mask(p, &mask);
+		base_test = cpumask_test_cpu(cpu, &mask) && cpu_active(cpu);
+	}
+#endif
+
 	return base_test && start_cap_test;
 }
 
@@ -3923,6 +4054,9 @@ struct find_best_target_env {
 	int end_index;
 	bool strict_max;
 	int skip_cpu;
+#ifdef CONFIG_OPCHAIN
+	int op_path;
+#endif /*CONFIG_OPCHAIN*/
 };
 
 static inline bool prefer_spread_on_idle(int cpu, bool new_ilb)
@@ -4166,6 +4300,9 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
 	bool renorm = !(flags & ENQUEUE_WAKEUP) || (flags & ENQUEUE_MIGRATED);
 	bool curr = cfs_rq->curr == se;
+#ifdef CONFIG_UXCHAIN
+	bool boost_flag = 0;
+#endif
 
 	/*
 	 * If we're the current task, we must renormalise before calling
@@ -4185,6 +4322,49 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	if (renorm && !curr)
 		se->vruntime += cfs_rq->min_vruntime;
 
+#ifdef CONFIG_UXCHAIN
+	if (entity_is_task(se) && sysctl_uxchain_enabled) {
+		struct task_struct *tsk = task_of(se);
+#ifdef CONFIG_OPCHAIN
+		if (is_opc_task(tsk, UT_FORE) && !tsk->dynamic_ux)
+			tsk->dynamic_ux = 1;
+#endif
+
+
+#ifdef CONFIG_UXCHAIN_V2
+		if (tsk->static_ux || tsk->dynamic_ux || tsk->fork_by_static_ux || tsk->ux_once) {
+			u64 raw_vruntime;
+			u64 min_vruntime;
+
+			raw_vruntime = se->vruntime;
+			min_vruntime = get_min_vruntime(cfs_rq);
+			se->vruntime = min_vruntime -
+				(sysctl_sched_wakeup_granularity << 3);
+			if (raw_vruntime > se->vruntime)
+				se->vruntime_minus = raw_vruntime - se->vruntime;
+			boost_flag = 1;
+			if (tsk->fork_by_static_ux)
+				tsk->fork_by_static_ux = 0;
+			if (tsk->ux_once)
+				tsk->ux_once = 0;
+		}
+#else
+		if (tsk->static_ux || tsk->dynamic_ux) {
+			u64 raw_vruntime;
+			u64 min_vruntime;
+
+			raw_vruntime = se->vruntime;
+			min_vruntime = get_min_vruntime(cfs_rq);
+			se->vruntime = min_vruntime -
+				(sysctl_sched_wakeup_granularity << 3);
+			if (raw_vruntime > se->vruntime)
+				se->vruntime_minus = raw_vruntime - se->vruntime;
+			boost_flag = 1;
+		}
+#endif
+	}
+#endif
+
 	/*
 	 * When enqueuing a sched_entity, we must:
 	 *   - Update loads to have both entity and cfs_rq synced with now.
@@ -4198,8 +4378,13 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	enqueue_runnable_load_avg(cfs_rq, se);
 	account_entity_enqueue(cfs_rq, se);
 
+#ifdef CONFIG_UXCHAIN
+	if (flags & ENQUEUE_WAKEUP && !boost_flag)
+		place_entity(cfs_rq, se, 0);
+#else
 	if (flags & ENQUEUE_WAKEUP)
 		place_entity(cfs_rq, se, 0);
+#endif
 
 	check_schedstat_required();
 	update_stats_enqueue(cfs_rq, se, flags);
@@ -4295,6 +4480,22 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	se->on_rq = 0;
 	account_entity_dequeue(cfs_rq, se);
 
+#ifdef CONFIG_UXCHAIN
+	if (entity_is_task(se) && sysctl_uxchain_enabled) {
+		struct task_struct *tsk = task_of(se);
+
+		if ((tsk->static_ux || tsk->dynamic_ux) &&
+			se->vruntime_minus > 0){
+			se->vruntime += se->vruntime_minus;
+			se->vruntime_minus = 0;
+		}
+#ifdef CONFIG_OPCHAIN
+		if (is_opc_task(tsk, UT_FORE) && tsk->dynamic_ux)
+			tsk->dynamic_ux = 0;
+#endif
+	}
+#endif
+
 	/*
 	 * Normalize after update_curr(); which will also have moved
 	 * min_vruntime if @se is the one holding it back. But before doing
@@ -4328,6 +4529,18 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 	unsigned long ideal_runtime, delta_exec;
 	struct sched_entity *se;
 	s64 delta;
+
+#ifdef CONFIG_UXCHAIN
+	if (entity_is_task(curr) && sysctl_uxchain_enabled) {
+		struct task_struct *tsk = task_of(curr);
+		u64 wallclock = sched_ktime_clock();
+
+		if ((tsk->static_ux || tsk->dynamic_ux) &&
+			(sysctl_launcher_boost_enabled ||
+			wallclock - tsk->oncpu_time < PREEMPT_DISABLE_NS))
+			return;
+	}
+#endif
 
 	ideal_runtime = sched_slice(cfs_rq, curr);
 	delta_exec = curr->sum_exec_runtime - curr->prev_sum_exec_runtime;
@@ -5446,6 +5659,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int idle_h_nr_running = task_has_idle_policy(p);
 
+#ifdef CONFIG_OPCHAIN
+	opc_task_switch(true, cpu_of(rq), p, 0);
+#endif
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
 	 * the cfs_rq utilization to select a frequency.
@@ -5543,6 +5759,9 @@ enqueue_throttle:
 	assert_list_leaf_cfs_rq(rq);
 
 	hrtick_update(rq);
+#ifdef CONFIG_TPP
+	tpp_enqueue(cpu_of(rq), p);
+#endif /* CONFIG_TPP */
 }
 
 static void set_next_buddy(struct sched_entity *se);
@@ -5558,6 +5777,9 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int task_sleep = flags & DEQUEUE_SLEEP;
 	int idle_h_nr_running = task_has_idle_policy(p);
+#ifdef CONFIG_OPCHAIN
+	opc_task_switch(false, cpu_of(rq), p, rq->clock);
+#endif /*CONFIG_OPCHAIN*/
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -5608,6 +5830,9 @@ dequeue_throttle:
 
 	util_est_dequeue(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
+#ifdef CONFIG_TPP
+	tpp_dequeue(cpu_of(rq), p);
+#endif /* CONFIG_TPP */
 }
 
 #ifdef CONFIG_SMP
@@ -6525,6 +6750,29 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 	if (num_sched_clusters <= 1)
 		return;
 
+#if defined(CONFIG_CONTROL_CENTER) && defined(CONFIG_IM)
+	if ((im_rendering(p)) &&
+			im_render_grouping_enable() &&
+			ccdm_get_hint(CCDM_TB_PLACE_BOOST) &&
+			task_util(p) > ccdm_get_min_util_threshold()) {
+		*order_index = 1;
+		return;
+	}
+#endif
+#ifdef CONFIG_IM
+	if (im_hwuiEx(p)) {
+		*order_index = 1;
+		return;
+	}
+#endif
+
+#ifdef CONFIG_ONEPLUS_FG_OPT
+	if (ht_fuse_boost && p->fuse_boost) {
+		*order_index = 1;
+		return;
+	}
+#endif
+
 	if (task_boost > TASK_BOOST_ON_MID) {
 		*order_index = num_sched_clusters - 1;
 		return;
@@ -6548,6 +6796,12 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 	}
 
 	*order_index = i;
+
+#ifdef CONFIG_TPD
+	if ((is_dynamic_tpd_task(p) || is_tpd_task(p)) && is_tpd_enable()) {
+		*order_index = tpd_suggested(p, *order_index);
+	}
+#endif
 }
 
 enum fastpaths {
@@ -6578,6 +6832,7 @@ static void walt_find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 	bool rtg_high_prio_task = task_rtg_high_prio(p);
 	cpumask_t visit_cpus;
 	bool io_task_pack = (order_index > 0 && p->in_iowait);
+	cpumask_t new_allowed_cpus;
 
 	/* Find start CPU based on boost value */
 	start_cpu = fbt_env->start_cpu;
@@ -6602,14 +6857,37 @@ static void walt_find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 			goto out;
 		}
 	}
+
+	cpumask_copy(&new_allowed_cpus, &p->cpus_mask);
+
+#ifdef CONFIG_TPD
+	if (is_tpd_enable() && is_tpd_task(p)) {
+		tpd_mask(p,&new_allowed_cpus);
+	}
+#endif
 	for (cluster = 0; cluster < num_sched_clusters; cluster++) {
-		cpumask_and(&visit_cpus, &p->cpus_mask,
+		cpumask_and(&visit_cpus, &new_allowed_cpus,
 				&cpu_array[order_index][cluster]);
 		for_each_cpu(i, &visit_cpus) {
 			unsigned long capacity_orig = capacity_orig_of(i);
 			unsigned long wake_util, new_util, new_util_cuml;
 			long spare_cap;
 			int idle_idx = INT_MAX;
+
+#ifdef CONFIG_UXCHAIN
+			if (current->static_ux == 1 &&
+				current->group_leader == current && sysctl_uxchain_enabled &&
+				sysctl_launcher_boost_enabled && i == smp_processor_id())
+				continue;
+
+			if (sysctl_uxchain_enabled && ux_thread(p)) {
+				struct rq *rq = cpu_rq(i);
+				struct task_struct *tsk = rq->curr;
+
+				if (ux_thread(tsk) || tsk->normal_prio <= 100)
+					continue;
+			}
+#endif
 
 			trace_sched_cpu_util(i);
 
@@ -6638,7 +6916,12 @@ static void walt_find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 			 * so prev_cpu will receive a negative bias due to the double
 			 * accounting. However, the blocked utilization may be zero.
 			 */
+#ifdef CONFIG_OPCHAIN
+			wake_util = opc_cpu_util(cpu_util_without(i, p),
+					i, p, fbt_env->op_path);
+#else
 			wake_util = cpu_util_without(i, p);
+#endif
 			new_util = wake_util + uclamp_task_util(p);
 			spare_wake_cap = capacity_orig - wake_util;
 
@@ -6781,6 +7064,26 @@ static void walt_find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 		else if (cpu_isolated(prev_cpu))
 			target_cpu = unisolated_candidate;
 	}
+
+#ifdef CONFIG_UXCHAIN
+	if (sysctl_uxchain_enabled && ux_thread(p) && target_cpu == -1) {
+		for (cluster = 0; cluster < num_sched_clusters; cluster++) {
+
+			for_each_cpu_and(i, &p->cpus_mask,
+					&cpu_array[order_index][cluster]) {
+				struct rq *rq = cpu_rq(i);
+				struct task_struct *tsk = rq->curr;
+
+				if (!ux_thread(tsk) && tsk->normal_prio > 100) {
+					target_cpu = i;
+					break;
+				}
+			}
+			if (target_cpu != -1)
+				break;
+		}
+	}
+#endif
 
 	if (target_cpu != -1)
 		cpumask_set_cpu(target_cpu, cpus);
@@ -7028,7 +7331,15 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	bool is_uclamp_boosted = uclamp_boosted(p);
 	bool boosted = is_uclamp_boosted || (task_boost > 0);
 	int start_cpu, order_index, end_index;
+#ifdef CONFIG_OPCHAIN
+	bool is_uxtop = is_opc_task(p, UT_FORE);
+#endif /*CONFIG_OPCHAIN*/
 
+#if defined(CONFIG_HOUSTON) && defined(CONFIG_OPCHAIN)
+	if (is_uxtop && current->wts.demand_scaled >= p->wts.demand_scaled) {
+		ht_rtg_list_add_tail(current);
+	}
+#endif
 	if (walt_is_many_wakeup(sibling_count_hint) && prev_cpu != cpu &&
 			cpumask_test_cpu(prev_cpu, &p->cpus_mask))
 		return prev_cpu;
@@ -7045,6 +7356,14 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	fbt_env.fastpath = 0;
 	fbt_env.need_idle = need_idle;
 
+#ifdef CONFIG_UXCHAIN
+	if (p->static_ux == 1 && p->group_leader == p && !im_launcher(p) &&
+		sysctl_uxchain_enabled && sysctl_launcher_boost_enabled) {
+		if (cpu_online(GOLD_PLUS_CPU) && !cpu_isolated(GOLD_PLUS_CPU))
+			return GOLD_PLUS_CPU;
+	}
+#endif
+
 	if (trace_sched_task_util_enabled())
 		start_t = sched_clock();
 
@@ -7054,8 +7373,12 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 
 	if (sync && (need_idle || (is_rtg && curr_is_rtg)))
 		sync = 0;
-
+#ifdef CONFIG_OPCHAIN
+	if (sync && bias_to_this_cpu(p, cpu, start_cpu) &&
+			opc_check_uxtop_cpu(is_uxtop, cpu)) {
+#else
 	if (sync && bias_to_this_cpu(p, cpu, start_cpu)) {
+#endif /*CONFIG_OPCHAIN*/
 		best_energy_cpu = cpu;
 		fbt_env.fastpath = SYNC_WAKEUP;
 		goto done;
@@ -7092,10 +7415,15 @@ int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 
 	if (p->state == TASK_WAKING)
 		delta = task_util(p);
-
+#ifdef CONFIG_TPD
+	if (task_placement_boost_enabled(p) || fbt_env.need_idle || boosted ||
+		is_rtg || __cpu_overutilized(prev_cpu, delta) ||
+		!task_fits_max(p, prev_cpu) || cpu_isolated(prev_cpu) || (is_tpd_enable() && is_tpd_task(p))) {
+#else
 	if (task_placement_boost_enabled(p) || fbt_env.need_idle ||
 	    boosted || is_rtg || __cpu_overutilized(prev_cpu, delta) ||
 	    !task_fits_max(p, prev_cpu) || cpu_isolated(prev_cpu)) {
+#endif
 		best_energy_cpu = cpu;
 		goto unlock;
 	}
@@ -7140,12 +7468,15 @@ unlock:
 	    ((prev_delta - best_delta) <= prev_delta >> 4) &&
 	    (capacity_orig_of(prev_cpu) <= capacity_orig_of(start_cpu)))
 		best_energy_cpu = prev_cpu;
+#ifdef CONFIG_TPP
+	best_energy_cpu = tpp_find_cpu(p, best_energy_cpu);
+#endif /* CONFIG_TPP */
 
 done:
 	trace_sched_task_util(p, cpumask_bits(candidates)[0], best_energy_cpu,
 			sync, fbt_env.need_idle, fbt_env.fastpath,
 			task_boost_policy(p), start_t, boosted, is_rtg,
-			walt_get_rtg_status(p), start_cpu);
+			walt_get_rtg_status(p), is_uxtop);
 
 	return best_energy_cpu;
 
@@ -7987,6 +8318,10 @@ enum group_type {
 #define LBF_NOHZ_AGAIN	0x20
 #define LBF_IGNORE_BIG_TASKS 0x100
 #define LBF_IGNORE_PREFERRED_CLUSTER_TASKS 0x200
+#ifdef CONFIG_OPCHAIN
+#define LBF_IGNORE_UX_TOP 0x800
+#define LBF_IGNORE_SLAVE 0xC00
+#endif /*CONFIG_OPCHAIN*/
 
 struct lb_env {
 	struct sched_domain	*sd;
@@ -8113,6 +8448,12 @@ static inline int migrate_degrades_locality(struct task_struct *p,
 static inline bool can_migrate_boosted_task(struct task_struct *p,
 			int src_cpu, int dst_cpu)
 {
+#ifdef CONFIG_TPD
+	if (is_tpd_enable() && is_tpd_task(p)) {
+		if (tpd_check(p, dst_cpu))
+			return false;
+        }
+#endif
 	if (per_task_boost(p) == TASK_BOOST_STRICT_MAX &&
 		task_in_related_thread_group(p) &&
 		(capacity_orig_of(dst_cpu) < capacity_orig_of(src_cpu)))
@@ -8219,6 +8560,13 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 
 	/* Don't detach task if it is under active migration */
 	if (env->src_rq->wrq.push_task == p)
+		return 0;
+#endif
+
+#ifdef CONFIG_OPCHAIN
+	if (env->flags & LBF_IGNORE_UX_TOP && is_opc_task(p, UT_FORE))
+		return 0;
+	if (env->flags & LBF_IGNORE_SLAVE && UTASK_SLAVE(p))
 		return 0;
 #endif
 
@@ -8336,6 +8684,9 @@ static int detach_tasks(struct lb_env *env)
 	int detached = 0;
 	int orig_loop = env->loop;
 
+#ifdef CONFIG_OPCHAIN
+	int src_claim = opc_get_claim_on_cpu(env->src_cpu);
+#endif /*CONFIG_OPCHAIN*/
 	lockdep_assert_held(&env->src_rq->lock);
 
 	if (env->imbalance <= 0)
@@ -8344,8 +8695,18 @@ static int detach_tasks(struct lb_env *env)
 	if (!same_cluster(env->dst_cpu, env->src_cpu))
 		env->flags |= LBF_IGNORE_PREFERRED_CLUSTER_TASKS;
 
+#ifdef CONFIG_OPCHAIN
+	if (capacity_orig_of(env->dst_cpu) < capacity_orig_of(env->src_cpu)) {
+		env->flags |= LBF_IGNORE_BIG_TASKS;
+		if (src_claim == 1)
+			env->flags |= LBF_IGNORE_UX_TOP | LBF_IGNORE_SLAVE;
+		else if (src_claim == -1)
+			env->flags |= LBF_IGNORE_SLAVE;
+	}
+#else
 	if (capacity_orig_of(env->dst_cpu) < capacity_orig_of(env->src_cpu))
 		env->flags |= LBF_IGNORE_BIG_TASKS;
+#endif /*CONFIG_OPCHAIN*/
 
 redo:
 	while (!list_empty(tasks)) {
@@ -8441,6 +8802,10 @@ next:
 		tasks = &env->src_rq->cfs_tasks;
 		env->flags &= ~(LBF_IGNORE_BIG_TASKS |
 				LBF_IGNORE_PREFERRED_CLUSTER_TASKS);
+#ifdef CONFIG_OPCHAIN
+		if (env->flags & LBF_IGNORE_SLAVE)
+			env->flags &= ~LBF_IGNORE_SLAVE;
+#endif /*CONFIG_OPCHAIN*/
 		env->loop = orig_loop;
 		goto redo;
 	}

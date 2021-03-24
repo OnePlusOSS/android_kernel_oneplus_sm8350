@@ -1,0 +1,101 @@
+/*this is for different project dtsi*/
+
+&oplus_p9415 {
+	status = "ok";
+};
+
+&oplus_hl7227 {
+	status = "ok";
+};
+
+&oplus_chg_wls {
+	status = "ok";
+	oplus,fast_ic = <&oplus_hl7227>;
+	oplus,support_fastchg;
+	oplus,support_epp_plus;
+	oplus,wls_chg_fw = "IDT_P9415_45W";
+	oplus,cp_boost_en-gpio = <&pm8350c_gpios 1 0x00>;
+	pinctrl-names = "default", "wrx_en_active", "wrx_en_sleep",
+			"cp_boost_en_active", "cp_boost_en_sleep";
+	pinctrl-3 = <&cp_boost_en_active>;
+	pinctrl-4 = <&cp_boost_en_sleep>;
+
+	/* fod parameter*/
+	oplus,fastchg-fod-enable;
+	oplus,fastchg-match-q = /bits/ 8 <0x3F>;
+	oplus,fastchg-fod-parm = /bits/ 8 <0xac 0x32 0xac 0x28 0xa0 0x1e
+						0x9a 0x47 0x9a 0x50 0x9f 0xec>;
+	oplus,fastchg-fod-parm-12V = /bits/ 8 <0xac 0x32 0xa0 0x68 0xa0 0x28
+						0x9a 0x47 0x9a 0x32 0x9f 0xc4>;
+
+	oplus,bpp-vol-mv = <5000>;
+	oplus,epp-vol-mv = <11000>;
+	oplus,epp_plus-vol-mv = <12000>;
+	oplus,warp-vol-mv = <12000>;
+	oplus,swarp-vol-mv = <12000>;
+};
+
+&oplus_chg_gki {
+    oplus,support_wls;
+};
+
+&qupv3_se4_i2c {
+	status = "ok";
+	synaptics-s3908@4B {
+		compatible = "synaptics-s3908";
+		reg = <0x4B>;
+		project-name = "19821";
+		chip-name = "S3908";
+		module_id = <7>;
+		reset-gpio = <&tlmm 22 0x00>;
+		irq-gpio = <&tlmm 23 0x2008>;
+		vdd_2v8-supply = <&pm8350c_l3>;                 //set 3.3 by ldo
+		vdd_2v8_volt = <3008000>;
+		enable1v8_gpio = <&tlmm 197 0x00>;
+		enable2v8_gpio = <&tlmm 31  0x00>;
+		touchpanel,display-coords = <1439 3125>;
+		touchpanel,panel-coords = <1439 3125>;
+		touchpanel,tx-rx-num = <17 38>;
+		//edge_limit_support = <1>;
+		//spurious_fingerprint_support = <1>;
+		//charger_pump_support = <1>;
+		black_gesture_support = <1>;
+		//black_gesture_test_support = <1>;
+		game_switch_support = <1>;
+		face_detect_support = <1>;
+		touch_hold_support = <1>;
+		report_flow_unlock_support = <1>;
+		report_rate_switch_support = <1>;
+		touchpanel,max-num-support = <10>;
+		pinctrl-names = "pin_set_high", "pin_set_low";
+		pinctrl-0 = <&tp_irq_active &tp_rst_active>;
+		pinctrl-1 = <&tp_rst_suspend>;
+		touchpanel,int-mode = <1>;
+		panel = <&dsi_samsung_amb670yf01_dsc_cmd &dsi_samsung_amb670yf01_o_dsc_cmd &dsi_samsung_amb655x_dsc_cmd>;
+	};
+};
+&soc {
+	oem_rf_cable:oem_rf_cable{
+		compatible = "oem,rf_cable";
+		interrupt-parent = <&tlmm>;
+		rf,cable-gpio-0 = <&tlmm 165 0>;
+		rf,cable-support-timer = <0>;
+		rf,cable-gpio-num = <1>;
+		oem,rf_uevent_feature_enable;
+		pinctrl-names = "oem_rf_cable_active";
+		pinctrl-0= <&rf_cable_ant0_active>;
+	};
+};
+&tlmm {
+    rf_cable_ant0_active: rf_cable_ant0_active {
+        mux {
+            pins = "gpio165";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio165";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+};

@@ -427,6 +427,9 @@ static void rwsem_mark_wake(struct rw_semaphore *sem,
 			 * Readers, on the other hand, will block as they
 			 * will notice the queued writer.
 			 */
+#ifdef CONFIG_UXCHAIN_V2
+			uxchain_rwsem_wake(waiter->task, sem);
+#endif
 			wake_q_add(wake_q, waiter->task);
 			lockevent_inc(rwsem_wake_writer);
 		}
@@ -548,6 +551,9 @@ static void rwsem_mark_wake(struct rw_semaphore *sem,
 		 * to the task to wakeup.
 		 */
 		smp_store_release(&waiter->task, NULL);
+#ifdef CONFIG_UXCHAIN_V2
+		uxchain_rwsem_wake(tsk, sem);
+#endif
 		/*
 		 * Ensure issuing the wakeup (either by us or someone else)
 		 * after setting the reader waiter to nil.
@@ -1110,7 +1116,13 @@ queue:
 			/* Ordered by sem->wait_lock against rwsem_mark_wake(). */
 			break;
 		}
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+		current->in_downread = 1;
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 		schedule();
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+		current->in_downread = 0;
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 		lockevent_inc(rwsem_sleep_reader);
 	}
 
@@ -1254,8 +1266,13 @@ wait:
 		for (;;) {
 			if (signal_pending_state(state, current))
 				goto out_nolock;
-
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			current->in_downwrite = 1;
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 			schedule();
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			current->in_downwrite = 0;
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 			lockevent_inc(rwsem_sleep_writer);
 			set_current_state(state);
 			/*
@@ -1517,6 +1534,9 @@ void __sched down_read(struct rw_semaphore *sem)
 	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);
 
 	LOCK_CONTENDED(sem, __down_read_trylock, __down_read);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 }
 EXPORT_SYMBOL(down_read);
 
@@ -1529,7 +1549,9 @@ int __sched down_read_killable(struct rw_semaphore *sem)
 		rwsem_release(&sem->dep_map, 1, _RET_IP_);
 		return -EINTR;
 	}
-
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(down_read_killable);
@@ -1541,8 +1563,16 @@ int down_read_trylock(struct rw_semaphore *sem)
 {
 	int ret = __down_read_trylock(sem);
 
+#ifdef CONFIG_UXCHAIN_V2
+	if (ret == 1) {
+		rwsem_acquire_read(&sem->dep_map, 0, 1, _RET_IP_);
+		uxchain_rwsem_down(sem);
+	}
+#else
 	if (ret == 1)
 		rwsem_acquire_read(&sem->dep_map, 0, 1, _RET_IP_);
+#endif
+
 	return ret;
 }
 EXPORT_SYMBOL(down_read_trylock);
@@ -1555,6 +1585,10 @@ void __sched down_write(struct rw_semaphore *sem)
 	might_sleep();
 	rwsem_acquire(&sem->dep_map, 0, 0, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
+
 }
 EXPORT_SYMBOL(down_write);
 
@@ -1571,7 +1605,9 @@ int __sched down_write_killable(struct rw_semaphore *sem)
 		rwsem_release(&sem->dep_map, 1, _RET_IP_);
 		return -EINTR;
 	}
-
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL(down_write_killable);
@@ -1583,8 +1619,15 @@ int down_write_trylock(struct rw_semaphore *sem)
 {
 	int ret = __down_write_trylock(sem);
 
+#ifdef CONFIG_UXCHAIN_V2
+	if (ret == 1) {
+		rwsem_acquire(&sem->dep_map, 0, 1, _RET_IP_);
+		uxchain_rwsem_down(sem);
+	}
+#else
 	if (ret == 1)
 		rwsem_acquire(&sem->dep_map, 0, 1, _RET_IP_);
+#endif
 
 	return ret;
 }
@@ -1597,6 +1640,9 @@ void up_read(struct rw_semaphore *sem)
 {
 	rwsem_release(&sem->dep_map, 1, _RET_IP_);
 	__up_read(sem);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_up(sem);
+#endif
 }
 EXPORT_SYMBOL(up_read);
 
@@ -1608,6 +1654,9 @@ void up_write(struct rw_semaphore *sem)
 	rwsem_release(&sem->dep_map, 1, _RET_IP_);
 	trace_android_vh_rwsem_write_finished(sem);
 	__up_write(sem);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_up(sem);
+#endif
 }
 EXPORT_SYMBOL(up_write);
 
@@ -1629,6 +1678,9 @@ void down_read_nested(struct rw_semaphore *sem, int subclass)
 	might_sleep();
 	rwsem_acquire_read(&sem->dep_map, subclass, 0, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_read_trylock, __down_read);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 }
 EXPORT_SYMBOL(down_read_nested);
 
@@ -1637,6 +1689,9 @@ void _down_write_nest_lock(struct rw_semaphore *sem, struct lockdep_map *nest)
 	might_sleep();
 	rwsem_acquire_nest(&sem->dep_map, 0, 0, nest, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 }
 EXPORT_SYMBOL(_down_write_nest_lock);
 
@@ -1645,6 +1700,9 @@ void down_read_non_owner(struct rw_semaphore *sem)
 	might_sleep();
 	__down_read(sem);
 	__rwsem_set_reader_owned(sem, NULL);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 }
 EXPORT_SYMBOL(down_read_non_owner);
 
@@ -1653,6 +1711,9 @@ void down_write_nested(struct rw_semaphore *sem, int subclass)
 	might_sleep();
 	rwsem_acquire(&sem->dep_map, subclass, 0, _RET_IP_);
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 }
 EXPORT_SYMBOL(down_write_nested);
 
@@ -1666,6 +1727,9 @@ int __sched down_write_killable_nested(struct rw_semaphore *sem, int subclass)
 		rwsem_release(&sem->dep_map, 1, _RET_IP_);
 		return -EINTR;
 	}
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_down(sem);
+#endif
 
 	return 0;
 }
@@ -1675,6 +1739,9 @@ void up_read_non_owner(struct rw_semaphore *sem)
 {
 	DEBUG_RWSEMS_WARN_ON(!is_rwsem_reader_owned(sem), sem);
 	__up_read(sem);
+#ifdef CONFIG_UXCHAIN_V2
+	uxchain_rwsem_up(sem);
+#endif
 }
 EXPORT_SYMBOL(up_read_non_owner);
 

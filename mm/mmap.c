@@ -52,7 +52,9 @@
 #include <asm/cacheflush.h>
 #include <asm/tlb.h>
 #include <asm/mmu_context.h>
-
+#ifdef CONFIG_GLOOM_VA_FEATURE
+#include <linux/random.h>
+#endif
 #include "internal.h"
 
 #ifndef arch_mmap_check
@@ -2075,6 +2077,26 @@ unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info)
 	if (length < info->length)
 		return -ENOMEM;
 
+#ifdef CONFIG_GLOOM_VA_FEATURE
+	if ((mm->va_feature & 0x2) && info->high_limit == mm->mmap_base) {
+		struct vm_unmapped_area_info info_b;
+		unsigned long addr;
+
+		switch (info->length) {
+		case 4096: case 8192: case 16384: case 32768:
+		case 65536: case 131072: case 262144:
+			info_b = *info;
+			info_b.high_limit =
+				current->mm->va_feature_rnd - (dbg_pm[2] * (ilog2(info->length) - dbg_pm[1]));
+			info_b.low_limit = current->mm->va_feature_rnd - (dbg_pm[2] * dbg_pm[3]);
+			addr = unmapped_area_topdown(&info_b);
+			if (!offset_in_page(addr))
+				return addr;
+		default:
+			break;
+		}
+	}
+#endif
 	/*
 	 * Adjust search limits by the desired length.
 	 * See implementation comment at top of unmapped_area().
@@ -2252,6 +2274,10 @@ arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 	info.flags = VM_UNMAPPED_AREA_TOPDOWN;
 	info.length = len;
 	info.low_limit = max(PAGE_SIZE, mmap_min_addr);
+#ifdef CONFIG_GLOOM_VA_FEATURE
+	if (mm->va_feature & 0x1)
+		info.low_limit = max_t(unsigned long, dbg_pm[0], info.low_limit);
+#endif
 	info.high_limit = arch_get_mmap_base(addr, mm->mmap_base);
 	info.align_mask = 0;
 	addr = vm_unmapped_area(&info);
@@ -2269,6 +2295,15 @@ arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 		info.high_limit = mmap_end;
 		addr = vm_unmapped_area(&info);
 	}
+#ifdef CONFIG_GLOOM_VA_FEATURE
+	if ((mm->va_feature & 0x1) && offset_in_page(addr)) {
+		VM_BUG_ON(addr != -ENOMEM);
+		info.flags = VM_UNMAPPED_AREA_TOPDOWN;
+		info.low_limit = max(PAGE_SIZE, mmap_min_addr);
+		info.high_limit = mm->mmap_base;
+		addr = vm_unmapped_area(&info);
+	}
+#endif
 
 	return addr;
 }

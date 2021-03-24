@@ -21,10 +21,30 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/spmi.h>
+#include <linux/kthread.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
+
+#if IS_ENABLED(CONFIG_OEM_FORCE_DUMP)
+#include <linux/oem/oem_force_dump.h>
+#endif
+#if IS_ENABLED(CONFIG_PARAM_READ_WRITE)
+#include <linux/oem/param_rw.h>
+#endif
+#if IS_ENABLED(CONFIG_OEM_BOOT_MODE)
+#include <linux/oem/boot_mode.h>
+#endif
+#include <linux/input/qpnp-power-on.h>
+#include <linux/power_supply.h>
+
+#include <linux/syscalls.h>
+#include <linux/atomic.h>
+#include <linux/sched/debug.h>
+
+#include <linux/msm_drm_notify.h>
+#include <soc/qcom/msm-poweroff.h>
 
 #define PMIC_VER_8941				0x01
 #define PMIC_VERSION_REG			0x0105
@@ -205,6 +225,15 @@ struct qpnp_pon {
 	struct pon_regulator	*pon_reg_cfg;
 	struct list_head	list;
 	struct delayed_work	bark_work;
+#ifdef CONFIG_OEM_FORCE_DUMP
+	struct kthread_worker	*kworker;
+	struct kthread_delayed_work press_work;
+#endif
+	struct work_struct  up_work;
+#ifdef CONFIG_KEY_FLUSH
+	struct delayed_work     press_work_flush;
+#endif
+	atomic_t	   press_count;
 	struct dentry		*debugfs;
 	u16			base;
 	u8			subtype;
@@ -235,6 +264,7 @@ struct qpnp_pon {
 };
 
 static struct qpnp_pon *sys_reset_dev;
+static struct qpnp_pon *sys_key_dev;
 static struct qpnp_pon *modem_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
@@ -304,6 +334,17 @@ static const char * const qpnp_poff_reason[] = {
 	[38] = "Triggered from S3_RESET_PBS_NACK",
 	[39] = "Triggered from S3_RESET_KPDPWR_ANDOR_RESIN",
 };
+
+#ifdef CONFIG_QGKI
+#include "oem-qpnp-power-on.c"
+#else
+static void up_work_func(struct work_struct *work)
+{}
+static int oem_qpnp_config_init(struct qpnp_pon *pon)
+{
+	return 0;
+}
+#endif
 
 static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val)
@@ -946,6 +987,29 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		pon_rt_bit = is_pon_gen3(pon)
 				? QPNP_PON_GEN3_KPDPWR_N_SET
 				: QPNP_PON_KPDPWR_N_SET;
+
+		if ((pon_rt_sts & pon_rt_bit) == 0) {
+			pr_info("Power-Key UP\n");
+			schedule_work(&pon->up_work);
+#ifdef CONFIG_OEM_FORCE_DUMP
+			kthread_cancel_delayed_work_sync(&pon->press_work);
+#endif
+#ifdef CONFIG_KEY_FLUSH
+			cancel_delayed_work(&pon->press_work_flush);
+			panic_flush_device_cache_circled_off();
+#endif
+		} else {
+			pr_info("Power-Key DOWN\n");
+#ifdef CONFIG_OEM_FORCE_DUMP
+			kthread_queue_delayed_work(pon->kworker, &pon->press_work,
+				msecs_to_jiffies(4000));
+#endif
+#ifdef CONFIG_KEY_FLUSH
+			schedule_delayed_work(&pon->press_work_flush,
+				msecs_to_jiffies(3000));
+#endif
+		}
+
 		break;
 	case PON_RESIN:
 		pon_rt_bit = is_pon_gen3(pon)
@@ -984,6 +1048,12 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	input_sync(pon->pon_input);
 
 	cfg->old_state = !!key_status;
+
+#if IS_ENABLED(CONFIG_OEM_FORCE_DUMP)
+#ifdef CONFIG_QGKI
+	oem_check_force_dump_key(cfg->key_code, key_status);
+#endif
+#endif
 
 	return 0;
 }
@@ -1132,6 +1202,88 @@ static void bark_work_func(struct work_struct *work)
 		schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
 	}
 }
+
+#ifdef CONFIG_OEM_FORCE_DUMP
+static void press_work_func(struct kthread_work *work)
+{
+	int display_bl, boot_mode;
+	int rc;
+	uint pon_rt_sts = 0;
+	u8  pon_rt_bit = 0;
+	struct qpnp_pon_config *cfg;
+	struct qpnp_pon *pon =
+	container_of(work, struct qpnp_pon, press_work.work);
+
+	cfg = qpnp_get_cfg(pon, PON_KPDPWR);
+	if (!cfg) {
+		dev_err(pon->dev, "Invalid config pointer\n");
+		goto err_return;
+	}
+	rc = regmap_read(pon->regmap, QPNP_PON_RT_STS(pon), &pon_rt_sts);
+	if (rc) {
+		dev_err(pon->dev, "Unable to read PON RT status\n");
+		goto err_return;
+	}
+
+	pon_rt_bit = is_pon_gen3(pon)
+			? QPNP_PON_GEN3_KPDPWR_N_SET
+			: QPNP_PON_KPDPWR_N_SET;
+	if (pon_rt_sts & pon_rt_bit) {
+		qpnp_powerkey_state_check(pon, 1);
+		dev_err(pon->dev, "after 4s Power-Key is still DOWN\n");
+		display_bl = dsi_panel_backlight_get();
+		boot_mode = get_boot_mode();
+		if (display_bl == 0 && boot_mode == MSM_BOOT_MODE_NORMAL) {
+			oem_force_minidump_mode();
+			get_init_sched_info();
+			show_state_filter(TASK_UNINTERRUPTIBLE);
+			dump_runqueue();
+			dump_workqueue();
+			send_sig_to_get_trace("system_server");
+			send_sig_to_get_tombstone("surfaceflinger");
+			send_sig_to_get_tombstone("composer-servic");
+			ksys_sync();
+			panic("power key still pressed\n");
+		}
+	}
+err_return:
+	return;
+}
+#endif
+
+#ifdef CONFIG_KEY_FLUSH
+static void press_work_flush_func(struct work_struct *work)
+{
+	int rc;
+	uint pon_rt_sts = 0;
+	u8  pon_rt_bit = 0;
+	struct qpnp_pon_config *cfg;
+	struct qpnp_pon *pon =
+	container_of(work, struct qpnp_pon, press_work_flush.work);
+
+	cfg = qpnp_get_cfg(pon, PON_KPDPWR);
+	if (!cfg) {
+		dev_err(pon->dev, "Invalid config pointer\n");
+		goto err_return;
+	}
+	rc = qpnp_pon_read(pon, QPNP_PON_RT_STS(pon), &pon_rt_sts);
+	if (rc) {
+		dev_err(pon->dev, "Unable to read PON RT status\n");
+		goto err_return;
+	}
+	pon_rt_bit = is_pon_gen3(pon)
+			? QPNP_PON_GEN3_KPDPWR_N_SET
+			: QPNP_PON_KPDPWR_N_SET;
+
+	if ((pon_rt_sts & pon_rt_bit)) {
+		qpnp_powerkey_state_check(pon, 1);
+		panic_flush_device_cache_circled_on();
+		dev_err(pon->dev, "after 3s Pwr-Key is still DOWN, circle flush\n");
+	}
+err_return:
+	return;
+}
+#endif
 
 static irqreturn_t qpnp_resin_bark_irq(int irq, void *_pon)
 {
@@ -2272,7 +2424,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	struct qpnp_pon *pon;
 	unsigned long flags;
 	u32 base, delay;
-	bool sys_reset, modem_reset;
+	bool sys_reset, modem_reset, sys_key;
 	int rc;
 
 	pon = devm_kzalloc(dev, sizeof(*pon), GFP_KERNEL);
@@ -2308,6 +2460,11 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	sys_key = of_property_read_bool(dev->of_node, "qcom,system-key");
+	if (sys_key && sys_key_dev)
+		dev_err(dev, "qcom,system-key property cannot be supported together for PWK long Press\n");
+
+
 	/* Get the total number of pon configurations and regulators */
 	for_each_available_child_of_node(dev->of_node, node) {
 		if (of_find_property(node, "regulator-name", NULL)) {
@@ -2338,6 +2495,16 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, pon);
 
 	INIT_DELAYED_WORK(&pon->bark_work, bark_work_func);
+#ifdef CONFIG_OEM_FORCE_DUMP
+	kthread_init_delayed_work(&pon->press_work, press_work_func);
+	pon->kworker = kthread_create_worker(0, "press_worker");
+	if (IS_ERR(pon->kworker))
+		return -ENOMEM;
+#endif
+#ifdef CONFIG_KEY_FLUSH
+	INIT_DELAYED_WORK(&pon->press_work_flush, press_work_flush_func);
+#endif
+	INIT_WORK(&pon->up_work, up_work_func);
 
 	rc = qpnp_pon_parse_dt_power_off_config(pon);
 	if (rc)
@@ -2389,10 +2556,15 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	if (sys_reset)
+	if (sys_reset) {
 		sys_reset_dev = pon;
+		oem_qpnp_config_init(pon);
+	}
 	if (modem_reset)
 		modem_reset_dev = pon;
+
+	if (sys_key)
+		sys_key_dev = pon;
 
 	qpnp_pon_debugfs_init(pon);
 
@@ -2414,7 +2586,12 @@ static int qpnp_pon_remove(struct platform_device *pdev)
 		list_del(&pon->list);
 		spin_unlock_irqrestore(&spon_list_slock, flags);
 	}
-
+#ifdef CONFIG_OEM_FORCE_DUMP
+	if (pon->kworker) {
+		kthread_cancel_delayed_work_sync(&pon->press_work);
+		kthread_destroy_worker(pon->kworker);
+	}
+#endif
 	return 0;
 }
 

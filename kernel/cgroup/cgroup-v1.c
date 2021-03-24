@@ -512,10 +512,18 @@ static ssize_t __cgroup1_procs_write(struct kernfs_open_file *of,
 	 */
 	cred = current_cred();
 	tcred = get_task_cred(task);
+#ifdef CONFIG_BG_FREEZER
+	if (!uid_eq(cred->euid, GLOBAL_ROOT_UID) &&
+	    !uid_eq(cred->euid, GLOBAL_SYSTEM_UID) &&
+	    !uid_eq(cred->euid, tcred->uid) &&
+	    !uid_eq(cred->euid, tcred->suid) &&
+	    !ns_capable(tcred->user_ns, CAP_SYS_NICE))
+#else
 	if (!uid_eq(cred->euid, GLOBAL_ROOT_UID) &&
 	    !uid_eq(cred->euid, tcred->uid) &&
 	    !uid_eq(cred->euid, tcred->suid) &&
 	    !ns_capable(tcred->user_ns, CAP_SYS_NICE))
+#endif
 		ret = -EACCES;
 	put_cred(tcred);
 	if (ret)

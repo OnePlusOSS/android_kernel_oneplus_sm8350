@@ -30,6 +30,14 @@ struct utp_upiu_header {
 	__be32 dword_2;
 };
 
+struct utp_upiu_task_req {
+	struct utp_upiu_header header;
+	__be32 input_param1;
+	__be32 input_param2;
+	__be32 input_param3;
+	__be32 reserved[2];
+};
+
 /**
  * struct utp_upiu_query - upiu request buffer structure for
  * query request.

@@ -1,0 +1,119 @@
+/*this is for different project dtsi*/
+
+&battery_charger {
+	oplus,otg_type = <1>;
+};
+&qupv3_se4_i2c {
+	status = "ok";
+	sec-s6sy792@48 {
+		compatible = "sec-s6sy792";
+		reg = <0x48>;
+		project-name = "19825";
+		chip-name = "SY792";
+		module_id = <7>;
+		reset-gpio = <&tlmm 22 0x00>;
+		irq-gpio = <&tlmm 23 0x2008>;
+		vdd_2v8-supply = <&pm8350c_l3>;                 //set 3.3 by ldo
+		vdd_2v8_volt = <3008000>;
+		vcc_1v8-supply = <&pm8350c_l8>;
+		enable2v8_gpio = <&tlmm 74 0x00>;
+		touchpanel,display-coords = <1079 2399>;
+		touchpanel,panel-coords = <1079 2399>;
+		touchpanel,tx-rx-num = <16 36>;
+		//edge_limit_support = <1>;
+		//spurious_fingerprint_support = <1>;
+		//charger_pump_support = <1>;
+		black_gesture_support = <1>;
+		//black_gesture_test_support = <1>;
+		game_switch_support = <1>;
+		face_detect_support = <1>;
+		touch_hold_support = <1>;
+		touchpanel,max-num-support = <10>;
+		charge_detect_support = <1>;
+		temperature_detect_support = <1>;
+		report_rate_switch_support = <1>;
+		//lcd_trigger_fp_check = <1>;
+		module_id_support = <1>;
+		pinctrl-names = "pin_set_high", "pin_set_low";
+		pinctrl-0 = <&tp_irq_active &tp_rst_active>;
+		pinctrl-1 = <&tp_rst_suspend>;
+		//touchpanel,int-mode = <1>;
+		io-channels = <&pmk8350_vadc PM8350_ADC7_AMUX_THM3_100K_PU>;
+		io-channel-names = "pm8350_skin_therm";
+		oplus,skin_temp_chan = "pm8350_skin_therm";
+		panel = <&dsi_samsung_amb655x_dsc_cmd &dsi_samsung_ana6706_dsc_cmd &dsi_samsung_amb655xl08_dsc_cmd>;
+	};
+};
+&soc {
+	oem_rf_cable:oem_rf_cable{
+		compatible = "oem,rf_cable";
+		interrupt-parent = <&tlmm>;
+		rf,cable-gpio-0 = <&tlmm 165 0>;
+		rf,cable-gpio-1 = <&tlmm 27 0>;
+		rf,cable-gpio-2 = <&tlmm 92 0>;
+		rf,cable-gpio-3 = <&tlmm 44 0>;
+		rf,cable-gpio-4 = <&tlmm 155 0>;
+		rf,cable-support-timer = <0>;
+		rf,cable-gpio-num = <5>;
+		oem,rf_uevent_feature_enable;
+		pinctrl-names = "oem_rf_cable_active";
+		pinctrl-0= <&rf_cable_ant0_active &rf_cable_ant1_active &rf_cable_ant2_active&rf_cable_ant3_active &rf_cable_ant7_active>;
+	};
+};
+&tlmm {
+    rf_cable_ant0_active: rf_cable_ant0_active {
+        mux {
+            pins = "gpio165";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio165";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+	rf_cable_ant1_active: rf_cable_ant1_active {
+        mux {
+            pins = "gpio27";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio27";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+	rf_cable_ant2_active: rf_cable_ant2_active {
+        mux {
+            pins = "gpio92";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio92";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+	rf_cable_ant3_active: rf_cable_ant3_active {
+        mux {
+            pins = "gpio44";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio44";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+	rf_cable_ant7_active: rf_cable_ant7_active {
+        mux {
+            pins = "gpio155";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio155";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+};

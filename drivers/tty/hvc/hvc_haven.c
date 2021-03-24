@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 #include <linux/printk.h>
 #include <linux/workqueue.h>
+#include <linux/srcu.h>
 
 #include <linux/haven/hh_msgq.h>
 #include <linux/haven/hh_common.h>
@@ -42,10 +43,12 @@ struct hh_hvc_prv {
 	DECLARE_KFIFO(get_fifo, char, 1024);
 	DECLARE_KFIFO(put_fifo, char, 1024);
 	struct work_struct put_work;
+	struct srcu_struct put_srcu;
 };
 
 static DEFINE_SPINLOCK(fifo_lock);
 static struct hh_hvc_prv hh_hvc_data[HH_VM_MAX];
+static bool hh_self_open;
 
 static inline int hh_vm_name_to_vtermno(enum hh_vm_names vmname)
 {
@@ -97,6 +100,7 @@ static void hh_hvc_put_work_fn(struct work_struct *ws)
 	char buf[HH_HVC_WRITE_MSG_SIZE];
 	int count, ret;
 	struct hh_hvc_prv *prv = container_of(ws, struct hh_hvc_prv, put_work);
+	int srcu_idx;
 
 	ret = hh_rm_get_vmid(prv->vm_name, &vmid);
 	if (ret) {
@@ -111,12 +115,21 @@ static void hh_hvc_put_work_fn(struct work_struct *ws)
 		if (count <= 0)
 			continue;
 
+		srcu_idx = srcu_read_lock(&prv->put_srcu);
+#ifndef CONFIG_HVC_HAVEN_CONSOLE
+		if (prv->vm_name == HH_SELF_VM && !smp_load_acquire(&hh_self_open)) {
+			srcu_read_unlock(&prv->put_srcu, srcu_idx);
+			continue;
+		}
+#endif
 		ret = hh_rm_console_write(vmid, buf, count);
 		if (ret) {
 			pr_warn_once("%s hh_rm_console_write failed for %d: %d\n",
 				__func__, prv->vm_name, ret);
+			srcu_read_unlock(&prv->put_srcu, srcu_idx);
 			break;
 		}
+		srcu_read_unlock(&prv->put_srcu, srcu_idx);
 	}
 }
 
@@ -138,6 +151,10 @@ static int hh_hvc_put_chars(uint32_t vtermno, const char *buf, int count)
 	if (vm_name < 0 || vm_name >= HH_VM_MAX)
 		return -EINVAL;
 
+#ifndef CONFIG_HVC_HAVEN_CONSOLE
+	if (vm_name == HH_SELF_VM && !smp_load_acquire(&hh_self_open))
+		return 0;
+#endif
 	ret = kfifo_in_spinlocked(&hh_hvc_data[vm_name].put_fifo,
 				   buf, count, &fifo_lock);
 	if (ret > 0)
@@ -153,6 +170,10 @@ static int hh_hvc_flush(uint32_t vtermno, bool wait)
 	/* RM calls will all sleep. A flush without waiting isn't possible */
 	if (!wait)
 		return 0;
+#ifndef CONFIG_HVC_HAVEN_CONSOLE
+	if (vm_name == HH_SELF_VM && !smp_load_acquire(&hh_self_open))
+		return 0;
+#endif
 	might_sleep();
 
 	if (vm_name < 0 || vm_name >= HH_VM_MAX)
@@ -188,7 +209,10 @@ static int hh_hvc_notify_add(struct hvc_struct *hp, int vm_name)
 		return ret;
 	}
 
-	return hh_rm_console_open(vmid);
+	ret = hh_rm_console_open(vmid);
+	if (!ret && vm_name == HH_SELF_VM)
+		smp_store_release(&hh_self_open, true);
+	return ret;
 }
 
 static void hh_hvc_notify_del(struct hvc_struct *hp, int vm_name)
@@ -214,6 +238,12 @@ static void hh_hvc_notify_del(struct hvc_struct *hp, int vm_name)
 	if (ret)
 		return;
 
+#ifndef CONFIG_HVC_HAVEN_CONSOLE
+	if (vm_name == HH_SELF_VM) {
+		hh_self_open = false;
+		synchronize_srcu(&hh_hvc_data[vm_name].put_srcu);
+	}
+#endif
 	ret = hh_rm_console_close(vmid);
 
 	if (ret)
@@ -269,6 +299,7 @@ static int __init hvc_hh_init(void)
 		INIT_KFIFO(prv->get_fifo);
 		INIT_KFIFO(prv->put_fifo);
 		INIT_WORK(&prv->put_work, hh_hvc_put_work_fn);
+		init_srcu_struct(&prv->put_srcu);
 	}
 
 	/* Must instantiate console before calling hvc_alloc */

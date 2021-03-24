@@ -1,0 +1,147 @@
+/*oneplus local config modify */
+&thermal_zones {
+	msm-therm {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		wake-capable-sensor;
+		trips {
+			msm_trip0:msm_trip0 {
+				temperature = <63000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			msm_trip1:msm_trip1 {
+				temperature = <65000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			msm_cpu0_cdev0 {
+				trip = <&msm_trip0>;
+				cooling-device = <&CPU0 2 2>;
+			};
+			msm_cpu0_cdev1 {
+				trip = <&msm_trip1>;
+				cooling-device = <&CPU0 3 3>;
+			};
+			msm_cpu4_cdev0 {
+				trip = <&msm_trip0>;
+				cooling-device = <&CPU4 5 5>;
+			};
+			msm_cpu4_cdev1 {
+				trip = <&msm_trip1>;
+				cooling-device = <&CPU4 6 6>;
+			};
+			msm_cpu7_cdev0 {
+				trip = <&msm_trip0>;
+				cooling-device = <&CPU7 5 5>;
+			};
+			msm_cpu7_cdev1 {
+				trip = <&msm_trip1>;
+				cooling-device = <&CPU7 8 8>;
+			};
+			msm_gpu_cdev0 {
+				trip = <&msm_trip0>;
+				cooling-device = <&msm_gpu 7 7>;
+			};
+			msm_gpu_cdev1 {
+				trip = <&msm_trip1>;
+				cooling-device = <&msm_gpu 5 5>;
+			};
+		};
+	};
+
+	skin-therm {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-governor = "step_wise";
+		wake-capable-sensor;
+		trips {
+			skin_trip0:skin_trip0 {
+				temperature = <46000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+			skin_trip1:skin_trip1 {
+				temperature = <48000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+			skin_trip2:skin_trip2 {
+				temperature = <50000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+			skin_trip3:skin_trip3 {
+				temperature = <52000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+		};
+		cooling-maps {
+			skin_gpu_cdev0 {
+				trip = <&skin_trip0>;
+				cooling-device = <&msm_gpu 7 7>;
+			};
+			skin_gpu_cdev1 {
+				trip = <&skin_trip1>;
+				cooling-device = <&msm_gpu 5 5>;
+			};
+			skin_gpu_cdev2 {
+				trip = <&skin_trip2>;
+				cooling-device = <&msm_gpu 2 2>;
+			};
+			skin_gpu_cdev3 {
+				trip = <&skin_trip3>;
+				cooling-device = <&msm_gpu 1 1>;
+			};
+			skin_cpu0_cdev2 {
+				trip = <&skin_trip2>;
+				cooling-device = <&CPU0 6 6>;
+			};
+			skin_cpu0_cdev3 {
+				trip = <&skin_trip3>;
+				cooling-device = <&CPU0 9 9>;
+			};
+			skin_cpu4_cdev0 {
+				trip = <&skin_trip0>;
+				cooling-device = <&CPU4 6 6>;
+			};
+			skin_cpu4_cdev1 {
+				trip = <&skin_trip1>;
+				cooling-device = <&CPU4 9 9>;
+			};
+			skin_cpu4_cdev2 {
+				trip = <&skin_trip2>;
+				cooling-device = <&CPU4 11 11>;
+			};
+			skin_cpu4_cdev3 {
+				trip = <&skin_trip3>;
+				cooling-device = <&cpu4_isolate 1 1>;
+			};
+			skin_cpu5_cdev3 {
+				trip = <&skin_trip3>;
+				cooling-device = <&cpu5_isolate 1 1>;
+			};
+			skin_cpu6_cdev3 {
+				trip = <&skin_trip3>;
+				cooling-device = <&cpu6_isolate 1 1>;
+			};
+			skin_cpu7_cdev0 {
+				trip = <&skin_trip0>;
+				cooling-device = <&CPU7 8 8>;
+			};
+			skin_cpu7_cdev1 {
+				trip = <&skin_trip1>;
+				cooling-device = <&CPU7 15 15>;
+			};
+			skin_cpu7_cdev2 {
+				trip = <&skin_trip2>;
+				cooling-device = <&cpu7_isolate 1 1>;
+			};
+		};
+	};
+};

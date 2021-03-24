@@ -14,6 +14,9 @@
 #define CREATE_TRACE_POINTS
 #include "ion_trace.h"
 #include "ion_private.h"
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+#include <linux/module.h>
+#endif
 
 static atomic_long_t total_heap_bytes;
 
@@ -30,6 +33,17 @@ static void track_buffer_destroyed(struct ion_buffer *buffer)
 
 	trace_ion_stat(buffer->sg_table, -buffer->size, total);
 }
+
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+static atomic_long_t ion_total_size;
+static bool ion_cnt_enable = true;
+unsigned long ion_total(void)
+{
+	if (!ion_cnt_enable)
+		return 0;
+	return (unsigned long)atomic_long_read(&ion_total_size);
+}
+#endif
 
 /* this function should only be called while dev->lock is held */
 static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
@@ -84,6 +98,10 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
 	track_buffer_created(buffer);
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	if (ion_cnt_enable)
+		atomic_long_add(buffer->size, &ion_total_size);
+#endif
 	return buffer;
 
 err1:
@@ -242,6 +260,11 @@ int ion_buffer_destroy(struct ion_device *dev, struct ion_buffer *buffer)
 
 	heap = buffer->heap;
 	track_buffer_destroyed(buffer);
+
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	if (ion_cnt_enable)
+		atomic_long_sub(buffer->size, &ion_total_size);
+#endif
 
 	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
 		ion_heap_freelist_add(heap, buffer);

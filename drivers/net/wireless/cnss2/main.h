@@ -407,6 +407,7 @@ struct cnss_plat_data {
 	struct cnss_platform_cap cap;
 	struct pm_qos_request qos_request;
 	struct cnss_device_version device_version;
+	u32 rc_num;
 	unsigned long device_id;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
@@ -470,6 +471,9 @@ struct cnss_plat_data {
 	u8 pcie_gen_speed;
 	struct cnss_dms_data dms;
 };
+
+int get_wifi_chain_mode(void);
+void cnss_set_bdf_name(u32 version, u32 ext);
 
 #ifdef CONFIG_ARCH_QCOM
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)

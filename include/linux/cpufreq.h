@@ -17,6 +17,10 @@
 #include <linux/spinlock.h>
 #include <linux/sysfs.h>
 
+#ifdef CONFIG_PCCORE
+#include <oneplus/pccore/pccore_helper.h>
+#endif
+
 /*********************************************************************
  *                        CPUFREQ INTERFACE                          *
  *********************************************************************/
@@ -140,12 +144,26 @@ struct cpufreq_policy {
 
 	/* For cpufreq driver's internal use */
 	void			*driver_data;
-
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	char			change_comm[TASK_COMM_LEN];
+	unsigned int		org_max;
+#endif
 	/* Pointer to the cooling device if used for thermal mitigation */
 	struct thermal_cooling_device *cdev;
 
 	struct notifier_block nb_min;
 	struct notifier_block nb_max;
+
+#ifdef CONFIG_CONTROL_CENTER
+	unsigned int req_freq;
+	unsigned int cc_min;
+	unsigned int cc_max;
+	spinlock_t cc_lock;
+	bool cc_enable;
+#endif
+#ifdef CONFIG_PCCORE
+	unsigned int min_idx;
+#endif
 };
 
 /*
@@ -254,6 +272,10 @@ static inline void cpufreq_stats_record_transition(struct cpufreq_policy *policy
 #define CPUFREQ_RELATION_L 0  /* lowest frequency at or above target */
 #define CPUFREQ_RELATION_H 1  /* highest frequency below or at target */
 #define CPUFREQ_RELATION_C 2  /* closest frequency to target */
+
+#ifdef CONFIG_PCCORE
+#define CPUFREQ_RELATION_OP 3
+#endif
 
 struct freq_attr {
 	struct attribute attr;
@@ -848,6 +870,10 @@ static inline int cpufreq_table_find_index_ac(struct cpufreq_policy *policy,
 	unsigned int freq;
 	int idx, best = -1;
 
+#ifdef CONFIG_PCCORE
+	unsigned int op_mode = get_op_mode();
+	bool op_enable = get_op_select_freq_enable();
+#endif
 	cpufreq_for_each_valid_entry_idx(pos, table, idx) {
 		freq = pos->frequency;
 
@@ -864,10 +890,20 @@ static inline int cpufreq_table_find_index_ac(struct cpufreq_policy *policy,
 			return idx;
 
 		/* Choose the closest freq */
-		if (target_freq - table[best].frequency > freq - target_freq)
-			return idx;
+#ifdef CONFIG_PCCORE
+		if (op_enable && op_mode == 1) {
+			if ((target_freq - table[best].frequency) >
+		((freq - table[best].frequency) * get_op_limit() / 100))
+				return idx;
+		} else {
+			if (target_freq - table[best].frequency >
+			freq - target_freq)
+				return idx;
+		}
+#else
 
 		return best;
+#endif
 	}
 
 	return best;
@@ -881,6 +917,10 @@ static inline int cpufreq_table_find_index_dc(struct cpufreq_policy *policy,
 	struct cpufreq_frequency_table *pos;
 	unsigned int freq;
 	int idx, best = -1;
+#ifdef CONFIG_PCCORE
+	unsigned int op_mode = get_op_mode();
+	bool op_enable = get_op_select_freq_enable();
+#endif
 
 	cpufreq_for_each_valid_entry_idx(pos, table, idx) {
 		freq = pos->frequency;
@@ -898,10 +938,20 @@ static inline int cpufreq_table_find_index_dc(struct cpufreq_policy *policy,
 			return idx;
 
 		/* Choose the closest freq */
-		if (table[best].frequency - target_freq > target_freq - freq)
-			return idx;
-
+#ifdef CONFIG_PCCORE
+		if (op_enable && op_mode == 1) {
+			if ((table[best].frequency - target_freq) <
+					((table[best].frequency - freq) *
+					(100 - get_op_limit()) / 100))
+				return idx;
+		} else {
+			if (table[best].frequency -
+			target_freq > target_freq - freq)
+				return idx;
+		}
+#else
 		return best;
+#endif
 	}
 
 	return best;
@@ -911,12 +961,41 @@ static inline int cpufreq_table_find_index_dc(struct cpufreq_policy *policy,
 static inline int cpufreq_table_find_index_c(struct cpufreq_policy *policy,
 					     unsigned int target_freq)
 {
+
+#ifdef CONFIG_PCCORE
+	unsigned int raw_freq = target_freq * 4 / 5;
+	unsigned int op_mode = get_op_mode();
+	bool op_enable = get_op_select_freq_enable();
+	unsigned int idx, prefer_idx;
+
+	target_freq = clamp_val(target_freq, policy->min, policy->max);
+	raw_freq = clamp_val(raw_freq, policy->min, policy->max);
+	if (policy->freq_table_sorted == CPUFREQ_TABLE_SORTED_ASCENDING) {
+		if (op_enable && op_mode == 2) {
+			prefer_idx = cpufreq_table_find_index_ac(policy,
+			raw_freq);
+			idx = cpufreq_table_find_index_ac(policy, target_freq);
+			return cross_pd(policy->cpu, prefer_idx, idx, true);
+		} else {
+			return cpufreq_table_find_index_ac(policy, target_freq);
+		}
+	} else {
+		if (op_enable && op_mode == 2) {
+			idx = cpufreq_table_find_index_dc(policy, target_freq);
+		prefer_idx = cpufreq_table_find_index_dc(policy, raw_freq);
+			return cross_pd(policy->cpu, prefer_idx, idx, false);
+		} else {
+			return cpufreq_table_find_index_dc(policy, target_freq);
+		}
+	}
+#else
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
 
 	if (policy->freq_table_sorted == CPUFREQ_TABLE_SORTED_ASCENDING)
 		return cpufreq_table_find_index_ac(policy, target_freq);
 	else
 		return cpufreq_table_find_index_dc(policy, target_freq);
+#endif
 }
 
 static inline int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
@@ -934,6 +1013,10 @@ static inline int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 		return cpufreq_table_find_index_h(policy, target_freq);
 	case CPUFREQ_RELATION_C:
 		return cpufreq_table_find_index_c(policy, target_freq);
+#ifdef CONFIG_PCCORE
+	case CPUFREQ_RELATION_OP:
+		return cpufreq_table_find_index_c(policy, target_freq);
+#endif
 	default:
 		pr_err("%s: Invalid relation: %d\n", __func__, relation);
 		return -EINVAL;

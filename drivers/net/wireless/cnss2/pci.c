@@ -12,6 +12,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/memblock.h>
 #include <linux/completion.h>
+#include <soc/qcom/ramdump.h>
+#include <soc/qcom/subsystem_restart.h>
 
 #include "main.h"
 #include "bus.h"
@@ -393,15 +395,24 @@ int cnss_pci_check_link_status(struct cnss_pci_data *pci_priv)
 static void cnss_pci_select_window(struct cnss_pci_data *pci_priv, u32 offset)
 {
 	u32 window = (offset >> WINDOW_SHIFT) & WINDOW_VALUE_MASK;
+	u32 window_enable = WINDOW_ENABLE_BIT | window;
+	u32 val;
 
-	writel_relaxed(WINDOW_ENABLE_BIT | window,
-		       QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET +
-		       pci_priv->bar);
+	writel_relaxed(window_enable, pci_priv->bar +
+		       QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET);
 
 	if (window != pci_priv->remap_window) {
 		pci_priv->remap_window = window;
 		cnss_pr_dbg("Config PCIe remap window register to 0x%x\n",
-			    WINDOW_ENABLE_BIT | window);
+			    window_enable);
+	}
+
+	val = readl_relaxed(pci_priv->bar + QCA6390_PCIE_REMAP_BAR_CTRL_OFFSET);
+	if (val != window_enable) {
+		cnss_pr_err("Failed to config window register to 0x%x, current value: 0x%x\n",
+			    window_enable, val);
+		if (!cnss_pci_check_link_status(pci_priv))
+			CNSS_ASSERT(0);
 	}
 }
 
@@ -3387,8 +3398,8 @@ int cnss_pci_qmi_send_get(struct cnss_pci_data *pci_priv)
 	    !pci_priv->qmi_send_usage_count)
 		ret = cnss_pci_resume_bus(pci_priv);
 	pci_priv->qmi_send_usage_count++;
-	cnss_pr_vdbg("Increased QMI send usage count to %d\n",
-		     pci_priv->qmi_send_usage_count);
+	cnss_pr_buf("Increased QMI send usage count to %d\n",
+		    pci_priv->qmi_send_usage_count);
 	mutex_unlock(&pci_priv->bus_lock);
 
 	return ret;
@@ -3404,8 +3415,8 @@ int cnss_pci_qmi_send_put(struct cnss_pci_data *pci_priv)
 	mutex_lock(&pci_priv->bus_lock);
 	if (pci_priv->qmi_send_usage_count)
 		pci_priv->qmi_send_usage_count--;
-	cnss_pr_vdbg("Decreased QMI send usage count to %d\n",
-		     pci_priv->qmi_send_usage_count);
+	cnss_pr_buf("Decreased QMI send usage count to %d\n",
+		    pci_priv->qmi_send_usage_count);
 	if (cnss_pci_get_auto_suspended(pci_priv) &&
 	    !pci_priv->qmi_send_usage_count)
 		ret = cnss_pci_suspend_bus(pci_priv);
@@ -4362,7 +4373,11 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 		plat_priv->ramdump_info_v2.dump_data_vaddr;
 	struct image_info *fw_image, *rddm_image;
 	struct cnss_fw_mem *fw_mem = plat_priv->fw_mem;
+	struct cnss_subsys_info *subsys_info =
+				&plat_priv->subsys_info;
+	char sfr_buf[SFR_BUF_SIZE];
 	int ret, i, j;
+	int crash_num = 0;
 
 	if (test_bit(CNSS_DEV_ERR_NOTIFY, &plat_priv->driver_state) &&
 	    !test_bit(CNSS_IN_PANIC, &plat_priv->driver_state))
@@ -4444,7 +4459,10 @@ void cnss_pci_collect_dump_info(struct cnss_pci_data *pci_priv, bool in_panic)
 
 	dump_data->nentries += rddm_image->entries;
 
-	mhi_dump_sfr(pci_priv->mhi_ctrl);
+	crash_num++;
+	mhi_dump_sfr(pci_priv->mhi_ctrl, sfr_buf, sizeof(sfr_buf));
+	subsys_store_crash_reason(subsys_info->subsys_device, sfr_buf);
+	subsys_send_uevent_notify(&subsys_info->subsys_desc, crash_num);
 
 	cnss_pr_dbg("Collect remote heap dump segment\n");
 
@@ -4755,21 +4773,29 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 			     struct mhi_link_info *link_info)
 {
 	struct cnss_pci_data *pci_priv = mhi_ctrl->priv_data;
+	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	int ret = 0;
+
+	cnss_pr_dbg("Setting link speed:0x%x, width:0x%x\n",
+		    link_info->target_link_speed,
+		    link_info->target_link_width);
+	ret = msm_pcie_set_target_link_speed(plat_priv->rc_num,
+					     link_info->target_link_speed);
+	if (ret)
+		cnss_pr_err("Failed to set target link speed to 0x%x, err = %d\n",
+			    link_info->target_link_speed, ret);
 
 	ret = msm_pcie_set_link_bandwidth(pci_priv->pci_dev,
 					  link_info->target_link_speed,
 					  link_info->target_link_width);
 
-	if (ret)
+	if (ret) {
+		cnss_pr_err("Failed to set link bandwidth, err = %d\n", ret);
 		return ret;
+	}
 
 	pci_priv->def_link_speed = link_info->target_link_speed;
 	pci_priv->def_link_width = link_info->target_link_width;
-
-	cnss_pr_dbg("Setting link speed:0x%x, width:0x%x\n",
-		    link_info->target_link_speed,
-		    link_info->target_link_width);
 
 	return 0;
 }
@@ -5121,6 +5147,15 @@ int cnss_pci_init(struct cnss_plat_data *plat_priv)
 	if (ret) {
 		cnss_pr_err("Failed to find PCIe RC number, err = %d\n", ret);
 		goto out;
+	}
+
+	plat_priv->rc_num = rc_num;
+	if (plat_priv->device_id == QCA6490_DEVICE_ID) {
+		ret = msm_pcie_set_target_link_speed(rc_num,
+						     PCI_EXP_LNKSTA_CLS_5_0GB);
+		if (ret)
+			cnss_pr_err("Failed to set target PCIe link speed to Gen2, err = %d\n",
+				    ret);
 	}
 
 retry:

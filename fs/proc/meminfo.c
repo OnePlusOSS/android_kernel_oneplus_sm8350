@@ -20,6 +20,10 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include "internal.h"
+#include <oneplus/defrag/defrag_helper.h>
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+#include <linux/oem/oneplus_ion.h>
+#endif
 #ifdef CONFIG_QCOM_MINIDUMP_PANIC_DUMP
 #include <soc/qcom/minidump.h>
 #include <linux/seq_buf.h>
@@ -172,11 +176,25 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 		    global_node_page_state(NR_FILE_PMDMAPPED) * HPAGE_PMD_NR);
 #endif
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+#ifdef CONFIG_ION
+	show_val_kb(m, "IonTotalCache:  ",
+			global_zone_page_state(NR_IONCACHE_PAGES));
+	show_val_kb(m, "IonTotalUsed:   ", ion_total() >> PAGE_SHIFT);
+#endif
+#endif
+
 #ifdef CONFIG_CMA
 	show_val_kb(m, "CmaTotal:       ", totalcma_pages);
 	show_val_kb(m, "CmaFree:        ",
 		    global_zone_page_state(NR_FREE_CMA_PAGES));
 #endif
+#if IS_ENABLED(CONFIG_QGKI)
+	show_val_kb(m, "FastRPCUsed:    ", read_fastrpc_usage());
+	show_val_kb(m, "KgslCache:      ", kgsl_pool_size_total());
+#endif
+	show_defrag_free(m);
+	show_real_freemem(m, i.freeram);
 
 	if (m) {
 		hugetlb_report_meminfo(m);

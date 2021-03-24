@@ -49,6 +49,11 @@
 #include "blk-pm.h"
 #include "blk-rq-qos.h"
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+extern void ohm_iolatency_record(struct request *req,
+	unsigned int nr_bytes, int fg, u64 delta_us);
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 struct dentry *blk_debugfs_root;
 #endif
@@ -1438,7 +1443,22 @@ bool blk_update_request(struct request *req, blk_status_t error,
 {
 	int total_bytes;
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	ktime_t now;
+	u64 delta_us;
+#endif
+
 	trace_block_rq_complete(req, blk_status_to_errno(error), nr_bytes);
+
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	if (req->tag >= 0 && req->block_io_start > 0) {
+		now = ktime_get();
+		delta_us = ktime_us_delta(now, req->block_io_start);
+		ohm_iolatency_record(req, nr_bytes, current_is_fg(),
+			ktime_us_delta(now, req->block_io_start));
+		trace_block_time(req->q, req, delta_us, nr_bytes);
+	}
+#endif
 
 	if (!req->bio)
 		return false;

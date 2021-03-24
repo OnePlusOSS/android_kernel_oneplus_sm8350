@@ -627,8 +627,8 @@ void *hh_rm_call(hh_rm_msgid_t message_id,
 
 	*reply_err_code = connection->reply_err_code;
 	if (connection->reply_err_code) {
-		pr_err("%s: Reply for seq:%d failed with RM err: %d\n",
-			__func__, connection->seq, connection->reply_err_code);
+		//pr_err("%s: Reply for seq:%d failed with RM err: %d\n",
+			//__func__, connection->seq, connection->reply_err_code);
 		ret = ERR_PTR(hh_remap_error(connection->reply_err_code));
 		goto out;
 	}

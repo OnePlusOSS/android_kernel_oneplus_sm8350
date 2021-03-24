@@ -248,6 +248,12 @@ static int fastrpc_pdr_notifier_cb(struct notifier_block *nb,
 static struct dentry *debugfs_root;
 static struct dentry *debugfs_global_file;
 
+static atomic_t total_buf_size;
+int read_fastrpc_usage(void)
+{
+	return atomic_read(&total_buf_size) / PAGE_SIZE;
+}
+
 static inline uint64_t buf_page_start(uint64_t buf)
 {
 	uint64_t start = (uint64_t) buf & PAGE_MASK;
@@ -926,6 +932,7 @@ skip_buf_cache:
 			}
 		}
 		trace_fastrpc_dma_free(fl->cid, buf->phys, buf->size);
+		atomic_sub(buf->size, &total_buf_size);
 		dma_free_attrs(fl->sctx->smmu.dev, buf->size, buf->virt,
 					buf->phys, buf->dma_attr);
 	}
@@ -1576,7 +1583,7 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	buf->flags = rflags;
 	buf->raddr = 0;
 	buf->type = buf_type;
-	ktime_get_real_ts64(&buf->buf_start_time);
+	atomic_add(size, &total_buf_size);
 	buf->virt = dma_alloc_attrs(fl->sctx->smmu.dev, buf->size,
 						(dma_addr_t *)&buf->phys,
 						GFP_KERNEL, buf->dma_attr);
@@ -2198,7 +2205,7 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 	size_t rlen = 0, copylen = 0, metalen = 0, lrpralen = 0;
 	size_t totallen = 0; //header and non ion copy buf len
 	int i, oix;
-	int err = 0;
+	int err = 0, j = 0;
 	int mflags = 0;
 	uint64_t *fdlist;
 	uint32_t *crclist;
@@ -2243,6 +2250,8 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 					FASTRPC_ATTR_NOVA, 0, 0, dmaflags,
 					&ctx->maps[i]);
 		if (err) {
+			for (j = bufs; j < i; j++)
+				fastrpc_mmap_free(ctx->maps[j], 0);
 			mutex_unlock(&ctx->fl->map_mutex);
 			goto bail;
 		}

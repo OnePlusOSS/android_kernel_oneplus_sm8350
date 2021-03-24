@@ -11,6 +11,7 @@
 #include <linux/usb/typec.h>
 #include <linux/usb/ucsi_glink.h>
 #include <linux/soc/qcom/fsa4480-i2c.h>
+#include <linux/proc_fs.h>
 #include <linux/iio/consumer.h>
 
 #define FSA4480_I2C_NAME	"fsa4480-driver"
@@ -435,12 +436,31 @@ static void fsa4480_update_reg_defaults(struct regmap *regmap)
 				   fsa_reg_i2c_defaults[i].val);
 }
 
+static ssize_t fsa4480_exist_read(struct file *p_file,
+			 char __user *puser_buf, size_t count, loff_t *p_offset)
+{
+	return 0;
+}
+
+static ssize_t fsa4480_exist_write(struct file *p_file,
+			 const char __user *puser_buf,
+			 size_t count, loff_t *p_offset)
+{
+	return 0;
+}
+
+static const struct file_operations fsa4480_exist_operations = {
+	.read = fsa4480_exist_read,
+	.write = fsa4480_exist_write,
+};
+
 static int fsa4480_probe(struct i2c_client *i2c,
 			 const struct i2c_device_id *id)
 {
 	struct fsa4480_priv *fsa_priv;
 	u32 use_powersupply = 0;
 	int rc = 0;
+	u32 switch_status = 0;
 
 	fsa_priv = devm_kzalloc(&i2c->dev, sizeof(*fsa_priv),
 				GFP_KERNEL);
@@ -518,6 +538,15 @@ static int fsa4480_probe(struct i2c_client *i2c,
 		(struct rw_semaphore)__RWSEM_INITIALIZER
 		((fsa_priv->fsa4480_notifier).rwsem);
 	fsa_priv->fsa4480_notifier.head = NULL;
+
+	if ((regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS1,
+				&switch_status)) == 0) {
+		if (!proc_create("fsa4480_exist", 0644, NULL,
+				&fsa4480_exist_operations)) {
+			pr_err("%s : Failed to register proc interface\n",
+				__func__);
+		}
+	}
 
 	return 0;
 

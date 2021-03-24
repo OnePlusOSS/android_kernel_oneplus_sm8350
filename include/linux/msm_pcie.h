@@ -64,6 +64,8 @@ int msm_msi_init(struct device *dev);
 
 #if IS_ENABLED(CONFIG_PCI_MSM)
 
+int msm_pcie_set_target_link_speed(u32 rc_idx, u32 target_link_speed);
+
 /**
  * msm_pcie_allow_l1 - allow PCIe link to re-enter L1
  * @pci_dev:		client's pci device structure
@@ -217,6 +219,12 @@ int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
 #else /* !CONFIG_PCI_MSM */
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
+{
+	return -ENODEV;
+}
+
+static inline int msm_pcie_set_target_link_speed(u32 rc_idx,
+			u32 target_link_speed)
 {
 	return -ENODEV;
 }

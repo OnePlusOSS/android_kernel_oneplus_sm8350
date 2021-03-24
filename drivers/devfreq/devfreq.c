@@ -26,6 +26,10 @@
 #include <linux/of.h>
 #include "governor.h"
 
+#ifdef CONFIG_CONTROL_CENTER
+#include <oneplus/control_center/control_center_helper.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/devfreq.h>
 
@@ -371,6 +375,20 @@ int update_devfreq(struct devfreq *devfreq)
 		flags |= DEVFREQ_FLAG_LEAST_UPPER_BOUND; /* Use LUB */
 	}
 
+#ifdef CONFIG_CONTROL_CENTER
+	if (cc_ddr_boost_enabled()) {
+		if (devfreq->dev.cc_marked) {
+			unsigned long val;
+
+			devfreq->dev.parent->cc_marked = devfreq->dev.cc_marked;
+
+			val = cc_get_expect_ddrfreq();
+			if (val)
+				freq = val;
+		}
+	}
+#endif
+
 	return devfreq_set_target(devfreq, freq, flags);
 
 }
@@ -679,6 +697,12 @@ struct devfreq *devfreq_add_device(struct device *dev,
 	atomic_set(&devfreq->suspend_count, 0);
 
 	dev_set_name(&devfreq->dev, "%s", dev_name(dev));
+
+#ifdef CONFIG_CONTROL_CENTER
+	if (dev_name(dev))
+		devfreq->dev.cc_marked = cc_is_ddrfreq_related(dev_name(dev));
+#endif
+
 	err = device_register(&devfreq->dev);
 	if (err) {
 		mutex_unlock(&devfreq->lock);

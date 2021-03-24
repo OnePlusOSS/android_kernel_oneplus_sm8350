@@ -22,10 +22,11 @@
 #include <crypto/hash.h>
 #include <crypto/sha.h>
 #include <linux/iommu.h>
-
+#include <linux/delay.h>
 #include <linux/hwkm.h>
 #include "hwkmregs.h"
 #include "hwkm_serialize.h"
+#define HWKM_DEBUG_DUMP 1
 
 #define BYTES_TO_WORDS(bytes) (((bytes) + 3) / 4)
 
@@ -84,13 +85,17 @@ static struct hwkm_device *km_device;
 	(writel_relaxed((val), (void __iomem *)((hwkm)->ice_base + (reg)))))
 #define qti_hwkm_setb(hwkm, reg, nr, dest) {			\
 	u32 val = qti_hwkm_readl(hwkm, reg, dest);		\
+	rmb();                                  \
 	val |= (0x1 << nr);					\
 	qti_hwkm_writel(hwkm, val, reg, dest);			\
+	wmb();          \
 }
 #define qti_hwkm_clearb(hwkm, reg, nr, dest) {			\
 	u32 val = qti_hwkm_readl(hwkm, reg, dest);		\
+	rmb();                                  \
 	val &= ~(0x1 << nr);					\
 	qti_hwkm_writel(hwkm, val, reg, dest);			\
+	wmb();          \
 }
 
 static inline bool qti_hwkm_testb(struct hwkm_device *hwkm, u32 reg, u8 nr,
@@ -98,6 +103,7 @@ static inline bool qti_hwkm_testb(struct hwkm_device *hwkm, u32 reg, u8 nr,
 {
 	u32 val = qti_hwkm_readl(hwkm, reg, dest);
 
+	rmb();
 	val = (val >> nr) & 0x1;
 	if (val == 0)
 		return false;
@@ -111,6 +117,7 @@ static inline unsigned int qti_hwkm_get_reg_data(struct hwkm_device *dev,
 	u32 val = 0;
 
 	val = qti_hwkm_readl(dev, reg, dest);
+	rmb();
 	return ((val & mask) >> offset);
 }
 
@@ -142,8 +149,33 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 {
 	int i = 0;
 	int err = 0;
-	u32 val = 0;
-	uint32_t rsp_discard;
+	u32 val = 0, ESR_val = 0;
+
+#ifdef HWKM_DEBUG_DUMP
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL, KM_MASTER);
+	rmb();
+	pr_err("%s: before transaction - km_bank_ctl status %x in HWKM\n",
+				__func__, val);
+
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS, KM_MASTER);
+	rmb();
+	pr_err("%s: before transaction - km_bank status %x in HWKM\n",
+				__func__, val);
+
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS, KM_MASTER);
+	rmb();
+	pr_err("%s: before transaction - IRQ status %x in HWKM\n",
+				__func__, val);
+#endif
+
+	ESR_val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR, KM_MASTER);
+	rmb();
+	if (ESR_val) {
+		pr_err("%s: before transaction - error Status %x in HWKM\n",
+				__func__, ESR_val);
+		err = -1;
+	goto Cmd_Err_Handling;
+	}
 
 	// Clear CMD FIFO
 	qti_hwkm_setb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL,
@@ -152,15 +184,6 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 	wmb();
 	qti_hwkm_clearb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL,
 			CMD_FIFO_CLEAR_BIT, KM_MASTER);
-	/* Write memory barrier */
-	wmb();
-
-	// Clear previous CMD errors, write 1 to err bits
-	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR,
-			KM_MASTER);
-	qti_hwkm_writel(dev, val,
-			QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR,
-			KM_MASTER);
 	/* Write memory barrier */
 	wmb();
 
@@ -178,63 +201,45 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 		return -err;
 	}
 
-	if (qti_hwkm_testb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
-			RSP_FIFO_NOT_EMPTY, KM_MASTER)) {
-		while (qti_hwkm_get_reg_data(dev,
-			QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS,
-			RSP_FIFO_AVAILABLE_DATA, RSP_FIFO_AVAILABLE_DATA_MASK,
-			KM_MASTER) > 0) {
-			rsp_discard = qti_hwkm_readl(dev,
-				QTI_HWKM_MASTER_RG_BANK2_RSP_0, KM_MASTER);
-		}
-		// Clear RSP_FIFO_NOT_EMPTY status bit
-		qti_hwkm_setb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
-			RSP_FIFO_NOT_EMPTY, KM_MASTER);
-		/* Write memory barrier */
-		wmb();
-	}
-
 	for (i = 0; i < cmd_words; i++) {
-		WAIT_UNTIL(qti_hwkm_get_reg_data(dev,
+		while (!(qti_hwkm_get_reg_data(dev,
 			QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS,
 			CMD_FIFO_AVAILABLE_SPACE, CMD_FIFO_AVAILABLE_SPACE_MASK,
-			KM_MASTER) > 0);
-		if (qti_hwkm_get_reg_data(dev,
-			QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS,
-			CMD_FIFO_AVAILABLE_SPACE, CMD_FIFO_AVAILABLE_SPACE_MASK,
-			KM_MASTER) == 0) {
-			pr_err("%s: cmd fifo space not available\n", __func__);
-			err = -1;
-			return err;
-		}
+			KM_MASTER) > 0))
+			continue;
+
 		qti_hwkm_writel(dev, cmd_packet[i],
 				QTI_HWKM_MASTER_RG_BANK2_CMD_0, KM_MASTER);
 		/* Write memory barrier */
 		wmb();
+
+		usleep_range(100, 200);
 	}
 
 	for (i = 0; i < rsp_words; i++) {
-		WAIT_UNTIL(qti_hwkm_get_reg_data(dev,
+		while (!(qti_hwkm_get_reg_data(dev,
 			QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS,
 			RSP_FIFO_AVAILABLE_DATA, RSP_FIFO_AVAILABLE_DATA_MASK,
-			KM_MASTER) > 0);
-		if (qti_hwkm_get_reg_data(dev,
-			QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS,
-			RSP_FIFO_AVAILABLE_DATA, RSP_FIFO_AVAILABLE_DATA_MASK,
-			KM_MASTER) == 0) {
-			pr_err("%s: rsp fifo data not available\n", __func__);
-			err = -1;
-			return err;
-		}
+			KM_MASTER) > 0))
+			continue;
+
 		rsp_packet[i] = qti_hwkm_readl(dev,
 				QTI_HWKM_MASTER_RG_BANK2_RSP_0, KM_MASTER);
+		rmb();
+	}
+
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR, KM_MASTER);
+	rmb();
+	if (val) {
+		pr_err("%s: after reading rsp FIFO error %x in ESR\n", __func__,
+			val, i);
 	}
 
 	if (!qti_hwkm_testb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS,
 			CMD_DONE_BIT, KM_MASTER)) {
-		pr_err("%s: CMD_DONE_BIT not set\n", __func__);
+		pr_err("%s: after reading rsp, CMD_DONE_BIT not set\n", __func__);
 		err = -1;
-		return err;
+		goto Cmd_Err_Handling;
 	}
 
 	// Clear CMD_DONE status bit
@@ -243,6 +248,37 @@ static int qti_hwkm_master_transaction(struct hwkm_device *dev,
 	/* Write memory barrier */
 	wmb();
 
+#ifdef HWKM_DEBUG_DUMP
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL, KM_MASTER);
+	rmb();
+	pr_err("%s: after transaction - km_bank_ctl status %x in HWKM\n",
+				__func__, val);
+
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_STATUS, KM_MASTER);
+	rmb();
+	pr_err("%s: after transaction - km_bank status %x in HWKM\n",
+				__func__, val);
+
+	val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_IRQ_STATUS, KM_MASTER);
+	rmb();
+	pr_err("%s: after transaction - IRQ status %x in HWKM\n",
+				__func__, val);
+#endif
+	ESR_val = qti_hwkm_readl(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_ESR, KM_MASTER);
+	rmb();
+	if (!ESR_val)
+		return 0;
+
+	pr_err("%s: after transation: reading rsp FIFO error status %x in HWKM\n",
+			__func__, ESR_val);
+	err = -1;
+
+Cmd_Err_Handling:
+	if (err) {
+		qti_hwkm_setb(dev, QTI_HWKM_MASTER_RG_BANK2_BANKN_CTL,
+				CMD_FIFO_CLEAR_BIT, KM_MASTER);
+		wmb();
+	}
 	return err;
 }
 
@@ -290,6 +326,7 @@ static int qti_hwkm_ice_transaction(struct hwkm_device *dev,
 	// Clear previous CMD errors, write 1 to err bits
 	val = qti_hwkm_readl(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_ESR,
 			ICEMEM_SLAVE);
+	rmb();
 	qti_hwkm_writel(dev, val,
 			QTI_HWKM_ICE_RG_BANK0_BANKN_ESR,
 			ICEMEM_SLAVE);
@@ -319,6 +356,7 @@ static int qti_hwkm_ice_transaction(struct hwkm_device *dev,
 			ICEMEM_SLAVE) > 0) {
 			rsp_discard = qti_hwkm_readl(dev,
 				QTI_HWKM_ICE_RG_BANK0_RSP_0, ICEMEM_SLAVE);
+			rmb();
 		}
 		// Clear RSP_FIFO_NOT_EMPTY status bit
 		qti_hwkm_setb(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
@@ -361,6 +399,7 @@ static int qti_hwkm_ice_transaction(struct hwkm_device *dev,
 		}
 		rsp_packet[i] = qti_hwkm_readl(dev,
 				QTI_HWKM_ICE_RG_BANK0_RSP_0, ICEMEM_SLAVE);
+		rmb();
 	}
 
 	if (!qti_hwkm_testb(dev, QTI_HWKM_ICE_RG_BANK0_BANKN_IRQ_STATUS,
@@ -754,7 +793,7 @@ static int qti_handle_set_tpkey(const struct hwkm_cmd *cmd_in,
 
 	rsp_in->status = rsp[RESPONSE_ERR_IDX];
 	if (rsp_in->status) {
-		pr_err("%s: SET_TPKEY error status 0x%x\n", __func__,
+		pr_err("%s: SET_TPKEY status in rsp packet 0x%x\n", __func__,
 					rsp_in->status);
 		return rsp_in->status;
 	}
@@ -1053,6 +1092,7 @@ out:
 
 int qti_hwkm_handle_cmd(struct hwkm_cmd *cmd, struct hwkm_rsp *rsp)
 {
+	pr_err("%s: command = %d\n", __func__, cmd->op);
 	switch (cmd->op) {
 	case SYSTEM_KDF:
 		return qti_handle_system_kdf(cmd, rsp);
@@ -1165,6 +1205,13 @@ static void qti_hwkm_enable_slave_receive_mode(struct hwkm_device *hwkm_dev)
 			TPKEY_EN, ICEMEM_SLAVE);
 	/* Write memory barrier */
 	wmb();
+
+	//Enable tpkey receive
+	qti_hwkm_setb(hwkm_dev, QTI_HWKM_ICE_RG_TZ_TPKEY_RECEIVE_CTL,
+					TPKEY_EN, ICEMEM_SLAVE);
+	/* Write memory barrier */
+	wmb();
+
 	qti_hwkm_writel(hwkm_dev, ICEMEM_SLAVE_TPKEY_VAL,
 			QTI_HWKM_ICE_RG_TZ_TPKEY_RECEIVE_CTL, ICEMEM_SLAVE);
 	/* Write memory barrier */
@@ -1179,14 +1226,19 @@ static void qti_hwkm_disable_slave_receive_mode(struct hwkm_device *hwkm_dev)
 	wmb();
 }
 
-static void qti_hwkm_check_tpkey_status(struct hwkm_device *hwkm_dev)
+static int qti_hwkm_check_tpkey_status(struct hwkm_device *hwkm_dev)
 {
 	int val = 0;
 
 	val = qti_hwkm_readl(hwkm_dev, QTI_HWKM_ICE_RG_TZ_TPKEY_RECEIVE_STATUS,
 			ICEMEM_SLAVE);
+	rmb();
+	pr_err("%s: Tpkey receive status 0x%x\n", __func__, val);
 
-	pr_debug("%s: Tpkey receive status 0x%x\n", __func__, val);
+	if ((val & (0x1 << 8)) != 0)
+		return 1;
+	else
+		return 0;
 }
 
 static int qti_hwkm_set_tpkey(void)
@@ -1194,6 +1246,12 @@ static int qti_hwkm_set_tpkey(void)
 	int ret = 0;
 	struct hwkm_cmd cmd;
 	struct hwkm_rsp rsp;
+#if 1
+	if (qti_hwkm_check_tpkey_status(km_device)) {
+		pr_err("%s: HWKM TPKey is already set\n", __func__);
+		return 0;
+	}
+#endif
 
 	cmd.op = SET_TPKEY;
 	cmd.set_tpkey.sks = KM_MASTER_TPKEY_SLOT;

@@ -81,6 +81,10 @@
 # define SCHED_WARN_ON(x)	({ (void)(x), 0; })
 #endif
 
+#ifdef CONFIG_UXCHAIN_V2
+extern int sysctl_uxchain_v2;
+#endif
+
 struct rq;
 struct cpuidle_state;
 

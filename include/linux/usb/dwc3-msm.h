@@ -165,4 +165,10 @@ static inline int dwc3_msm_release_ss_lane(struct device *dev)
 { return -ENODEV; }
 #endif
 
+enum oplus_dwc3_notify_event {
+	DWC3_ENUM_DONE,
+};
+
+extern void oplus_dwc3_set_notifier(void (*notify)(enum oplus_dwc3_notify_event event));
+extern int oplus_dwc3_notify_event(enum oplus_dwc3_notify_event event);
 #endif /* __LINUX_USB_DWC3_MSM_H */

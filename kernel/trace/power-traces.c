@@ -27,3 +27,6 @@ EXPORT_TRACEPOINT_SYMBOL(bw_hwmon_meas);
 EXPORT_TRACEPOINT_SYMBOL(bw_hwmon_debug);
 EXPORT_TRACEPOINT_SYMBOL_GPL(device_pm_callback_start);
 EXPORT_TRACEPOINT_SYMBOL_GPL(device_pm_callback_end);
+#ifdef CONFIG_PCCORE
+EXPORT_TRACEPOINT_SYMBOL_GPL(cpu_frequency_select);
+#endif

@@ -85,6 +85,9 @@ extern int sysctl_protected_symlinks;
 extern int sysctl_protected_hardlinks;
 extern int sysctl_protected_fifos;
 extern int sysctl_protected_regular;
+#ifdef CONFIG_FUSE_DECOUPLING
+extern char *inode_name(struct inode *ino);
+#endif
 
 typedef __kernel_rwf_t rwf_t;
 
@@ -3234,6 +3237,9 @@ enum {
 
 	/* filesystem does not support filling holes */
 	DIO_SKIP_HOLES	= 0x02,
+#ifdef CONFIG_FS_HPB
+	DIO_HPB_IO      = 0x10,
+#endif
 };
 
 void dio_end_io(struct bio *bio);

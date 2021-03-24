@@ -1287,6 +1287,22 @@ int do_send_sig_info(int sig, struct kernel_siginfo *info, struct task_struct *p
 	unsigned long flags;
 	int ret = -ESRCH;
 
+#ifdef CONFIG_BG_FREEZER
+	if (sig == SIGKILL) {
+		if (p && p->flags & PF_FROZEN) {
+			struct task_struct *child = p;
+
+			rcu_read_lock();
+			do {
+				child = next_thread(child);
+				child->kill_flag = 1;
+				__thaw_task(child);
+			} while (child != p);
+			rcu_read_unlock();
+		}
+	}
+#endif
+
 	if (lock_task_sighand(p, &flags)) {
 		ret = send_signal(sig, info, p, type);
 		unlock_task_sighand(p, &flags);
@@ -3650,8 +3666,19 @@ static inline void prepare_kill_siginfo(int sig, struct kernel_siginfo *info)
 SYSCALL_DEFINE2(kill, pid_t, pid, int, sig)
 {
 	struct kernel_siginfo info;
+#ifdef CONFIG_BG_FREEZER
+	struct task_struct *p;
+#endif
 
 	prepare_kill_siginfo(sig, &info);
+
+#ifdef CONFIG_BG_FREEZER
+	if (sig == SIGQUIT || sig == SIGSEGV ||  sig == SIGABRT) {
+		p = pid_task(find_vpid(pid), PIDTYPE_PID);
+		if (p)
+			unfreezer_fork(p);
+	}
+#endif
 
 	return kill_something_info(sig, &info, pid);
 }

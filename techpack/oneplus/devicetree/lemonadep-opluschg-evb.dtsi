@@ -1,0 +1,73 @@
+&warp_mcu_gpio {
+	mcu_en_active {
+		mux {
+			pins = "gpio154";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio154";
+			drive-strength = <16>;
+			bias-pull-down;
+		};
+	};
+
+	mcu_en_suspend {
+		mux {
+			pins = "gpio154";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio154";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+};
+
+&warp_charge{
+	microchip,mcu-en-gpio = <&tlmm 154 0x00>;
+};
+
+&battery_charger {
+	op,wrx1-otg-en = <&tlmm 97 0x00>;
+};
+
+&op_wlchg {
+	qcom,wrx_otg-gpio = <&pm8350c_gpios 7 0x00>;
+	pinctrl-names = "wrx_en_active", "wrx_en_sleep", "wrx_en_default",
+			"cp_boost_en_active", "cp_boost_en_sleep", "cp_boost_en_default",
+			"wrx_otg_active", "wrx_otg_sleep";
+	pinctrl-6 = <&wrx_otg_active>;
+	pinctrl-7 = <&wrx_otg_sleep>;
+};
+
+&warp_charge {
+	microchip,usb-sw-2-gpio = <&tlmm 179 0x00>;
+};
+
+&warp_mcu_gpio {
+	usb_sw_active {
+		mux {
+			pins = "gpio39", "gpio179";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio39", "gpio179";
+			drive-strength = <16>;
+			bias-pull-down;
+		};
+	};
+	usb_sw_suspend {
+		mux {
+			pins = "gpio39", "gpio179";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio39", "gpio179";
+			drive-strength = <2>;
+			bias-disable;
+		};
+	};
+};

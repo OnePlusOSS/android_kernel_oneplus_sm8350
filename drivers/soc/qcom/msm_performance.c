@@ -18,6 +18,9 @@
 #include <linux/input.h>
 #include <linux/kthread.h>
 #include <linux/sched/core_ctl.h>
+#ifdef CONFIG_CONTROL_CENTER
+#include <linux/oem/control_center.h>
+#endif
 #include <soc/qcom/msm_performance.h>
 #include <linux/spinlock.h>
 #include <linux/circ_buf.h>
@@ -181,6 +184,9 @@ static int set_cpu_min_freq(const char *buf, const struct kernel_param *kp)
 	struct cpufreq_policy policy;
 	struct freq_qos_request *req;
 	int ret = 0;
+#ifdef CONFIG_CONTROL_CENTER
+	bool boost_on_big_hint = false;
+#endif
 
 	if (!ready_for_freq_updates) {
 		ret = freq_qos_request_init();
@@ -230,6 +236,11 @@ static int set_cpu_min_freq(const char *buf, const struct kernel_param *kp)
 		if (cpufreq_get_policy(&policy, i))
 			continue;
 
+#ifdef CONFIG_CONTROL_CENTER
+		if (i == 7 && policy.max == i_cpu_stats->min)
+			boost_on_big_hint = true;
+#endif
+
 		if (cpu_online(i)) {
 			req = &per_cpu(qos_req_min, i);
 			if (freq_qos_update_request(req, i_cpu_stats->min) < 0)
@@ -241,6 +252,22 @@ static int set_cpu_min_freq(const char *buf, const struct kernel_param *kp)
 	}
 	put_online_cpus();
 
+#ifdef CONFIG_CONTROL_CENTER
+	if (boost_on_big_hint) {
+		struct cc_command cc;
+
+		memset(&cc, 0, sizeof(struct cc_command));
+		cc.pid = current->pid;
+		cc.prio = CC_PRIO_HIGH;
+		cc.period_us = 2 * 1000 * 1000; /* us */
+		cc.group = CC_CTL_GROUP_SYSTEM;
+		cc.response = 0;
+		cc.status = 0;
+		cc.type = CC_CTL_TYPE_PERIOD_NONBLOCK;
+		cc.category = CC_CTL_CATEGORY_TB_PLACE_BOOST;
+		cc_tsk_process(&cc);
+	}
+#endif
 	return 0;
 }
 

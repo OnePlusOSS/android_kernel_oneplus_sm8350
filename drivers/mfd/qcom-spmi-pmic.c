@@ -36,6 +36,9 @@
 #define PMI8998_SUBTYPE		0x15
 #define PM8005_SUBTYPE		0x18
 
+struct regmap *pm8350b_regmap;
+EXPORT_SYMBOL(pm8350b_regmap);
+
 static const struct of_device_id pmic_spmi_id_table[] = {
 	{ .compatible = "qcom,spmi-pmic", .data = (void *)COMMON_SUBTYPE },
 	{ .compatible = "qcom,pm8941",    .data = (void *)PM8941_SUBTYPE },
@@ -136,6 +139,11 @@ static int pmic_spmi_probe(struct spmi_device *sdev)
 		regmap = devm_regmap_init_spmi_ext(sdev, &spmi_regmap_config);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
+
+	if (strcmp("qcom,pm8350b-debug", root->name) == 0) {
+		pm8350b_regmap = regmap;
+		pr_err("regmap device_node : %s\n", root->name);
+	}
 
 	/* Only the first slave id for a PMIC contains this information */
 	if (sdev->usid % 2 == 0)

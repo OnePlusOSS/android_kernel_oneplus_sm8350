@@ -109,6 +109,16 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
 
+#ifdef CONFIG_CONTROL_CENTER
+#include <oneplus/control_center/control_center_helper.h>
+#endif
+#ifdef CONFIG_HOUSTON
+#include <oneplus/houston/houston_helper.h>
+#endif
+#ifdef CONFIG_IM
+#include <linux/oem/im.h>
+#endif
+
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -150,6 +160,10 @@ int lockdep_tasklist_lock_is_held(void)
 }
 EXPORT_SYMBOL_GPL(lockdep_tasklist_lock_is_held);
 #endif /* #ifdef CONFIG_PROVE_RCU */
+
+#ifdef CONFIG_ONEPLUS_TASKLOAD_INFO
+struct sample_window_t sample_window;
+#endif
 
 int nr_processes(void)
 {
@@ -976,6 +990,35 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 	tsk->task_frag.page = NULL;
 	tsk->wake_q.next = NULL;
 
+#ifdef CONFIG_CONTROL_CENTER
+	tsk->nice_effect_ts = 0;
+	tsk->cached_prio = tsk->static_prio;
+#endif
+
+#ifdef CONFIG_UXCHAIN
+	tsk->static_ux = 0;
+	tsk->dynamic_ux = 0;
+	tsk->ux_depth = 0;
+	tsk->oncpu_time = 0;
+	tsk->prio_saved = 0;
+	tsk->saved_flag = 0;
+#endif
+
+#ifdef CONFIG_UXCHAIN_V2
+	tsk->fork_by_static_ux = 0;
+	tsk->ux_once = 0;
+	tsk->get_mmlock = 0;
+	tsk->get_mmlock_ts = 0;
+#endif
+
+#ifdef CONFIG_OPCHAIN
+	tsk->utask_tag = 0;
+	tsk->utask_tag_base = 0;
+	tsk->etask_claim = 0;
+	tsk->claim_cpu = -1;
+	tsk->utask_slave = 0;
+#endif
+
 	account_kernel_stack(tsk, 1);
 
 	kcov_task_init(tsk);
@@ -991,6 +1034,12 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
+#endif
+
+#ifdef CONFIG_TPD
+	tsk->tpd = 0;
+	tsk->dtpd = 0;
+	tsk->dtpdg = -1;
 #endif
 	return tsk;
 
@@ -1054,6 +1103,10 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
 	mm->vmacache_seqnum = 0;
+#ifdef CONFIG_GLOOM_VA_FEATURE
+	mm->va_feature = 0;
+	mm->zygoteheap_in_MB = 0;
+#endif
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 	rwlock_init(&mm->mm_rb_lock);
 #endif
@@ -1996,6 +2049,9 @@ static __latent_entropy struct task_struct *copy_process(
 #endif
 
 	task_io_accounting_init(&p->ioac);
+#ifdef CONFIG_ONEPLUS_TASKLOAD_INFO
+	task_tli_init(p);
+#endif
 	acct_clear_integrals(p);
 
 	posix_cputimers_init(&p->posix_cputimers);
@@ -2046,7 +2102,13 @@ static __latent_entropy struct task_struct *copy_process(
 	p->sequential_io_avg	= 0;
 #endif
 
-	/* Perform scheduler related setup. Assign this task to a CPU. */
+#ifdef CONFIG_FUSE_DECOUPLING
+	p->fpack = NULL;
+#endif
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	p->stuck_trace = 0;
+	memset(&p->oneplus_stuck_info, 0, sizeof(struct oneplus_uifirst_monitor_info));
+#endif /*CONFIG_ONEPLUS_HEALTHINFO*/
 	retval = sched_fork(clone_flags, p);
 	if (retval)
 		goto bad_fork_cleanup_policy;
@@ -2293,6 +2355,26 @@ static __latent_entropy struct task_struct *copy_process(
 	trace_task_newtask(p, clone_flags);
 	uprobe_copy_process(p, clone_flags);
 
+#if defined(CONFIG_CONTROL_CENTER) || defined(CONFIG_HOUSTON) || defined(CONFIG_IM)
+	if (!IS_ERR(p)) {
+#ifdef CONFIG_HOUSTON
+		ht_perf_event_init(p);
+		ht_rtg_init(p);
+#endif
+#ifdef CONFIG_TPP
+		p->tpp_flag = 0;
+#endif
+#ifdef CONFIG_CONTROL_CENTER
+		cc_tsk_init((void *) p);
+#endif
+#ifdef CONFIG_IM
+		im_tsk_init_flag((void *) p);
+#endif
+	}
+#endif
+#ifdef CONFIG_ONEPLUS_FG_OPT
+	p->fuse_boost = 0;
+#endif
 	copy_oom_score_adj(clone_flags, p);
 
 	return p;

@@ -1913,10 +1913,15 @@ fetch_events:
 			res = -EINTR;
 			break;
 		}
-
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			current->in_epoll = 1;
+#endif
 		if (!freezable_schedule_hrtimeout_range(to, slack,
 						        HRTIMER_MODE_ABS)) {
 			timed_out = 1;
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+			current->in_epoll = 0;
+#endif
 			break;
 		}
 

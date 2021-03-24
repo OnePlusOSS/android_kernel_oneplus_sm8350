@@ -55,6 +55,10 @@ enum pon_restart_reason {
 	PON_RESTART_REASON_DMVERITY_CORRUPTED	= 0x04,
 	PON_RESTART_REASON_DMVERITY_ENFORCE	= 0x05,
 	PON_RESTART_REASON_KEYS_CLEAR		= 0x06,
+	PON_RESTART_REASON_SBL_DDRTEST			= 0x24,
+	PON_RESTART_REASON_SBL_DDR_CUS			= 0x25,
+	PON_RESTART_REASON_MEM_AGING			= 0x26,
+
 };
 
 #if IS_ENABLED(CONFIG_INPUT_QPNP_POWER_ON)
@@ -66,6 +70,11 @@ int qpnp_pon_set_restart_reason(enum pon_restart_reason reason);
 bool qpnp_pon_check_hard_reset_stored(void);
 int qpnp_pon_modem_pwr_off(enum pon_power_off_type type);
 
+#ifdef CONFIG_KEY_FLUSH
+extern int panic_flush_device_cache(int timeout);
+extern void panic_flush_device_cache_circled_on(void);
+extern void panic_flush_device_cache_circled_off(void);
+#endif
 #else
 
 static int qpnp_pon_system_pwr_off(enum pon_power_off_type type)

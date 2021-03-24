@@ -198,18 +198,19 @@ EXPORT_SYMBOL(msm_rpmh_master_stats_update);
 static int msm_rpmh_master_stats_probe(struct platform_device *pdev)
 {
 	struct rpmh_master_stats_prv_data *prvdata = NULL;
-	struct kobject *rpmh_master_stats_kobj = NULL;
 	int ret = -ENOMEM;
 
 	prvdata = devm_kzalloc(&pdev->dev, sizeof(*prvdata), GFP_KERNEL);
 	if (!prvdata)
 		return ret;
 
-	rpmh_master_stats_kobj = kobject_create_and_add(
-					"rpmh_stats",
-					power_kobj);
-	if (!rpmh_master_stats_kobj)
-		return ret;
+	if (rpmh_master_stats_kobj == NULL) {
+		rpmh_master_stats_kobj = kobject_create_and_add(
+						"rpmh",
+						power_kobj);
+		if (!rpmh_master_stats_kobj)
+			return ret;
+	}
 
 	prvdata->kobj = rpmh_master_stats_kobj;
 

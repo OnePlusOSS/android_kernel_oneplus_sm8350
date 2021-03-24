@@ -75,6 +75,21 @@ enum core_ldo_levels {
 #define DP_MODE			BIT(1) /* enables DP mode */
 #define USB3_DP_COMBO_MODE	(USB3_MODE | DP_MODE) /*enables combo mode */
 
+unsigned int USB3_DP_PCS_G12S1_TXMGN_V0;
+module_param(USB3_DP_PCS_G12S1_TXMGN_V0, uint, 0644);
+MODULE_PARM_DESC(USB3_DP_PCS_G12S1_TXMGN_V0, "QUSB3 DP PHY TUNE1");
+
+unsigned int USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB;
+module_param(USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB, uint, 0644);
+MODULE_PARM_DESC(USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB, "QUSB3 DP PHY TUNE2");
+
+unsigned int USB3_UNI_PCS_G12S1_TXMGN_V0;
+module_param(USB3_UNI_PCS_G12S1_TXMGN_V0, uint, 0644);
+MODULE_PARM_DESC(USB3_UNI_PCS_G12S1_TXMGN_V0, "QUSB3 DP PHY TUNE1");
+
+unsigned int USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB;
+module_param(USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB, uint, 0644);
+MODULE_PARM_DESC(USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB, "QUSB3 DP PHY TUNE2");
 /* USB3_DP_COM_TYPEC_STATUS */
 #define PORTSELECT_RAW		BIT(0)
 
@@ -509,6 +524,7 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 	int ret;
 	unsigned int init_timeout_usec = INIT_MAX_TIME_USEC;
 	const struct qmp_reg_val *reg = NULL;
+	u8 USB3_reg1, USB3_reg2, USB3_reg3, USB3_reg4;
 
 	dev_dbg(uphy->dev, "Initializing QMP phy\n");
 
@@ -542,6 +558,40 @@ static int msm_ssphy_qmp_init(struct usb_phy *uphy)
 		goto fail;
 	}
 
+	if (USB3_DP_PCS_G12S1_TXMGN_V0) {
+			pr_err("%s(): (modparam) USB3_DP_PCS_G12S1_TXMGN_V0 val:0x%02x\n",
+				__func__, USB3_DP_PCS_G12S1_TXMGN_V0);
+			writel_relaxed(USB3_DP_PCS_G12S1_TXMGN_V0,
+				phy->base + 0x1D38);
+	}
+	USB3_reg1 = readl_relaxed(phy->base + 0x1D38);
+
+	if (USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB) {
+			pr_err("%s(): (modparam) USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB val:0x%02x\n",
+				__func__, USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB);
+			writel_relaxed(USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB,
+				phy->base + 0x1D6C);
+	}
+	USB3_reg2 = readl_relaxed(phy->base + 0x1D6C);
+	if (USB3_UNI_PCS_G12S1_TXMGN_V0) {
+			pr_err("%s(): (modparam) USB3_UNI_PCS_G12S1_TXMGN_V0 val:0x%02x\n",
+				__func__, USB3_UNI_PCS_G12S1_TXMGN_V0);
+			writel_relaxed(USB3_UNI_PCS_G12S1_TXMGN_V0,
+				phy->base + 0x0338);
+	}
+	USB3_reg3 = readl_relaxed(phy->base + 0x0338);
+
+	if (USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB) {
+			pr_err("%s(): (modparam) USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB val:0x%02x\n",
+				__func__, USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB);
+			writel_relaxed(USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB,
+				phy->base + 0x036C);
+	}
+	USB3_reg4 = readl_relaxed(phy->base + 0x036C);
+	pr_err("USB3_DP_PCS_G12S1_TXMGN_V0:%x, USB3_DP_PCS_G12S1_TXDEEMPH_M3P5DB:%x\n",
+			USB3_reg1, USB3_reg2);
+	pr_err("USB3_UNI_PCS_G12S1_TXMGN_V0:%x, USB3_UNI_PCS_G12S1_TXDEEMPH_M3P5DB:%x\n",
+			USB3_reg3, USB3_reg4);
 	/* perform software reset of PCS/Serdes */
 	writel_relaxed(0x00, phy->base + phy->phy_reg[USB3_PHY_SW_RESET]);
 	/* start PCS/Serdes to operation mode */

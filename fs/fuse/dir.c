@@ -479,6 +479,9 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	struct fuse_entry_out outentry;
 	struct fuse_inode *fi;
 	struct fuse_file *ff;
+#ifdef CONFIG_FUSE_DECOUPLING
+	char *iname;
+#endif
 
 	/* Userspace expects S_IFREG in create mode */
 	BUG_ON((mode & S_IFMT) != S_IFREG);
@@ -514,7 +517,24 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	args.out_args[0].value = &outentry;
 	args.out_args[1].size = sizeof(outopen);
 	args.out_args[1].value = &outopen;
+#ifdef CONFIG_FUSE_DECOUPLING
+	iname = inode_name(dir);
+	if (iname) {
+		if ((strlen(iname) + entry->d_name.len + 2) <= PATH_MAX) {
+			strlcat(iname, "/", PATH_MAX);
+			strlcat(iname, entry->d_name.name, PATH_MAX);
+		} else {
+			__putname(iname);
+			iname = NULL;
+		}
+	}
+	args.iname = iname;
+#endif
 	err = fuse_simple_request(fc, &args);
+#ifdef CONFIG_FUSE_DECOUPLING
+	if (args.iname)
+		__putname(args.iname);
+#endif
 	if (err)
 		goto out_free_ff;
 
@@ -526,6 +546,7 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	ff->fh = outopen.fh;
 	ff->nodeid = outentry.nodeid;
 	ff->open_flags = outopen.open_flags;
+	ff->sct = args.sct;
 	inode = fuse_iget(dir->i_sb, outentry.nodeid, outentry.generation,
 			  &outentry.attr, entry_attr_timeout(&outentry), 0);
 	if (!inode) {

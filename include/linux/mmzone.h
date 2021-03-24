@@ -63,6 +63,9 @@ enum migratetype {
 #endif
 	MIGRATE_PCPTYPES, /* the number of types on the pcp lists */
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
+#ifdef CONFIG_DEFRAG
+	MIGRATE_UNMOVABLE_DEFRAG_POOL,
+#endif
 #ifdef CONFIG_MEMORY_ISOLATION
 	MIGRATE_ISOLATE,	/* can't allocate from here */
 #endif
@@ -212,6 +215,12 @@ enum zone_stat_item {
 	NR_BOUNCE,
 #if IS_ENABLED(CONFIG_ZSMALLOC)
 	NR_ZSPAGES,		/* allocated in zsmalloc */
+#endif
+#ifdef CONFIG_DEFRAG
+	NR_FREE_DEFRAG_POOL,
+#endif
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	NR_IONCACHE_PAGES,
 #endif
 	NR_FREE_CMA_PAGES,
 	NR_VM_ZONE_STAT_ITEMS };

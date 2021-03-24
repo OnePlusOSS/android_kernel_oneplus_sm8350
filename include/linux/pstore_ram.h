@@ -136,6 +136,16 @@ struct ramoops_platform_data {
 	int		dump_oops;
 	u32		flags;
 	struct persistent_ram_ecc_info ecc_info;
+
+	unsigned long	 device_info_size;
+	unsigned long	 dump_size;
+	unsigned long	 rsv01_size;
+	unsigned long	 rsv02_size;
+	unsigned long	 rsv03_size;
+	unsigned long	 rsv04_size;
+	unsigned long	 rsv05_size;
+
+
 };
 
 #endif

@@ -51,6 +51,11 @@ else
 	LINUX_COMPILE_HOST=$KBUILD_BUILD_HOST
 fi
 
+#delete /work
+CURRENT_RELEASE="${RELEASE#\/work}"
+#replace / to \\
+WINDOWS_RELEASE="${CURRENT_RELEASE//\//\\\\}"
+
 UTS_VERSION="#$VERSION"
 CONFIG_FLAGS=""
 if [ -n "$SMP" ] ; then CONFIG_FLAGS="SMP"; fi
@@ -74,6 +79,17 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
 
   echo \#define LINUX_COMPILE_BY \"`echo $LINUX_COMPILE_BY | $UTS_TRUNCATE`\"
   echo \#define LINUX_COMPILE_HOST \"`echo $LINUX_COMPILE_HOST | $UTS_TRUNCATE`\"
+
+  echo \#define SMBIP \"$SMBIP\"
+  echo \#define RELEASE \"$RELEASE\"
+  echo \#define WINDOWS_RELEASE \"$WINDOWS_RELEASE\"
+  echo \#define CURRENT_OUT_DIRECTORY \"$CURRENT_OUT_DIRECTORY\"
+  echo \#define IMG_FULL_NAME \"$IMG_FULL_NAME\"
+
+  echo \#define VERSION_OUT_DIR \"\\\\\\\\$SMBIP$WINDOWS_RELEASE\\\\$CURRENT_OUT_DIRECTORY\"
+  echo \#define VERSION_OUT_DIR_FULL_NAME \"\\\\\\\\$SMBIP$WINDOWS_RELEASE\\\\$CURRENT_OUT_DIRECTORY\\\\$IMG_FULL_NAME\"
+  echo \#define VERSION_OUT_COMPILE \"\\\\\\\\$SMBIP$WINDOWS_RELEASE\\\\$CURRENT_OUT_DIRECTORY\\\\Debug\\\\compile.h\"
+  echo \#define VERSION_OUT_ELF \"\\\\\\\\$SMBIP$WINDOWS_RELEASE\\\\$CURRENT_OUT_DIRECTORY\\\\Debug\\\\elf\\\\elf.zip\"
 
   LD_VERSION=$($LD -v | head -n1 | sed 's/(compatible with [^)]*)//' \
 		      | sed 's/[[:space:]]*$//')

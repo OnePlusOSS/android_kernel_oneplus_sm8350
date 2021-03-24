@@ -142,12 +142,15 @@ exit:
 	return length;
 }
 
+struct kobject *rpmh_master_stats_kobj = NULL;
 static int soc_sleep_stats_create_sysfs(struct platform_device *pdev,
 					struct soc_sleep_stats_data *drv)
 {
-	drv->kobj = kobject_create_and_add("soc_sleep", power_kobj);
-	if (!drv->kobj)
+	rpmh_master_stats_kobj = kobject_create_and_add("rpmh", power_kobj);
+	if (!rpmh_master_stats_kobj)
 		return -ENOMEM;
+
+	drv->kobj = rpmh_master_stats_kobj;
 
 	sysfs_attr_init(&drv->ka.attr);
 	drv->ka.attr.mode = 0444;

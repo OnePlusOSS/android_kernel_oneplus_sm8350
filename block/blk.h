@@ -15,6 +15,10 @@
 extern struct dentry *blk_debugfs_root;
 #endif
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+extern unsigned long ufs_outstanding;
+#endif
+
 struct blk_flush_queue {
 	unsigned int		flush_queue_delayed:1;
 	unsigned int		flush_pending_idx:1;
@@ -37,6 +41,10 @@ struct blk_flush_queue {
 extern struct kmem_cache *blk_requestq_cachep;
 extern struct kobj_type blk_queue_ktype;
 extern struct ida blk_queue_ida;
+
+#ifdef CONFIG_PANIC_FLUSH
+extern unsigned long sysctl_blkdev_issue_flush_count;
+#endif
 
 static inline struct blk_flush_queue *
 blk_get_flush_queue(struct request_queue *q, struct blk_mq_ctx *ctx)

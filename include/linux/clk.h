@@ -962,6 +962,10 @@ static inline struct clk *clk_get_optional(struct device *dev, const char *id)
 	return clk;
 }
 
+#ifdef CONFIG_HOUSTON
+extern void clk_get_ddr_freq(u64 *val);
+#endif
+
 #if defined(CONFIG_OF) && defined(CONFIG_COMMON_CLK)
 struct clk *of_clk_get(struct device_node *np, int index);
 struct clk *of_clk_get_by_name(struct device_node *np, const char *name);
@@ -982,7 +986,7 @@ static inline struct clk *of_clk_get_from_provider(struct of_phandle_args *clksp
 }
 #endif
 
-#ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
+#if defined(CONFIG_COMMON_CLK_QCOM_DEBUG) || defined(CONFIG_CLK_LIST_SHOW)
 /* Debugfs API to print the enabled clocks */
 void clock_debug_print_enabled(void);
 #else

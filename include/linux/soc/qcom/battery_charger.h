@@ -23,4 +23,11 @@ qti_battery_charger_get_prop(const char *name,
 }
 #endif
 
+enum oplus_subsys_notify_event {
+	SUBSYS_EVENT_ADSP_CRASH,
+	SUBSYS_EVENT_ADSP_RECOVER,
+};
+
+extern void oplus_subsys_set_notifier(void (*notify)(enum oplus_subsys_notify_event event));
+extern int oplus_subsys_notify_event(enum oplus_subsys_notify_event event);
 #endif

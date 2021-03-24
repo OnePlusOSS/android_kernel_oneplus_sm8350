@@ -36,6 +36,11 @@ struct sysrq_key_op {
 	int enable_mask;
 };
 
+#ifdef CONFIG_PANIC_FLUSH
+extern int panic_flush_device_cache(int timeout);
+extern int oem_get_download_mode(void);
+#endif
+
 #ifdef CONFIG_MAGIC_SYSRQ
 
 /* Generic SysRq interface -- you may call it from any device driver, supplying

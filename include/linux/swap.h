@@ -439,6 +439,10 @@ extern atomic_long_t nr_swap_pages;
 extern long total_swap_pages;
 extern atomic_t nr_rotate_swap;
 extern bool has_usable_swap(void);
+#ifdef CONFIG_ZRAM
+extern unsigned long znr_swap_pages;
+extern bool is_enable_zlimit;
+#endif
 
 /* Swap 50% full? Release swapcache more aggressively.. */
 static inline bool vm_swap_full(void)
@@ -448,7 +452,12 @@ static inline bool vm_swap_full(void)
 
 static inline long get_nr_swap_pages(void)
 {
-	return atomic_long_read(&nr_swap_pages);
+#ifdef CONFIG_ZRAM
+	if (is_enable_zlimit)
+		return znr_swap_pages;
+	else
+#endif
+		return atomic_long_read(&nr_swap_pages);
 }
 
 extern void si_swapinfo(struct sysinfo *);

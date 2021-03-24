@@ -78,9 +78,103 @@ static struct pm_qos_object cpu_dma_pm_qos = {
 	.name = "cpu_dma_latency",
 };
 
+#ifdef CONFIG_ONEPLUS_THERM_OPT
+static BLOCKING_NOTIFIER_HEAD(msm_thermal_notifier);
+static struct pm_qos_constraints msm_thermal_constraints = {
+	.list = PLIST_HEAD_INIT(msm_thermal_constraints.list),
+	.target_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.default_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &msm_thermal_notifier,
+};
+static struct pm_qos_object msm_thermal_pm_qos = {
+	.constraints = &msm_thermal_constraints,
+	.name = "msm_thermal",
+};
+
+static BLOCKING_NOTIFIER_HEAD(skin_thermal_notifier);
+static struct pm_qos_constraints skin_thermal_constraints = {
+	.list = PLIST_HEAD_INIT(skin_thermal_constraints.list),
+	.target_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.default_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &skin_thermal_notifier,
+};
+static struct pm_qos_object skin_thermal_pm_qos = {
+	.constraints = &skin_thermal_constraints,
+	.name = "skin_thermal",
+};
+
+static BLOCKING_NOTIFIER_HEAD(modem_skin_thermal_notifier);
+static struct pm_qos_constraints modem_skin_thermal_constraints = {
+	.list = PLIST_HEAD_INIT(modem_skin_thermal_constraints.list),
+	.target_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.default_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &modem_skin_thermal_notifier,
+};
+static struct pm_qos_object modem_skin_thermal_pm_qos = {
+	.constraints = &modem_skin_thermal_constraints,
+	.name = "modem_skin_thermal",
+};
+
+static BLOCKING_NOTIFIER_HEAD(pa1_mmw0_thermal_notifier);
+static struct pm_qos_constraints pa1_mmw0_thermal_constraints = {
+	.list = PLIST_HEAD_INIT(pa1_mmw0_thermal_constraints.list),
+	.target_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.default_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &pa1_mmw0_thermal_notifier,
+};
+static struct pm_qos_object pa1_mmw0_thermal_pm_qos = {
+	.constraints = &pa1_mmw0_thermal_constraints,
+	.name = "mmw0_thermal",
+};
+
+static BLOCKING_NOTIFIER_HEAD(xo_mmw1_thermal_notifier);
+static struct pm_qos_constraints xo_mmw1_thermal_constraints = {
+	.list = PLIST_HEAD_INIT(xo_mmw1_thermal_constraints.list),
+	.target_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.default_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &xo_mmw1_thermal_notifier,
+};
+static struct pm_qos_object xo_mmw1_thermal_pm_qos = {
+	.constraints = &xo_mmw1_thermal_constraints,
+	.name = "mmw1_thermal",
+};
+
+static BLOCKING_NOTIFIER_HEAD(modem_mmw2_thermal_notifier);
+static struct pm_qos_constraints modem_mmw2_thermal_constraints = {
+	.list = PLIST_HEAD_INIT(modem_mmw2_thermal_constraints.list),
+	.target_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.default_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.no_constraint_value = PM_QOS_DYNAMIC_THERMAL_DEFAULT_VALUE,
+	.type = PM_QOS_MAX,
+	.notifiers = &modem_mmw2_thermal_notifier,
+};
+static struct pm_qos_object modem_mmw2_thermal_pm_qos = {
+	.constraints = &modem_mmw2_thermal_constraints,
+	.name = "mmw2_thermal",
+};
+#endif
+
 static struct pm_qos_object *pm_qos_array[] = {
 	&null_pm_qos,
 	&cpu_dma_pm_qos,
+#ifdef CONFIG_ONEPLUS_THERM_OPT
+	&msm_thermal_pm_qos,
+	&skin_thermal_pm_qos,
+	&pa1_mmw0_thermal_pm_qos,
+	&xo_mmw1_thermal_pm_qos,
+	&modem_mmw2_thermal_pm_qos,
+	&modem_skin_thermal_pm_qos,
+#endif
 };
 
 static ssize_t pm_qos_power_write(struct file *filp, const char __user *buf,

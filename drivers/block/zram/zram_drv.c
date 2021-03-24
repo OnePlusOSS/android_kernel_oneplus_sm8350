@@ -55,6 +55,8 @@ static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 				u32 index, int offset, struct bio *bio);
 
+unsigned long znr_swap_pages;
+bool is_enable_zlimit;
 
 static int zram_slot_trylock(struct zram *zram, u32 index)
 {
@@ -258,6 +260,11 @@ static ssize_t mem_limit_store(struct device *dev,
 
 	down_write(&zram->init_lock);
 	zram->limit_pages = PAGE_ALIGN(limit) >> PAGE_SHIFT;
+	if (zram->limit_pages) {
+		is_enable_zlimit = true;
+		znr_swap_pages = zram->limit_pages * 3;
+	} else
+		is_enable_zlimit = false;
 	up_write(&zram->init_lock);
 
 	return len;
@@ -313,6 +320,10 @@ static ssize_t idle_store(struct device *dev,
 	}
 
 	up_read(&zram->init_lock);
+
+#ifdef CONFIG_ZWB_HANDLE
+	wake_up_process(zwb_clear_tsk);
+#endif
 
 	return len;
 }
@@ -763,6 +774,7 @@ next:
 	if (blk_idx)
 		free_block_bdev(zram, blk_idx);
 	__free_page(page);
+	ksys_sync();
 release_init_lock:
 	up_read(&zram->init_lock);
 
@@ -1089,10 +1101,11 @@ static ssize_t bd_stat_show(struct device *dev,
 
 	down_read(&zram->init_lock);
 	ret = scnprintf(buf, PAGE_SIZE,
-		"%8llu %8llu %8llu\n",
+		"%8llu %8llu %8llu %8llu\n",
 			FOUR_K((u64)atomic64_read(&zram->stats.bd_count)),
 			FOUR_K((u64)atomic64_read(&zram->stats.bd_reads)),
-			FOUR_K((u64)atomic64_read(&zram->stats.bd_writes)));
+			FOUR_K((u64)atomic64_read(&zram->stats.bd_writes)),
+			FOUR_K((u64)atomic64_read(&zram->stats.bd_free)));
 	up_read(&zram->init_lock);
 
 	return ret;
@@ -1180,6 +1193,9 @@ static void zram_free_page(struct zram *zram, size_t index)
 	if (zram_test_flag(zram, index, ZRAM_WB)) {
 		zram_clear_flag(zram, index, ZRAM_WB);
 		free_block_bdev(zram, zram_get_element(zram, index));
+#ifdef CONFIG_ZRAM_WRITEBACK
+		atomic64_inc(&zram->stats.bd_free);
+#endif
 		goto out;
 	}
 
@@ -1376,6 +1392,13 @@ compress_again:
 
 	alloced_pages = zs_get_total_pages(zram->mem_pool);
 	update_used_max(zram, alloced_pages);
+
+	if (is_enable_zlimit) {
+		if (alloced_pages < zram->limit_pages)
+			znr_swap_pages = (zram->limit_pages - alloced_pages) * 3;
+		else
+			znr_swap_pages = 0;
+	}
 
 	if (zram->limit_pages && alloced_pages > zram->limit_pages) {
 		zcomp_stream_put(zram->comp);
@@ -1684,6 +1707,7 @@ static void zram_reset_device(struct zram *zram)
 	down_write(&zram->init_lock);
 
 	zram->limit_pages = 0;
+	is_enable_zlimit = false;
 
 	if (!init_done(zram)) {
 		up_write(&zram->init_lock);

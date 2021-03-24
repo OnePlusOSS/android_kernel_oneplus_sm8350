@@ -146,6 +146,10 @@ struct ion_heap {
 
 #define ion_device_add_heap(heap) __ion_device_add_heap(heap, THIS_MODULE)
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+unsigned long ion_total(void);
+#endif
+
 /**
  * struct ion_dma_buf_attachment - hold device-table attachment data for buffer
  * @dev:	device attached to the buffer.

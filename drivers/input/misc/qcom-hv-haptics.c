@@ -675,7 +675,7 @@ static int get_fifo_play_length_us(struct fifo_cfg *fifo, u32 t_lra_us)
 	if (!fifo)
 		return -EINVAL;
 
-	for (i = fifo->num_s; i > 0; i--)
+	for (i = fifo->num_s - 1; i > 0; i--)
 		if (fifo->samples[i] != 0)
 			break;
 
@@ -1257,6 +1257,8 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 	struct haptics_play_info *play = &chip->play;
 	int rc;
 	u8 val;
+
+	return 0;
 
 	if (en) {
 		val = SC_CLR_BIT | AUTO_RES_ERR_CLR_BIT |
@@ -4271,6 +4273,8 @@ static int haptics_suspend(struct device *dev)
 	u8 val = 0;
 	int rc;
 
+	return 0;
+
 	if (chip->cfg_revision == HAP_CFG_V1)
 		return 0;
 
@@ -4304,6 +4308,8 @@ static int haptics_resume(struct device *dev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(dev);
 	u8 val = HAPTICS_EN_BIT;
+
+	return 0;
 
 	if (chip->cfg_revision == HAP_CFG_V1)
 		return 0;

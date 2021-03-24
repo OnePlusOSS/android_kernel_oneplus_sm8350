@@ -12,8 +12,18 @@
 #include <trace/events/sched.h>
 
 #include "walt.h"
+#ifdef CONFIG_CONTROL_CENTER
+#include <linux/oem/control_center.h>
+#endif
+#ifdef CONFIG_IM
+#include <linux/oem/im.h>
+#endif
 
 #include <trace/hooks/sched.h>
+
+#ifdef CONFIG_OPCHAIN
+#include <oneplus/uxcore/opchain_helper.h>
+#endif
 
 int sched_rr_timeslice = RR_TIMESLICE;
 int sysctl_sched_rr_timeslice = (MSEC_PER_SEC / HZ) * RR_TIMESLICE;
@@ -1078,6 +1088,10 @@ static void update_curr_rt(struct rq *rq)
 	struct sched_rt_entity *rt_se = &curr->rt;
 	u64 delta_exec;
 	u64 now;
+#ifdef CONFIG_ONEPLUS_TASKLOAD_INFO
+	u64 window_index = sample_window.window_index;
+	bool index = ODD(window_index);
+#endif
 
 	if (curr->sched_class != &rt_sched_class)
 		return;
@@ -1092,6 +1106,35 @@ static void update_curr_rt(struct rq *rq)
 
 	curr->se.sum_exec_runtime += delta_exec;
 	account_group_exec_runtime(curr, delta_exec);
+
+#ifdef CONFIG_ONEPLUS_TASKLOAD_INFO
+	curr->tli[index].tli_overload_flag |= TASK_RT_THREAD_FLAG;
+	if (window_index != curr->tli[index].task_sample_index) {
+		curr->tli[index].task_sample_index = window_index;
+		curr->tli[index].write_bytes = 0;
+		curr->tli[index].read_bytes = 0;
+		if (current_is_fg()) {
+			curr->tli[index].runtime[1] = delta_exec;
+			curr->tli[index].runtime[0] = 0;
+		} else {
+			curr->tli[index].runtime[0] = delta_exec;
+			curr->tli[index].runtime[1] = 0;
+		}
+		curr->tli[index].tli_overload_flag = 0;
+	} else {
+		if (current_is_fg()) {
+			curr->tli[index].runtime[1] += delta_exec;
+			if (curr->tli[index].runtime[1] > ohm_runtime_thresh_fg)
+				curr->tli[index].tli_overload_flag |=
+					TASK_CPU_OVERLOAD_FG_FLAG;
+		} else {
+			curr->tli[index].runtime[0] += delta_exec;
+			if (curr->tli[index].runtime[0] > ohm_runtime_thresh_bg)
+				curr->tli[index].tli_overload_flag |=
+					TASK_CPU_OVERLOAD_BG_FLAG;
+			}
+	}
+#endif
 
 	curr->se.exec_start = now;
 	cgroup_account_cputime(curr, delta_exec);
@@ -1442,6 +1485,44 @@ static void dequeue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
 	enqueue_top_rt_rq(&rq->rt);
 }
 
+static void
+update_rt_enqueue_sleeper(struct rq *rq, struct task_struct *p)
+{
+	u64 block_start;
+	struct sched_entity *se = &p->se;
+
+	if (!schedstat_enabled())
+		return;
+
+	if (!se)
+		return;
+
+	block_start = schedstat_val(se->statistics.block_start);
+
+	if (block_start) {
+		__schedstat_set(se->statistics.block_start, 0);
+
+		trace_sched_blocked_reason(p);
+	}
+}
+
+static void
+update_rt_dequeue(struct rq *rq, struct task_struct *p)
+{
+	struct sched_entity *se = &p->se;
+
+	if (!schedstat_enabled())
+		return;
+
+	if (!se)
+		return;
+
+	if (p->state & TASK_UNINTERRUPTIBLE) {
+		__schedstat_set(se->statistics.block_start,
+				    rq_clock_task(rq));
+	}
+}
+
 /*
  * Adding/removing a task to/from a priority array:
  */
@@ -1458,6 +1539,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rq, p);
+
+	update_rt_enqueue_sleeper(rq, p);
 }
 
 static void dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
@@ -1469,6 +1552,7 @@ static void dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	walt_dec_cumulative_runnable_avg(rq, p);
 
 	dequeue_pushable_task(rq, p);
+	update_rt_dequeue(rq, p);
 }
 
 /*
@@ -1830,6 +1914,14 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	int best_cpu_idle_idx = INT_MAX;
 	int cpu_idle_idx = -1;
 	bool boost_on_big = rt_boost_on_big();
+#ifdef CONFIG_OPCHAIN
+	bool best_cpu_is_claimed = false;
+#endif
+
+#ifdef CONFIG_SF_BOOST
+	if (task->compensate_need == 2 && tutil > 90)
+		boost_on_big = true;
+#endif
 
 	rcu_read_lock();
 
@@ -1840,6 +1932,12 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	sd = rcu_dereference(*per_cpu_ptr(&sd_asym_cpucapacity, cpu));
 	if (!sd)
 		goto unlock;
+
+#if defined(CONFIG_CONTROL_CENTER) && defined(CONFIG_IM)
+	boost_on_big = boost_on_big |
+		im_hwc(task) |
+		(im_sf(task) && ccdm_get_hint(CCDM_TB_PLACE_BOOST));
+#endif
 
 retry:
 	sg = sd->groups;
@@ -1857,7 +1955,18 @@ retry:
 
 		for_each_cpu_and(cpu, lowest_mask, sched_group_span(sg)) {
 
+#ifdef CONFIG_UXCHAIN
+			struct rq *rq = cpu_rq(cpu);
+			struct task_struct *tsk = rq->curr;
+#endif
+
 			trace_sched_cpu_util(cpu);
+
+#ifdef CONFIG_UXCHAIN
+			if (tsk->static_ux && tsk == tsk->group_leader &&
+				sysctl_launcher_boost_enabled && sysctl_uxchain_enabled)
+				continue;
+#endif
 
 			if (cpu_isolated(cpu))
 				continue;
@@ -1870,6 +1979,16 @@ retry:
 
 			util = cpu_util(cpu);
 
+#ifdef CONFIG_OPCHAIN
+			if (best_cpu_is_claimed) {
+				best_cpu_idle_idx = cpu_idle_idx;
+				best_cpu_util_cum = util_cum;
+				best_cpu_util = util;
+				best_cpu = cpu;
+				best_cpu_is_claimed = false;
+				continue;
+			}
+#endif
 			/* Find the least loaded CPU */
 			if (util > best_cpu_util)
 				continue;
@@ -1900,6 +2019,14 @@ retry:
 					continue;
 			}
 
+#ifdef CONFIG_OPCHAIN
+			if (opc_get_claim_on_cpu(cpu)) {
+				if (best_cpu != -1)
+					continue;
+				else
+					best_cpu_is_claimed = true;
+			}
+#endif
 			best_cpu_idle_idx = cpu_idle_idx;
 			best_cpu_util_cum = util_cum;
 			best_cpu_util = util;

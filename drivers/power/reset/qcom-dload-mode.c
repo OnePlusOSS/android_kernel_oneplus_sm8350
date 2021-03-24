@@ -39,6 +39,27 @@ static bool enable_dump =
 	IS_ENABLED(CONFIG_POWER_RESET_QCOM_DOWNLOAD_MODE_DEFAULT);
 static enum qcom_download_mode current_download_mode = QCOM_DOWNLOAD_NODUMP;
 static enum qcom_download_mode dump_mode = QCOM_DOWNLOAD_FULLDUMP;
+static void *dload_addr;
+
+#ifdef CONFIG_ARCH_LAHAINA
+static int set_dump_mode(enum qcom_download_mode mode);
+int oem_get_download_mode(void)
+{
+	return current_download_mode && (dump_mode & QCOM_DOWNLOAD_FULLDUMP);
+}
+EXPORT_SYMBOL(oem_get_download_mode);
+
+void oem_force_minidump_mode(void)
+{
+	if (dump_mode == QCOM_DOWNLOAD_FULLDUMP) {
+		pr_err("force minidump mode\n");
+		dump_mode = QCOM_DOWNLOAD_MINIDUMP;
+		set_dump_mode(dump_mode);
+		if (dload_addr)
+			__raw_writel(QCOM_DOWNLOAD_DEST_EMMC, dload_addr);
+	}
+}
+#endif
 
 static int set_download_mode(enum qcom_download_mode mode)
 {
@@ -335,7 +356,7 @@ static int qcom_dload_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	poweroff->dload_dest_addr = map_prop_mem("qcom,msm-imem-dload-type");
+	dload_addr = poweroff->dload_dest_addr = map_prop_mem("qcom,msm-imem-dload-type");
 	store_kaslr_offset();
 
 	msm_enable_dump_mode(enable_dump);

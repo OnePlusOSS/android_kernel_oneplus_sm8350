@@ -1,0 +1,178 @@
+/* Copyright (c) 2020, Pixelworks
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+#include "pxlw-iris5-cfg-samsung-amb670yf01-dsc-cmd.dtsi"
+
+&qupv3_se8_i2c {
+       status = "ok";
+       qcom,clk-freq-out = <400000>;
+       pixelworks@26 {  //i2c: 22, i3c: 26
+               status = "ok";
+               compatible = "pixelworks,iris";
+               reg = <0x26>;
+        };
+
+       pixelworks@22 {  //i2c: 22, i3c: 26
+               status = "ok";
+               compatible = "pixelworks,iris-i2c";
+               reg = <0x22>;
+        };
+};
+
+&tlmm {
+	pxlw_iris_gpio: pxlw_iris_gpio {
+		iris_reset_active: iris_reset_active {
+			mux {
+				pins = "gpio9";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio9";
+				drive-strength = <8>;   /* 8 mA */
+				bias-disable;
+			};
+		};
+
+		iris_reset_suspend: iris_reset_suspend {
+			mux {
+				pins = "gpio9";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio9";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		iris_wakeup_active: iris_wakeup_active {
+			mux {
+				pins = "gpio10";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio10";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		iris_wakeup_suspend: iris_wakeup_suspend {
+			mux {
+				pins = "gpio10";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio10";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		iris_abyp_ready_active: iris_abyp_ready_active {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		iris_abyp_ready_suspend: iris_abyp_ready_suspend {
+			mux {
+				pins = "gpio11";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio11";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		/*iris_vdd18_active: iris_vdd18_active {
+			mux {
+				pins = "gpio175";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio175";
+				drive-strength = <8>;
+				bias-pull-up;
+			};
+		};
+
+		iris_vdd18_suspend: iris_vdd18_suspend {
+			mux {
+				pins = "gpio175";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio175";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};*/
+	};
+};
+
+&soc {
+	dsi_iris_pwr_supply: dsi_iris_pwr_supply {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "px_v18r";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <62000>;
+			qcom,supply-disable-load = <80>;
+			qcom,supply-post-on-sleep = <0>;
+		};
+	};
+};
+
+&sde_dsi {
+	px_v18r-supply = <&L8C>;
+	pxlw,iris-lightup-config = <&iris_cfg_samsung_amb670yf01_dsc_cmd>;
+};
+
+&sde_dsi1 {
+	px_v18r-supply = <&L8C>;
+};
+
+&soc {
+	pxlw,iris {
+		compatible = "pxlw,iris";
+		index = <0>;
+
+		pinctrl-names = "iris_active", "iris_suspend";
+		pinctrl-0 = <&iris_reset_active &iris_wakeup_active &iris_abyp_ready_active>;
+		pinctrl-1 = <&iris_reset_suspend &iris_wakeup_suspend &iris_abyp_ready_suspend>;
+
+        qcom,iris-reset-gpio = <&tlmm 9 0>;
+        qcom,iris-wakeup-gpio = <&tlmm 10 0>;
+        qcom,iris-abyp-ready-gpio = <&tlmm 11 0>;
+        //qcom,iris-vdd-gpio = <&tlmm 175 0>;
+	};
+};

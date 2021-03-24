@@ -203,6 +203,81 @@ TRACE_EVENT(cpu_frequency_limits,
 		  (unsigned long)__entry->cpu_id)
 );
 
+#ifdef CONFIG_PCCORE
+TRACE_EVENT(find_freq,
+
+	TP_PROTO(unsigned int target_idx, unsigned int target_freq,
+	unsigned int final_idx, unsigned int final_freq, int cpu,
+	bool op_enable, int dp_level_mode, int dp_level),
+
+	TP_ARGS(target_idx, target_freq, final_idx, final_freq,
+	cpu, op_enable, dp_level_mode, dp_level),
+
+	TP_STRUCT__entry(
+		__field(u32, target_freq)
+		__field(u32, target_idx)
+		__field(u32, final_idx)
+		__field(u32, final_freq)
+		__field(int, cpu)
+		__field(bool, op_enable)
+		__field(int, dp_level_mode)
+		__field(int, dp_level)
+	),
+
+	TP_fast_assign(
+		__entry->target_idx = target_idx;
+		__entry->target_freq = target_freq;
+		__entry->final_idx = final_idx;
+		__entry->final_freq = final_freq;
+		__entry->cpu = cpu;
+		__entry->op_enable = op_enable;
+		__entry->dp_level_mode = dp_level_mode;
+		__entry->dp_level = dp_level;
+	),
+
+	TP_printk(
+		"target[%lu]=%lu final[%lu]=%lu cpu=%d op_enable=%d dp_level_mod=%d dp_level=%d",
+		(unsigned long)__entry->target_idx,
+		(unsigned long)__entry->target_freq,
+		(unsigned long)__entry->final_idx,
+		(unsigned long)__entry->final_freq,
+		(unsigned long)__entry->cpu,
+		 __entry->op_enable, __entry->dp_level_mode, __entry->dp_level)
+);
+
+TRACE_EVENT(cpu_frequency_select,
+
+	TP_PROTO(unsigned int target_freq, unsigned int final_freq,
+		unsigned int index, int cpu, int num),
+
+	TP_ARGS(target_freq, final_freq, index, cpu, num),
+
+	TP_STRUCT__entry(
+		__field(u32, target_freq)
+		__field(u32, final_freq)
+		__field(u32, index)
+		__field(int, cpu)
+		__field(int, num)
+	),
+
+	TP_fast_assign(
+		__entry->target_freq = target_freq;
+		__entry->final_freq = final_freq;
+		__entry->index = index;
+		__entry->cpu = cpu;
+		__entry->num = num;
+	),
+
+	TP_printk("target=%lu final=%lu index=%lu cpu=%d num=%d",
+		  (unsigned long)__entry->target_freq,
+		  (unsigned long)__entry->final_freq,
+		  (unsigned long)__entry->index,
+				 __entry->cpu, __entry->num)
+);
+#endif
+
+
+
 TRACE_EVENT(device_pm_callback_start,
 
 	TP_PROTO(struct device *dev, const char *pm_ops, int event),
@@ -803,6 +878,33 @@ TRACE_EVENT(sugov_util_update,
 		      __entry->pl, __entry->rtgb, __entry->flags)
 );
 
+#ifdef CONFIG_CONTROL_CENTER
+TRACE_EVENT(sugov_next_freq,
+	    TP_PROTO(unsigned int cpu, unsigned long util, unsigned long max,
+		     unsigned int freq, unsigned int req_freq),
+	    TP_ARGS(cpu, util, max, freq, req_freq),
+	    TP_STRUCT__entry(
+		    __field(unsigned int, cpu)
+		    __field(unsigned long, util)
+		    __field(unsigned long, max)
+		    __field(unsigned int, freq)
+		    __field(unsigned int, req_freq)
+	    ),
+	    TP_fast_assign(
+		    __entry->cpu = cpu;
+		    __entry->util = util;
+		    __entry->max = max;
+		    __entry->freq = freq;
+		    __entry->req_freq = req_freq;
+	    ),
+	    TP_printk("cpu=%u util=%lu max=%lu freq=%u req_freq=%u",
+		      __entry->cpu,
+		      __entry->util,
+		      __entry->max,
+		      __entry->freq,
+		      __entry->req_freq)
+);
+#else
 TRACE_EVENT(sugov_next_freq,
 	    TP_PROTO(unsigned int cpu, unsigned long util, unsigned long max,
 		     unsigned int freq),
@@ -825,6 +927,67 @@ TRACE_EVENT(sugov_next_freq,
 		      __entry->max,
 		      __entry->freq)
 );
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_SUGOV_TL
+TRACE_EVENT(sugov_next_freq_tl,
+	    TP_PROTO(unsigned int cpu, unsigned long util, unsigned long max,
+		     unsigned int freq, unsigned int laf, unsigned int prev_freq),
+	    TP_ARGS(cpu, util, max, freq, laf, prev_freq),
+	    TP_STRUCT__entry(
+		    __field(	unsigned int,	cpu)
+		    __field(	unsigned long,	util)
+		    __field(	unsigned long,	max)
+		    __field(	unsigned int,	freq)
+		    __field(	unsigned int,	laf)
+		    __field(	unsigned int,	prev_freq)
+	    ),
+	    TP_fast_assign(
+		    __entry->cpu = cpu;
+		    __entry->util = util;
+		    __entry->max = max;
+		    __entry->freq = freq;
+		    __entry->laf = laf;
+		    __entry->prev_freq = prev_freq;
+	    ),
+	    TP_printk("cpu=%u util=%lu max=%lu freq=%u laf=%u, prev_freq=%u",
+		      __entry->cpu,
+		      __entry->util,
+		      __entry->max,
+		      __entry->freq,
+		      __entry->laf,
+		      __entry->prev_freq)
+);
+
+TRACE_EVENT(choose_freq,
+	    TP_PROTO(unsigned int freq, unsigned int prevfreq, unsigned int freqmax,
+		     unsigned int freqmin, unsigned int tl, int index),
+	    TP_ARGS(freq, prevfreq, freqmax, freqmin, tl, index),
+	    TP_STRUCT__entry(
+		    __field(unsigned int, freq)
+		    __field(unsigned int, prevfreq)
+		    __field(unsigned int, freqmax)
+		    __field(unsigned int, freqmin)
+		    __field(unsigned int, tl)
+		    __field(int, index)
+	    ),
+	    TP_fast_assign(
+		    __entry->freq = freq;
+		    __entry->prevfreq = prevfreq;
+		    __entry->freqmax = freqmax;
+		    __entry->freqmin = freqmin;
+		    __entry->tl = tl;
+		    __entry->index = index;
+	    ),
+	    TP_printk("freq=%u prevfreq=%u freqmax=%u freqmin=%u tl=%u index=%d",
+		      __entry->freq,
+		      __entry->prevfreq,
+		      __entry->freqmax,
+		      __entry->freqmin,
+		      __entry->tl,
+		      __entry->index)
+);
+#endif
 
 #endif /* _TRACE_POWER_H */
 

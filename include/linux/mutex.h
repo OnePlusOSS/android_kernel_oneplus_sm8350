@@ -65,6 +65,8 @@ struct mutex {
 #endif
 };
 
+extern inline struct task_struct *__mutex_owner(struct mutex *lock);
+
 /*
  * This is the control structure for tasks blocked on mutex,
  * which resides on the blocked task's kernel stack:

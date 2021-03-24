@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
-#include <linux/debugfs.h>
+#include <linux/proc_fs.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/io.h>
@@ -1085,7 +1085,7 @@ static ssize_t tzdbgfs_read_unencrypted(struct file *file, char __user *buf,
 	size_t count, loff_t *offp)
 {
 	int len = 0;
-	int tz_id = *(int *)(file->private_data);
+	int tz_id = *(int *)PDE_DATA(file_inode(file));
 
 	if (tz_id == TZDBG_BOOT || tz_id == TZDBG_RESET ||
 		tz_id == TZDBG_INTERRUPT || tz_id == TZDBG_GENERAL ||
@@ -1150,7 +1150,7 @@ static ssize_t tzdbgfs_read_encrypted(struct file *file, char __user *buf,
 	size_t count, loff_t *offp)
 {
 	int len = 0, ret = 0;
-	int tz_id = *(int *)(file->private_data);
+	int tz_id = *(int *)PDE_DATA(file_inode(file));
 	struct tzdbg_stat *stat = &(tzdbg.stat[tz_id]);
 
 	pr_debug("%s: tz_id = %d\n", __func__, tz_id);
@@ -1190,7 +1190,7 @@ static ssize_t tzdbgfs_read_encrypted(struct file *file, char __user *buf,
 static ssize_t tzdbgfs_read(struct file *file, char __user *buf,
 	size_t count, loff_t *offp)
 {
-	int tz_id =  *(int *)(file->private_data);
+	int tz_id =  *(int *)PDE_DATA(file_inode(file));
 
 	if (!tzdbg.is_encrypted_log_enabled ||
 		(tz_id == TZDBG_HYP_GENERAL || tz_id == TZDBG_HYP_LOG))
@@ -1350,22 +1350,22 @@ static int  tzdbgfs_init(struct platform_device *pdev)
 {
 	int rc = 0;
 	int i;
-	struct dentry *dent_dir;
-	struct dentry *dent;
+	struct proc_dir_entry *dent_dir = NULL;
+	struct proc_dir_entry *dent = NULL;
 
-	dent_dir = debugfs_create_dir("tzdbg", NULL);
+	dent_dir = proc_mkdir("tzdbg", NULL);
 	if (dent_dir == NULL) {
-		dev_err(&pdev->dev, "tzdbg debugfs_create_dir failed\n");
+		dev_err(&pdev->dev, "tzdbg proc_mkdir failed\n");
 		return -ENOMEM;
 	}
 
 	for (i = 0; i < TZDBG_STATS_MAX; i++) {
 		tzdbg.debug_tz[i] = i;
-		dent = debugfs_create_file_unsafe(tzdbg.stat[i].name,
+		dent = proc_create_data(tzdbg.stat[i].name,
 				0444, dent_dir,
-				&tzdbg.debug_tz[i], &tzdbg_fops);
+				&tzdbg_fops, &tzdbg.debug_tz[i]);
 		if (dent == NULL) {
-			dev_err(&pdev->dev, "TZ debugfs_create_file failed\n");
+			dev_err(&pdev->dev, "TZ proc_create_data failed\n");
 			rc = -ENOMEM;
 			goto err;
 		}
@@ -1373,16 +1373,16 @@ static int  tzdbgfs_init(struct platform_device *pdev)
 	platform_set_drvdata(pdev, dent_dir);
 	return 0;
 err:
-	debugfs_remove_recursive(dent_dir);
+	proc_remove(dent_dir);
 
 	return rc;
 }
 
 static void tzdbgfs_exit(struct platform_device *pdev)
 {
-	struct dentry *dent_dir;
+	struct proc_dir_entry *dent_dir = NULL;
 	dent_dir = platform_get_drvdata(pdev);
-	debugfs_remove_recursive(dent_dir);
+	proc_remove(dent_dir);
 }
 
 static int __update_hypdbg_base(struct platform_device *pdev,

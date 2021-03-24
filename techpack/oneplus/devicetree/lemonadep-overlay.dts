@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+
+#include "../../../arch/arm64/boot/dts/vendor/qcom/lahaina-mtp-overlay.dts"
+#include "lahaina_oem.dtsi"
+#include "lemonadep.dtsi"
+#include "lemonadep-thermal-overlay.dtsi"
+#include"../../../arch/arm64/boot/dts/vendor/qcom/camera/lahaina-oem-camera-lemonadep_evt.dtsi"
+#include "lemonadep-sns-regulator-evb.dtsi"
+/ {
+    model = "Qualcomm Technologies, Inc. Lahaina MTP lemonadep";
+    /*we can add project id to this array,uefi can auto read it,if new project,we add to this array */
+    oem,project-id = <0x19815 0x2085A>; /*8350 use hex*/
+    oem,project-codename = "lemonadep","lemonadept","lemonadepv";
+    /*we can add hw id to this array,uefi can auto read it,if new hw,we add to this array  */
+    oem,hw-id = <12 13 21 22 23 31 32 33>;
+};

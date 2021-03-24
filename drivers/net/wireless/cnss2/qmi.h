@@ -31,6 +31,8 @@ struct cnss_qmi_event_fw_mem_file_save_data {
 #include "ip_multimedia_subsystem_private_service_v01.h"
 #include "device_management_service_v01.h"
 
+int cnss_pow_ten(int n);
+int cnss_atoi(const char *numbers);
 int cnss_qmi_init(struct cnss_plat_data *plat_priv);
 void cnss_qmi_deinit(struct cnss_plat_data *plat_priv);
 unsigned int cnss_get_qmi_timeout(struct cnss_plat_data *plat_priv);

@@ -103,12 +103,19 @@
 
 #if defined(CONFIG_SYSCTL)
 
+#ifdef CONFIG_HUNG_TASK_ENHANCE
+#include <linux/oem/hung_task_enhance.h>
+#endif
+
 /* External variables not in a header file. */
 extern int suid_dumpable;
 #ifdef CONFIG_COREDUMP
 extern int core_uses_pid;
 extern char core_pattern[];
 extern unsigned int core_pipe_limit;
+#endif
+#ifdef CONFIG_DIRECT_SWAPPINESS
+extern int vm_direct_swapiness;
 #endif
 extern int pid_max;
 extern int extra_free_kbytes;
@@ -134,6 +141,12 @@ static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
 static int one_thousand = 1000;
+#ifdef CONFIG_DIRECT_SWAPPINESS
+static int two_hundred = 200;
+#endif
+#ifdef CONFIG_PANIC_FLUSH
+unsigned long sysctl_blkdev_issue_flush_count;
+#endif
 #ifdef CONFIG_QCOM_HYP_CORE_CTL
 static int five_hundred = 500;
 static int five_thousand = 5000;
@@ -337,6 +350,13 @@ static int max_sched_tunable_scaling = SCHED_TUNABLESCALING_END-1;
 #endif /* CONFIG_SMP */
 #endif /* CONFIG_SCHED_DEBUG */
 
+#ifdef CONFIG_UXCHAIN
+int sysctl_uxchain_enabled = 1;
+int sysctl_launcher_boost_enabled;
+#endif
+#ifdef CONFIG_UXCHAIN_V2
+int sysctl_uxchain_v2 = 1;
+#endif
 #ifdef CONFIG_COMPACTION
 static int min_extfrag_threshold;
 static int max_extfrag_threshold = 1000;
@@ -350,6 +370,58 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
+#ifdef CONFIG_PANIC_FLUSH
+	{
+		.procname       = "blkdev_issue_flush_count",
+		.data           = &sysctl_blkdev_issue_flush_count,
+		.maxlen         = sizeof(unsigned long),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec,
+	},
+#endif
+#if defined(CONFIG_PREEMPT_TRACER) && defined(CONFIG_PREEMPTIRQ_EVENTS)
+	{
+		.procname	= "preemptoff_tracing_threshold_ns",
+		.data		= &sysctl_preemptoff_tracing_threshold_ns,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
+#if defined(CONFIG_IRQSOFF_TRACER) && defined(CONFIG_PREEMPTIRQ_EVENTS)
+	{
+		.procname	= "irqsoff_tracing_threshold_ns",
+		.data		= &sysctl_irqsoff_tracing_threshold_ns,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= &half_million,
+		.extra2		= &one_hundred_million,
+	},
+	{
+		.procname	= "irqsoff_dmesg_output_enabled",
+		.data		= &sysctl_irqsoff_dmesg_output_enabled,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "irqsoff_crash_sentinel_value",
+		.data		= &sysctl_irqsoff_crash_sentinel_value,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+	{
+		.procname	= "irqsoff_crash_threshold_ns",
+		.data		= &sysctl_irqsoff_crash_threshold_ns,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
+		.extra1		= &one_million,
+		.extra2		= &one_hundred_million,
+	},
+#endif
 #ifdef CONFIG_QCOM_HYP_CORE_CTL
 	{
 		.procname	= "hh_suspend_timeout_ms",
@@ -1142,7 +1214,7 @@ static struct ctl_table kern_table[] = {
 		.data		= &console_loglevel,
 		.maxlen		= 4*sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
+		.proc_handler	= proc_dointvec_oem,
 	},
 	{
 		.procname	= "printk_ratelimit",
@@ -1448,7 +1520,23 @@ static struct ctl_table kern_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
-
+#ifdef CONFIG_HUNG_TASK_ENHANCE
+	{
+		.procname	= "hung_task_kill",
+		.data		= &sysctl_hung_task_kill,
+		.maxlen		= 128,
+		.mode		= 0666,
+		.proc_handler	= proc_dostring,
+	},
+	{
+		.procname	= "hung_task_maxiowait_count",
+		.data		= &sysctl_hung_task_maxiowait_count,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &five,
+	},
+#endif
 #endif
 #ifdef CONFIG_RT_MUTEXES
 	{
@@ -1591,6 +1679,31 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
+#ifdef CONFIG_UXCHAIN
+	{
+		.procname	= "uxchain_enabled",
+		.data		= &sysctl_uxchain_enabled,
+		.maxlen = sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+	{
+		.procname	= "launcher_boost_enabled",
+		.data		= &sysctl_launcher_boost_enabled,
+		.maxlen = sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+#endif
+#ifdef CONFIG_UXCHAIN_V2
+	{
+		.procname	= "uxchain_v2",
+		.data		= &sysctl_uxchain_v2,
+		.maxlen = sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+#endif
 	{ }
 };
 
@@ -1720,8 +1833,23 @@ static struct ctl_table vm_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
+#ifdef CONFIG_DIRECT_SWAPPINESS
+		.extra2		= &two_hundred,
+#else
 		.extra2		= &one_hundred,
+#endif
 	},
+#ifdef CONFIG_DIRECT_SWAPPINESS
+	{
+		.procname	= "direct_swappiness",
+		.data		= &vm_direct_swapiness,
+		.maxlen		= sizeof(vm_direct_swapiness),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &two_hundred,
+	},
+#endif
 	{
 		.procname       = "want_old_faultaround_pte",
 		.data           = &want_old_faultaround_pte,
@@ -2916,6 +3044,24 @@ int proc_dointvec(struct ctl_table *table, int write,
 {
 	return do_proc_dointvec(table, write, buffer, lenp, ppos, NULL, NULL);
 }
+
+static unsigned int oem_en_chg_prk_lv = 1;
+module_param(oem_en_chg_prk_lv, uint, 0644);
+
+int proc_dointvec_oem(struct ctl_table *table, int write,
+		     void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+    if(oem_en_chg_prk_lv || !write )
+		return do_proc_dointvec(table, write, buffer, lenp, ppos, NULL, NULL);
+    else
+		return -ENOSYS;
+}
+static int __init oem_disable_chg_prk_lv(char *str)
+{
+	oem_en_chg_prk_lv = 0;
+	return 0;
+}
+early_param("debug", oem_disable_chg_prk_lv);
 
 /**
  * proc_douintvec - read a vector of unsigned integers

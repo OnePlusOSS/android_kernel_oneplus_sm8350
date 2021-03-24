@@ -679,6 +679,10 @@ void blk_mq_start_request(struct request *rq)
 {
 	struct request_queue *q = rq->q;
 
+#ifdef CONFIG_ONEPLUS_HEALTHINFO
+	rq->block_io_start = ktime_get();
+#endif
+
 	trace_block_rq_issue(q, rq);
 
 	if (test_bit(QUEUE_FLAG_STATS, &q->queue_flags)) {

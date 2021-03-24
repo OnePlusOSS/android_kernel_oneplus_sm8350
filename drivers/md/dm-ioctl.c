@@ -1695,6 +1695,9 @@ static ioctl_fn lookup_ioctl(unsigned int cmd, int *ioctl_flags)
 	if (unlikely(cmd >= ARRAY_SIZE(_ioctls)))
 		return NULL;
 
+	if (_ioctls[cmd].fn != NULL)
+		DMINFO("%s found command: %ps", __func__, _ioctls[cmd].fn);
+
 	*ioctl_flags = _ioctls[cmd].flags;
 	return _ioctls[cmd].fn;
 }

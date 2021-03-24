@@ -88,3 +88,6 @@ obj-$(CONFIG_QRTR)		+= qrtr/
 obj-$(CONFIG_NET_NCSI)		+= ncsi/
 obj-$(CONFIG_XDP_SOCKETS)	+= xdp/
 obj-$(CONFIG_NEURON)		+= neuron/
+#ifeq ($(CONFIG_QGKI),y)
+obj-$(CONFIG_SLA)		+= opsla/
+#endif
