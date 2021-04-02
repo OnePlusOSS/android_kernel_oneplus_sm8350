@@ -323,6 +323,7 @@ struct oplus_chg_wls_status {
 	bool trx_present;
 	bool is_op_trx;
 	bool epp_working;
+	bool epp_5w;
 	bool quiet_mode;
 	bool switch_quiet_mode;
 	bool cep_timeout_adjusted;

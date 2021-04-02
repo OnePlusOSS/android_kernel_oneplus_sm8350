@@ -25,6 +25,11 @@ static int __init tri_key_module_init(void)
 {
 	TRI_KEY_LOG("call\n");
 
+	if (platform_driver_register(&tri_key_platform_driver) != 0) {
+		TRI_KEY_LOG("unable to add tri_key_platform_driver\n");
+		return -1;
+	}
+
 	if (i2c_add_driver(&ist8801_i2c_down_driver) != 0){
 		TRI_KEY_LOG("unable to add ist8801_i2c_down_driver\n");
 		return -1;
@@ -45,10 +50,6 @@ static int __init tri_key_module_init(void)
 		return -1;
 	}
 
-	if (platform_driver_register(&tri_key_platform_driver) != 0) {
-		TRI_KEY_LOG("unable to add tri_key_platform_driver\n");
-		return -1;
-	}
 /*
 	if (platform_driver_register(&tristate_dev_driver) != 0) {
 		TRI_KEY_LOG("unable to add tristate_dev_driver\n");

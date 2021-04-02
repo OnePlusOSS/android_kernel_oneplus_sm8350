@@ -250,6 +250,7 @@
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
         at-current-support = <1>;
+        is-diff-af-support = <1>;
     };
 
     eeprom_rear_4: qcom,eeprom@4 {

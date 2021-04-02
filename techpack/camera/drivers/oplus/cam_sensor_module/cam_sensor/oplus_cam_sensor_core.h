@@ -64,6 +64,7 @@ int sensor_gc5035_update_reg(struct cam_sensor_ctrl_t * s_ctrl);
 
 int oplus_sensor_sony_get_dpc_data(struct cam_sensor_ctrl_t *s_ctrl);
 int cam_sensor_match_id_oem(struct cam_sensor_ctrl_t *s_ctrl,uint32_t chip_id);
+int cam_sensor_diff_af_support(struct cam_sensor_ctrl_t *s_ctrl, uint32_t vendor_id);
 
 int32_t cam_sensor_update_id_info(struct cam_cmd_probe *probe_info,
     struct cam_sensor_ctrl_t *s_ctrl);

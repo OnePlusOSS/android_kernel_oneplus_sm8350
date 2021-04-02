@@ -2,6 +2,7 @@
 #define __OPLUS_P9415_REG_H__
 
 #define P9415_RX_PWR_15W		0x1e
+#define P9415_RX_PWR_10W		0x14
 #define P9415_RX_MODE_EPP		0x31
 #define P9415_RX_MODE_BPP		0x04
 

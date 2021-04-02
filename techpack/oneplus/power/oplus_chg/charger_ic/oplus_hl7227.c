@@ -562,6 +562,21 @@ static int hl7227_driver_probe(struct i2c_client *client, const struct i2c_devic
 	chip->client = client;
 	i2c_set_clientdata(client, chip);
 
+	rc = hl7227_gpio_init(chip);
+	if (rc < 0) {
+		pr_err("gpio init error, rc=%d\n", rc);
+		goto gpio_init_err;
+	}
+
+	mutex_init(&chip->i2c_lock);
+
+	msleep(10);
+	rc = hl7227_hardware_init(chip);
+	if (rc < 0) {
+		pr_err("hardware init error, rc=%d\n", rc);
+		goto hw_init_err;
+	}
+
 	rc = of_property_read_u32(node, "oplus,ic_type", &ic_type);
 	if (rc < 0) {
 		pr_err("can't get ic type, rc=%d\n", rc);
@@ -581,23 +596,9 @@ static int hl7227_driver_probe(struct i2c_client *client, const struct i2c_devic
 	chip->ic_dev->dev_ops = &hl7227_dev_ops;
 	chip->ic_dev->type = ic_type;
 
-	rc = hl7227_gpio_init(chip);
-	if (rc < 0) {
-		pr_err("gpio init error, rc=%d\n", rc);
-		goto gpio_init_err;
-	}
-
-	mutex_init(&chip->i2c_lock);
-
-	msleep(10);
-	rc = hl7227_hardware_init(chip);
-	if (rc < 0) {
-		pr_err("hardware init error, rc=%d\n", rc);
-		goto hw_init_err;
-	}
-
 	return 0;
 
+reg_ic_err:
 hw_init_err:
 	if (!gpio_is_valid(chip->cp_en_gpio))
 		gpio_free(chip->cp_en_gpio);
@@ -605,8 +606,6 @@ hw_init_err:
 	if (!gpio_is_valid(chip->cp_int_gpio))
 		gpio_free(chip->cp_int_gpio);
 gpio_init_err:
-	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
-reg_ic_err:
 regmap_init_err:
 	devm_kfree(&client->dev, chip);
 	return rc;
@@ -650,12 +649,12 @@ static int hl7227_driver_remove(struct i2c_client *client)
 	if(chip == NULL)
 		return -ENODEV;
 
+	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
 	if (!gpio_is_valid(chip->cp_en_gpio))
 		gpio_free(chip->cp_en_gpio);
 	disable_irq(chip->cp_int_irq);
 	if (!gpio_is_valid(chip->cp_int_gpio))
 		gpio_free(chip->cp_int_gpio);
-	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
 	devm_kfree(&client->dev, chip);
 
 	return 0;

@@ -935,6 +935,7 @@ static void oplus_chg_wls_reset_variables(struct oplus_chg_wls *wls_dev) {
 	// wls_status->rx_present = false;
 	wls_status->is_op_trx = false;
 	wls_status->epp_working = false;
+	wls_status->epp_5w = false;
 	wls_status->quiet_mode = false;
 	wls_status->switch_quiet_mode = false;
 	wls_status->cep_timeout_adjusted = false;
@@ -3012,6 +3013,8 @@ static int oplus_chg_wls_rx_handle_state_default(struct oplus_chg_wls *wls_dev)
 		wls_status->wls_type = OPLUS_CHG_WLS_BPP;
 		wls_status->target_rx_state = OPLUS_CHG_WLS_RX_STATE_BPP;
 		break;
+	case OPLUS_CHG_WLS_RX_MODE_EPP_5W:
+		wls_status->epp_5w = true;
 	case OPLUS_CHG_WLS_RX_MODE_EPP:
 		wls_status->epp_working = true;
 		wls_status->wls_type = OPLUS_CHG_WLS_EPP;
@@ -3353,10 +3356,11 @@ static int oplus_chg_wls_rx_enter_state_epp(struct oplus_chg_wls *wls_dev)
 		wls_status->state_sub_step = 1;
 		break;
 	case 1:
-		if (wls_status->vout_mv < 8000)
-			vote(wls_dev->nor_icl_votable, USER_VOTER, true, 500, false);
-		else
-			vote(wls_dev->nor_icl_votable, USER_VOTER, true, icl_max_ma, false);
+		if(wls_status->epp_5w || wls_status->vout_mv < 8000)
+			vote(wls_dev->nor_icl_votable, USER_VOTER, true, 450, true);
+		else if (wls_status->vout_mv > 9000)
+			vote(wls_dev->nor_icl_votable, USER_VOTER, true, icl_max_ma, true);
+
 		wls_status->state_sub_step = 0;
 		wls_status->current_rx_state = OPLUS_CHG_WLS_RX_STATE_EPP;
 		break;
@@ -3424,10 +3428,10 @@ static int oplus_chg_wls_rx_handle_state_epp(struct oplus_chg_wls *wls_dev)
 		}
 	}
 
-	if (wls_status->vout_mv > 9000)
+	if(wls_status->epp_5w || wls_status->vout_mv < 8000)
+		vote(wls_dev->nor_icl_votable, USER_VOTER, true, 450, true);
+	else if (wls_status->vout_mv > 9000)
 		vote(wls_dev->nor_icl_votable, USER_VOTER, true, icl_max_ma, true);
-	else if (wls_status->vout_mv < 8000 )
-		vote(wls_dev->nor_icl_votable, USER_VOTER, true, 500, true);
 
 	(void)oplus_chg_wls_nor_skin_check(wls_dev);
 	oplus_chg_wls_check_term_charge(wls_dev);

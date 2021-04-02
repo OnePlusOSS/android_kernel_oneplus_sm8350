@@ -156,6 +156,7 @@ enum oplus_chg_wls_rx_mode {
 	OPLUS_CHG_WLS_RX_MODE_BPP,
 	OPLUS_CHG_WLS_RX_MODE_EPP,
 	OPLUS_CHG_WLS_RX_MODE_EPP_PLUS,
+	OPLUS_CHG_WLS_RX_MODE_EPP_5W,
 };
 
 enum oplus_chg_wls_trx_status {

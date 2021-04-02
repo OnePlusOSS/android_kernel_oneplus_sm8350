@@ -3193,6 +3193,12 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 		TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
+	prEntry_tmp = proc_create_data("oplus_apk", 0666, prEntry_tp, &proc_touch_apk_fops, ts);
+	if (prEntry_tmp == NULL) {
+		ret = -ENOMEM;
+		TPD_INFO("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
+	}
+
 	prEntry_tmp = proc_create_data("tp_switch_dead_zone", 0666, prEntry_tp, &proc_tp_dead_zone_fops, ts);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
@@ -5873,7 +5879,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		ts->corner_dead_zone_xl = 0xFF;
 		ts->corner_dead_zone_yl = 0x77;
 		ts->corner_dead_zone_xp = 0x66;
-		ts->corner_dead_zone_yp = 0xF5;
+		ts->corner_dead_zone_yp = 0xC5;
 	}
 	if(ts->is_noflash_ic) {
 		ts->irq = ts->s_client->irq;

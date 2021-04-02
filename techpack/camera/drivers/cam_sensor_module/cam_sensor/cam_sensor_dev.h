@@ -132,6 +132,7 @@ struct cam_sensor_ctrl_t {
         enum cam_sensor_setting_state sensor_initsetting_state;
         struct task_struct *sensor_open_thread;
         int at_current_support;
+        int is_diff_af_support;
 #endif
 };
 

@@ -488,7 +488,7 @@ static int judge_interference(struct extcon_dev_data *chip)
 				return 0;
 				}
 			}
-		if (delta > calib_DnValueMin - down_tolerance && delta < calib_DnValueMin + up_mid_tol) {
+		if (delta > calib_DnValueMin - down_tolerance && delta < calib_DnValueMin + mid_down_tol) {
 			TRI_KEY_LOG("tri_key:calib_Min:%d,calib_Sum:%d\n", calib_DnValueMin, calib_DnValueSum);
 
 			if (sum < calib_DnValueSum - tol2 || sum > calib_DnValueSum + tol2) {

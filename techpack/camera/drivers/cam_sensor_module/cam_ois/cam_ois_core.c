@@ -18,6 +18,7 @@
 #include "fw_download_interface.h"
 extern bool chip_version_old;
 #endif
+#include "cam_trace.h"
 
 #ifdef ENABLE_OIS_DELAY_POWER_DOWN
 static int cam_ois_power_down(struct cam_ois_ctrl_t *o_ctrl);
@@ -780,6 +781,7 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 			o_ctrl->cam_ois_state = CAM_OIS_CONFIG;
 		}
 
+		trace_begin("%d_%d_%s Download FW", o_ctrl->cci_num, o_ctrl->cci_i2c_master, o_ctrl->ois_name);
 		if (o_ctrl->ois_fw_flag) {
 			if (strstr(o_ctrl->ois_name, "lc898")) {
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
@@ -807,9 +809,11 @@ static int cam_ois_pkt_parse(struct cam_ois_ctrl_t *o_ctrl, void *arg)
 
 			if (rc) {
 				CAM_ERR(CAM_OIS, "Failed OIS FW Download");
+				trace_end();
 				goto pwr_dwn;
 			}
 		}
+		trace_end();
 
 		rc = cam_ois_apply_settings(o_ctrl, &o_ctrl->i2c_init_data);
 		if ((rc == -EAGAIN) &&

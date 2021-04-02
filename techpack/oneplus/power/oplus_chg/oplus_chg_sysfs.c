@@ -210,8 +210,12 @@ static ssize_t oplus_chg_mod_show_property(struct device *dev,
 			      oplus_chg_mod_usb_type_text[value.intval]);
 		break;
 	case OPLUS_CHG_PROP_WLS_TYPE:
-		ret = sprintf(buf, "%s\n",
-			      oplus_chg_mod_wls_type_text[value.intval]);
+		if (value.intval == OPLUS_CHG_WLS_PD_65W)
+			ret = sprintf(buf, "%s\n",
+				oplus_chg_mod_wls_type_text[OPLUS_CHG_WLS_SWARP]);
+		else
+			ret = sprintf(buf, "%s\n",
+				oplus_chg_mod_wls_type_text[value.intval]);
 		break;
 	case OPLUS_CHG_PROP_TRX_STATUS:
 		ret = sprintf(buf, "%s\n",

@@ -448,6 +448,22 @@
 		};
 
 	};
+
+	oplus_typec_ic {
+		ext1_otg_default: ext1_otg_default {
+			mux {
+				pins = "gpio8";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio8";
+				drive-strength = <16>;
+				bias-pull-down;
+				input-enable;
+			};
+		};
+	};
 };
 
 &pm8350c_gpios {
@@ -842,6 +858,8 @@
 		oplus,ic_type = <OPLUS_CHG_IC_TYPEC>;
 		oplus,ic_index = <0>;
 		oplus,ext1-otg-en = <&tlmm 8 0x00>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ext1_otg_default>;
 	};
 };
 

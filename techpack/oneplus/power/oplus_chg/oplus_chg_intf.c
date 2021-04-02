@@ -347,10 +347,12 @@ static void oplus_chg_connect_check_work(struct work_struct *work)
 
 	if (atomic_read(&dev->usb_online) == 0) {
 		dev->sid_backup = 0;
+		pr_info("sid_backup clean\n");
 		if (chip != NULL) {
 			chip->reconnect_count = 0;
 			chip->norchg_reconnect_count = 0;
 		}
+		oplus_warp_reset_fastchg_after_usbout();
 	}
 	dev->icon_debounce = false;
 	if (dev->usb_ocm)
@@ -1016,6 +1018,7 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
 			if (atomic_read(&op_dev->usb_online) == 0) {
 				atomic_set(&op_dev->usb_online, 1);
 				if (op_dev->usb_ocm) {
+					oplus_chg_global_event(op_dev->usb_ocm, OPLUS_CHG_EVENT_PRESENT);
 					oplus_chg_global_event(op_dev->usb_ocm, val);
 					oplus_chg_mod_changed(op_dev->usb_ocm);
 				}
@@ -1048,9 +1051,9 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
 					chip->norchg_reconnect_count = 0;
 					op_dev->icon_debounce = false;
 					op_dev->sid_backup = 0;
+					pr_info("sid_backup clean\n");
+					oplus_warp_reset_fastchg_after_usbout();
 				}
-				pr_info("sid_backup clean\n");
-				oplus_warp_reset_fastchg_after_usbout();
 				if (op_dev->usb_ocm) {
 					oplus_chg_global_event(op_dev->usb_ocm, val);
 					oplus_chg_mod_changed(op_dev->usb_ocm);
@@ -1068,7 +1071,7 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
 			if (atomic_read(&op_dev->usb_present) == 0) {
 				atomic_set(&op_dev->usb_present, 1);
 				if (op_dev->usb_ocm) {
-					oplus_chg_global_event(op_dev->usb_ocm, val);
+					// oplus_chg_global_event(op_dev->usb_ocm, val);
 					oplus_chg_mod_changed(op_dev->usb_ocm);
 				}
 				op_dev->batt_update_count = 0;

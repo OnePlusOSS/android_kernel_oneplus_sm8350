@@ -6,3 +6,20 @@
 /* Instantiate tracepoints */
 #define CREATE_TRACE_POINTS
 #include "cam_trace.h"
+
+pid_t camera_provider_pid;
+const char* GetFileName(const char* pFilePath)
+{
+    const char* pFileName = strrchr(pFilePath, '/');
+
+    if (NULL != pFileName)
+    {
+        pFileName += 1;
+    }
+    else
+    {
+        pFileName = pFilePath;
+    }
+
+    return pFileName;
+}

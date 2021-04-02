@@ -660,6 +660,50 @@ int32_t cam_sensor_update_id_info(struct cam_cmd_probe *probe_info,
         s_ctrl->sensordata->id_info.sensor_id_mask);
     return rc;
 }
+
+int cam_sensor_diff_af_support(struct cam_sensor_ctrl_t *s_ctrl, uint32_t vendor_id)
+{
+    int rc = 0;
+    struct camera_io_master *io_master_info_tmp = &(s_ctrl->io_master_info);
+    uint32_t vcm_id;
+    uint32_t af_driver_id;
+    uint16_t temp_sid;
+
+    temp_sid = io_master_info_tmp->cci_client->sid;
+    io_master_info_tmp->cci_client->sid = 0xA2 >> 1; 
+    rc=camera_io_dev_read(
+                &(s_ctrl->io_master_info),
+                0x000A,
+                &vcm_id, CAMERA_SENSOR_I2C_TYPE_WORD,
+                CAMERA_SENSOR_I2C_TYPE_BYTE);
+    rc=camera_io_dev_read(
+                &(s_ctrl->io_master_info),
+                0x000C,
+                &af_driver_id, CAMERA_SENSOR_I2C_TYPE_WORD,
+                CAMERA_SENSOR_I2C_TYPE_BYTE);
+    io_master_info_tmp->cci_client->sid = temp_sid;
+
+    CAM_ERR(CAM_SENSOR, "read sensor_id 0x%x vcm_id: 0x%x, af_driver_id: 0x%x, rc = %d",
+                    s_ctrl->sensordata->id_info.sensor_id, vcm_id, af_driver_id, rc);
+
+    if(vendor_id<2){
+        if((s_ctrl->sensordata->id_info.sensor_id & 0x0000FF)<2)
+                return 0;
+        else
+                return -1;
+    }
+    else if(vendor_id>=9){
+        if(((s_ctrl->sensordata->id_info.sensor_id & 0x0000FF)>=9) &&
+            (((s_ctrl->sensordata->id_info.sensor_id >> 8) & 0x0000FF)==vcm_id) &&
+            (((s_ctrl->sensordata->id_info.sensor_id >> 16) & 0x0000FF)==af_driver_id))
+                return 0;
+        else
+            return -1;
+    }
+
+    return rc;
+}
+
 int cam_sensor_match_id_oem(struct cam_sensor_ctrl_t *s_ctrl,uint32_t chip_id)
 {
     uint32_t vendor_id = 0;
@@ -674,6 +718,10 @@ int cam_sensor_match_id_oem(struct cam_sensor_ctrl_t *s_ctrl,uint32_t chip_id)
             CAM_ERR(CAM_SENSOR, "read vendor_id_addr=0x%x vendor_id: 0x%x expected vendor_id 0x%x: rc=%d",
                     s_ctrl->sensordata->id_info.sensor_id_reg_addr,vendor_id, s_ctrl->sensordata->id_info.sensor_id,rc);
             /*if vendor id <2 ,it is old module if vendor_id >=9,it is 0.91 or 1.0 module*/
+            if(s_ctrl->is_diff_af_support){
+                rc = cam_sensor_diff_af_support(s_ctrl, vendor_id);
+                return rc;
+            }
             if(vendor_id<2){
                         if(s_ctrl->sensordata->id_info.sensor_id<2)
                                 return 0;
@@ -741,6 +789,11 @@ void cam_sensor_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
         if ( rc < 0) {
                 CAM_DBG(CAM_SENSOR, "Invalid sensor params");
                 s_ctrl->at_current_support = 0;
+        }
+        rc = of_property_read_u32(of_node, "is-diff-af-support",&s_ctrl->is_diff_af_support);
+        if ( rc < 0) {
+                CAM_DBG(CAM_SENSOR, "Invalid sensor params");
+                s_ctrl->is_diff_af_support = 0;
         }
 }
 

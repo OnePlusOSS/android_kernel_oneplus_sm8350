@@ -585,8 +585,10 @@ static int p9415_get_rx_mode(struct oplus_chg_ic_dev *dev, enum oplus_chg_wls_rx
 		}
 		if (temp >= P9415_RX_PWR_15W)
 			*rx_mode = OPLUS_CHG_WLS_RX_MODE_EPP_PLUS;
-		else
+		else if(temp >= P9415_RX_PWR_10W)
 			*rx_mode = OPLUS_CHG_WLS_RX_MODE_EPP;
+		else
+			*rx_mode = OPLUS_CHG_WLS_RX_MODE_EPP_5W;
 	} else if (temp == P9415_RX_MODE_BPP) {
 		*rx_mode = OPLUS_CHG_WLS_RX_MODE_BPP;
 	} else{

@@ -283,6 +283,7 @@
         clock-rates = <19200000>;
         is-read-eeprom = <1>;
         at-current-support = <1>;
+        is-diff-af-support = <1>;
     };
 
 //Mono camera
