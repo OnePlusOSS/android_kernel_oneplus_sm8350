@@ -520,8 +520,8 @@ struct oplus_chg_wls {
 	const char *wls_chg_fw_name;
 };
 
-#ifdef OPLUS_CHG_DEBUG
-void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf);
+#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
+int oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf);
 #endif
 
 #endif /* __OPLUS_CHG_WLS_H__ */

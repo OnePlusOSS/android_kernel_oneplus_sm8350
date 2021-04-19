@@ -13,7 +13,7 @@ oplus_chg-obj-y += oplus_chg_ic.o
 oplus_chg-obj-y += oplus_chg_wls.o
 oplus_chg-obj-y += oplus_chg_comm.o
 oplus_chg-obj-y += oplus_chg_voter.o
-oplus_chg-obj-y += oplus_chg_cfg.o
+oplus_chg-obj-$(CONFIG_OPLUS_CHG_DYNAMIC_CONFIG) += oplus_chg_cfg.o
 oplus_chg-obj-y += oplus_chg_strategy.o
 
 oplus_chg-obj-y += adapter_ic/oplus_stm.o

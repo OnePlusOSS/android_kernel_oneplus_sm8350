@@ -2362,7 +2362,7 @@ static int syna_corner_limit_handle(struct syna_tcm_data *tcm_info)
 			TPD_INFO("%s:failed to set DC_GRIP_ABS_DARK_Y\n", __func__);
 			return ret;
 		}
-		ret = syna_tcm_set_dynamic_config(tcm_info, DC_GRIP_CONDTION_ZONE,0x64);
+		ret = syna_tcm_set_dynamic_config(tcm_info, DC_GRIP_CONDTION_ZONE,0x3C);
 		if (ret < 0) {
 			TPD_INFO("%s:failed to set DC_GRIP_CONDTION_ZONE\n", __func__);
 			return ret;

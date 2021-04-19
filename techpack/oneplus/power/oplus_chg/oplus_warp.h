@@ -393,6 +393,7 @@ int oplus_warp_user_fw_upgrade(u8 *fw_buf, u32 fw_size);
 bool is_warp_asic_hwid_check_by_i2c(struct oplus_warp_chip *chip);
 int oplus_chg_asic_register(struct oplus_chg_asic *asic);
 int oplus_chg_asic_unregister(struct oplus_chg_asic *asic);
+int oplus_warp_convert_fast_chg_type(int fast_chg_type);
 #endif
 
 #endif /* _OPLUS_WARP_H */

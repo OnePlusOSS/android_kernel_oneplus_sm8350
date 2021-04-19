@@ -519,6 +519,49 @@
 		wake-capable-sensor;
 	};
 
+        msm-therm-step {
+                polling-delay-passive = <0>;
+                polling-delay = <0>;
+                thermal-governor = "step_wise";
+                thermal-sensors = <&pmk8350_adc_tm PM8350_ADC7_AMUX_THM1_100K_PU>;
+                trips {
+                        modem_wifi0_config: active-config0 {
+                                temperature = <53000>;
+                                hysteresis = <5000>;
+                                type = "passive";
+                        };
+
+                        modem_wifi1_config: active-config1 {
+                                temperature = <55000>;
+                                hysteresis = <5000>;
+                                type = "passive";
+                        };
+
+                        modem_wifi2_config: active-config2 {
+                                temperature = <80000>;
+                                hysteresis = <33000>;
+                                type = "passive";
+                        };
+                };
+
+                cooling-maps {
+                        modem_wifi0_cdev {
+                                trip = <&modem_wifi0_config>;
+                                cooling-device = <&modem_skin 1 1>;
+                        };
+
+                        modem_wifi1_cdev {
+                                trip = <&modem_wifi1_config>;
+                                cooling-device = <&modem_skin 2 2>;
+                        };
+
+                        modem_wifi2_cdev {
+                                trip = <&modem_wifi2_config>;
+                                cooling-device = <&modem_skin 3 3>;
+                        };
+                };
+        };
+
 	camera-flash-therm {
 		polling-delay-passive = <0>;
 		polling-delay = <0>;

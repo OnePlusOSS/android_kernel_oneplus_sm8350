@@ -512,4 +512,136 @@
 			};
 		};
 	};
+
+        modem-mmw0-step {
+                polling-delay-passive = <2000>;
+                polling-delay = <0>;
+                thermal-governor = "step_wise";
+                thermal-sensors = <&qmi_sensor
+                                (QMI_MODEM_INST_ID+QMI_QFE_MMW_0)>;
+                trips {
+                        modem_mmw00_config: active-config0 {
+                                temperature = <46000>;
+                                hysteresis = <2000>;
+                                type = "passive";
+                        };
+
+                        modem_mmw01_config: active-config1 {
+                                temperature = <48000>;
+                                hysteresis = <7000>;
+                                type = "passive";
+                        };
+
+                        modem_mmw02_config: active-config2 {
+                                temperature = <80000>;
+                                hysteresis = <30000>;
+                                type = "passive";
+                        };
+                };
+
+                cooling-maps {
+                        modem_mmw00_cdev {
+                                trip = <&modem_mmw00_config>;
+                                cooling-device = <&modem_mmw_skin0 1 1>;
+                        };
+
+                        modem_mmw01_cdev {
+                                trip = <&modem_mmw01_config>;
+                                cooling-device = <&modem_mmw_skin0 2 2>;
+                        };
+
+                        modem_mmw02_cdev {
+                                trip = <&modem_mmw02_config>;
+                                cooling-device = <&modem_mmw_skin0 3 3>;
+                        };
+                };
+        };
+
+        modem-mmw1-step {
+                polling-delay-passive = <2000>;
+                polling-delay = <0>;
+                thermal-governor = "step_wise";
+                thermal-sensors = <&qmi_sensor
+                                (QMI_MODEM_INST_ID+QMI_QFE_MMW_1)>;
+                trips {
+                        modem_mmw10_config: active-config0 {
+                                temperature = <45000>;
+                                hysteresis = <1000>;
+                                type = "passive";
+                        };
+
+                        modem_mmw11_config: active-config1 {
+                                temperature = <48000>;
+                                hysteresis = <5000>;
+                                type = "passive";
+                        };
+
+                        modem_mmw12_config: active-config2 {
+                                temperature = <80000>;
+                                hysteresis = <28000>;
+                                type = "passive";
+                        };
+                };
+
+                cooling-maps {
+                        modem_mmw10_cdev {
+                                trip = <&modem_mmw10_config>;
+                                cooling-device = <&modem_mmw_skin1 1 1>;
+                        };
+
+                        modem_mmw11_cdev {
+                                trip = <&modem_mmw11_config>;
+                                cooling-device = <&modem_mmw_skin1 2 2>;
+                        };
+
+                        modem_mmw12_cdev {
+                                trip = <&modem_mmw12_config>;
+                                cooling-device = <&modem_mmw_skin1 3 3>;
+                        };
+                };
+        };
+
+        modem-mmw2-step {
+                polling-delay-passive = <2000>;
+                polling-delay = <0>;
+                thermal-governor = "step_wise";
+                thermal-sensors = <&qmi_sensor
+                                (QMI_MODEM_INST_ID+QMI_QFE_MMW_2)>;
+                trips {
+                        modem_mmw20_config: active-config0 {
+                                temperature = <50000>;
+                                hysteresis = <2000>;
+                                type = "passive";
+                        };
+
+                        modem_mmw21_config: active-config1 {
+                                temperature = <54000>;
+                                hysteresis = <9000>;
+                                type = "passive";
+                        };
+
+                        modem_mmw22_config: active-config2 {
+                                temperature = <80000>;
+                                hysteresis = <32000>;
+                                type = "passive";
+                        };
+                };
+
+                cooling-maps {
+                        modem_mmw20_cdev {
+                                trip = <&modem_mmw20_config>;
+                                cooling-device = <&modem_mmw_skin2 1 1>;
+                        };
+
+                        modem_mmw21_cdev {
+                                trip = <&modem_mmw21_config>;
+                                cooling-device = <&modem_mmw_skin2 2 2>;
+                        };
+
+                        modem_mmw22_cdev {
+                                trip = <&modem_mmw22_config>;
+                                cooling-device = <&modem_mmw_skin2 3 3>;
+                        };
+                };
+        };
 };

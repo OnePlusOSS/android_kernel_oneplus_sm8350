@@ -469,6 +469,9 @@ USERINCLUDE    := \
 		-I$(objtree)/include/generated/uapi \
                 -include $(srctree)/include/linux/kconfig.h
 
+USERINCLUDE  += -I$(srctree)/techpack/oneplus/include \
+                -I$(srctree)/techpack/oneplus/overlay
+
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
 LINUXINCLUDE    := \
@@ -477,6 +480,19 @@ LINUXINCLUDE    := \
 		$(if $(building_out_of_srctree),-I$(srctree)/include) \
 		-I$(objtree)/include \
 		$(USERINCLUDE)
+
+include $(srctree)/techpack/oneplus/config/oneplus.conf
+LINUXINCLUDE    += -include $(srctree)/techpack/oneplus/config/oneplus.h
+
+$(info "abs_objtree: $(abs_objtree)")
+
+ifeq ($(findstring kernel-gki, $(abs_objtree)),)
+include $(srctree)/techpack/oneplus/config/coretech.conf
+LINUXINCLUDE    += -include $(srctree)/techpack/oneplus/config/coretech.h
+endif
+
+$(warning "top USERINCLUDE" $(USERINCLUDE))
+$(warning "top LINUXINCLUDE" $(LINUXINCLUDE))
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__ -fno-PIE
 KBUILD_CFLAGS   := -Wall -Wundef -Werror=strict-prototypes -Wno-trigraphs \
@@ -495,6 +511,7 @@ KBUILD_LDFLAGS :=
 GCC_PLUGINS_CFLAGS :=
 CLANG_FLAGS :=
 
+KBUILD_CFLAGS   += -DTECHPACK_ONEPLUS
 export ARCH SRCARCH CONFIG_SHELL BASH HOSTCC KBUILD_HOSTCFLAGS CROSS_COMPILE LD CC
 export CPP AR NM STRIP OBJCOPY OBJDUMP OBJSIZE READELF PAHOLE LEX YACC AWK INSTALLKERNEL
 export PERL PYTHON PYTHON3 CHECK CHECKFLAGS MAKE UTS_MACHINE HOSTCXX
@@ -642,7 +659,7 @@ endif
 ifeq ($(KBUILD_EXTMOD),)
 # Objects we will link into vmlinux / subdirs we need to visit
 init-y		:= init/
-drivers-y	:= drivers/ sound/ techpack/
+drivers-y	:= drivers/ sound/ techpack/ opslalib/
 drivers-$(CONFIG_SAMPLES) += samples/
 net-y		:= net/
 libs-y		:= lib/

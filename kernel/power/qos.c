@@ -118,7 +118,7 @@ static struct pm_qos_constraints modem_skin_thermal_constraints = {
 };
 static struct pm_qos_object modem_skin_thermal_pm_qos = {
 	.constraints = &modem_skin_thermal_constraints,
-	.name = "modem_skin_thermal",
+	.name = "modem_skin_therm",
 };
 
 static BLOCKING_NOTIFIER_HEAD(pa1_mmw0_thermal_notifier);
@@ -132,7 +132,7 @@ static struct pm_qos_constraints pa1_mmw0_thermal_constraints = {
 };
 static struct pm_qos_object pa1_mmw0_thermal_pm_qos = {
 	.constraints = &pa1_mmw0_thermal_constraints,
-	.name = "mmw0_thermal",
+	.name = "mmw0_therm",
 };
 
 static BLOCKING_NOTIFIER_HEAD(xo_mmw1_thermal_notifier);
@@ -146,7 +146,7 @@ static struct pm_qos_constraints xo_mmw1_thermal_constraints = {
 };
 static struct pm_qos_object xo_mmw1_thermal_pm_qos = {
 	.constraints = &xo_mmw1_thermal_constraints,
-	.name = "mmw1_thermal",
+	.name = "mmw1_therm",
 };
 
 static BLOCKING_NOTIFIER_HEAD(modem_mmw2_thermal_notifier);
@@ -160,7 +160,7 @@ static struct pm_qos_constraints modem_mmw2_thermal_constraints = {
 };
 static struct pm_qos_object modem_mmw2_thermal_pm_qos = {
 	.constraints = &modem_mmw2_thermal_constraints,
-	.name = "mmw2_thermal",
+	.name = "mmw2_therm",
 };
 #endif
 

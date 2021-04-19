@@ -371,7 +371,7 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 		interval = (u64)ktime_to_us(ktime_get()) - now;
 		SDE_DEBUG("wr_ptr_irq interval: %llu\n", interval);
 		if (interval < 13600) {
-			SDE_ERROR("kVRR wr_ptr_irq is too close, interval: %llu\n", interval);
+			SDE_DEBUG("kVRR wr_ptr_irq is too close, interval: %llu\n", interval);
 		}
 		now = (u64)ktime_to_us(ktime_get());
 	}

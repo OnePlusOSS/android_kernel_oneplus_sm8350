@@ -78,13 +78,13 @@ static uint32_t update_reg_arr[64][4] = {
 	{0x0A, 0x14, 0x00, 0x0},
 	{0x0B, 0x60, 0x00, 0x0},
 	{0x0C, 0x56, 0x00, 0x0},
-	{0x0D, 0x52, 0x00, 0x0},
-	{0x0E, 0x51, 0x00, 0x0},
+	{0x0D, 0x39, 0x00, 0x0},
+	{0x0E, 0x48, 0x00, 0x0},
 	{0x0F, 0x48, 0x00, 0x0},
 
-	{0x10, 0x79, 0x00, 0x0},
-	{0x11, 0xD0, 0x00, 0x0},
-	{0x12, 0x5F, 0x00, 0x0},
+	{0x10, 0x76, 0x00, 0x0},
+	{0x11, 0x10, 0x00, 0x0},
+	{0x12, 0x4F, 0x00, 0x0},
 	{0x13, 0x18, 0x00, 0x0},
 	{0x14, 0x81, 0x00, 0x0},
 	{0x15, 0xFF, 0x00, 0x0},
@@ -109,14 +109,14 @@ static uint32_t update_reg_arr[64][4] = {
 	{0x26, 0x00, 0x00, 0x0},
 	{0x27, 0x5B, 0x00, 0x0},
 
-	{0x28, 0x45, 0x00, 0x0},
-	{0x29, 0xF7, 0x00, 0x0},
-	{0x2A, 0x2F, 0x00, 0x0},
-	{0x2B, 0x51, 0x00, 0x0},
+	{0x28, 0x14, 0x00, 0x0},
+	{0x29, 0xBC, 0x00, 0x0},
+	{0x2A, 0x12, 0x00, 0x0},
+	{0x2B, 0x37, 0x00, 0x0},
 	{0x2C, 0xFE, 0x00, 0x0},
 	{0x2D, 0xDD, 0x00, 0x0},
-	{0x2E, 0xDE, 0x00, 0x0},
-	{0x2F, 0xEE, 0x00, 0x0},
+	{0x2E, 0xDC, 0x00, 0x0},
+	{0x2F, 0xCC, 0x00, 0x0},
 
 	{0x30, 0xFF, 0x00, 0x0},
 	{0x31, 0xFF, 0x00, 0x0},
@@ -137,6 +137,202 @@ static uint32_t update_reg_arr[64][4] = {
 	{0x3F, 0x01, 0x00, 0x0}
 
 };
+
+#define LC898229_SLAVE_ADDR     0xE4
+#define LC898229_EEPROM_ADDR    0xE6
+
+uint32_t WriteValue1[22] = {0x6F,0x8D,0x14,0x60,0x56,0x39,0x48,0x48,
+                            0x76,0x10,0x4F,0x18,0x81,0xFF,0x78,0x10,
+                            0x00,0x07,0x06,0x31,0xCB,0x68};
+uint32_t WriteValue2[13] = {0x22,0xE1,0x80,0x00,0x5B,0x14,0xBC,0x12,
+                            0x37,0xFE,0xDD,0xDC,0xCC};
+
+uint32_t readValueOld[64] = {0x00};
+uint32_t readValueNew[64] = {0x00};
+
+int readPidRegisterOldValue(struct cam_actuator_ctrl_t *a_ctrl)
+{
+	int i = 0;
+	int32_t rc = 0;
+	uint32_t reg_data = 0;
+
+	if (LC898229_SLAVE_ADDR >> 1 == a_ctrl->io_master_info.cci_client->sid){
+		a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+		for(i = 0; i < UPDATE_REG_SIZE; i++)
+		{
+			rc = camera_io_dev_read(
+				&(a_ctrl->io_master_info),
+				0x00+i, &reg_data,
+				CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
+			if (rc < 0){
+				CAM_ERR(CAM_ACTUATOR, "read PID data error in step %d:rc %d", 0x00+i, rc);
+				break;
+			}
+			CAM_ERR(CAM_ACTUATOR, "before update, register address 0x%x, register value = 0x%x", 0x00+i, reg_data);
+			readValueOld[i] = reg_data;
+		}
+	}
+
+	a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+
+	return rc;
+}
+int readPidRegisterNewValue(struct cam_actuator_ctrl_t *a_ctrl)
+{
+	int i = 0;
+	int32_t rc = 0;
+	uint32_t reg_data = 0;
+
+	if (LC898229_SLAVE_ADDR >> 1 == a_ctrl->io_master_info.cci_client->sid){
+		a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+		for(i = 0; i < UPDATE_REG_SIZE; i++)
+		{
+			rc = camera_io_dev_read(
+				&(a_ctrl->io_master_info),
+				0x00+i, &reg_data,
+				CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
+			if (rc < 0){
+				CAM_ERR(CAM_ACTUATOR, "read PID data error in step %d:rc %d", 0x00+i, rc);
+				break;
+			}
+			CAM_ERR(CAM_ACTUATOR, "after update, register address 0x%x, register value = 0x%x", 0x00+i, reg_data);
+			readValueNew[i] = reg_data;
+		}
+    }
+
+	a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+
+	return rc;
+}
+
+int CheckPidRegister(struct cam_actuator_ctrl_t *a_ctrl)
+{
+	int i = 0;
+	int32_t rc = 0;
+	int retry = 0;
+	uint32_t reg_data = 0;
+
+	for(i=0x00; i<0x08; i++){
+		if(readValueOld[i] != readValueNew[i]){
+			for(retry=0; retry<3; retry++){
+				// Write all data to EEPROM
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				RamWriteByte(a_ctrl, 0x98, 0xE2, 0);		// Release Write Protect
+				RamWriteByte(a_ctrl, 0x99, 0xAF, 0);		// Release Write Protect
+				a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+				RamWriteByte(a_ctrl, i, readValueOld[i], 20);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				RamWriteByte(a_ctrl, 0x98, 0x00, 0);        // Write Protect
+				RamWriteByte(a_ctrl, 0x99, 0x00, 0);        // Write Protect
+
+				RamWriteByte(a_ctrl, 0xE0, 0x01, 0);
+
+				a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+				rc = camera_io_dev_read(
+					&(a_ctrl->io_master_info),
+					i, &reg_data,
+					CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
+				if (rc < 0){
+					CAM_ERR(CAM_ACTUATOR, "read  data error in step %d:rc %d", i, rc);
+					return rc;
+				}
+				if (reg_data == readValueOld[i]){
+					readValueNew[i] = reg_data;
+					break;
+				}
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR>> 1;
+			}
+
+			if(retry == 3){
+				rc = -1;
+				CAM_ERR(CAM_ACTUATOR, "PID data doesn't match in step %d:rc %d", i, rc);
+				return rc;
+			}
+		}
+	}
+
+	for(i=0x1E; i<0x23; i++){
+		if(readValueOld[i] != readValueNew[i]){
+			for(retry=0; retry<3; retry++){
+				// Write all data to EEPROM
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				RamWriteByte(a_ctrl, 0x98, 0xE2, 0);		// Release Write Protect
+				RamWriteByte(a_ctrl, 0x99, 0xAF, 0);		// Release Write Protect
+				a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+				RamWriteByte(a_ctrl, i, readValueOld[i], 20);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				RamWriteByte(a_ctrl, 0x98, 0x00, 0);        // Write Protect
+				RamWriteByte(a_ctrl, 0x99, 0x00, 0);        // Write Protect
+
+				RamWriteByte(a_ctrl, 0xE0, 0x01, 0);
+
+				a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+				rc = camera_io_dev_read(
+					&(a_ctrl->io_master_info),
+					i, &reg_data,
+					CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
+				if (rc < 0){
+					CAM_ERR(CAM_ACTUATOR, "read  data error in step %d:rc %d", i, rc);
+					return rc;
+				}
+				if (reg_data == readValueOld[i]){
+					readValueNew[i] = reg_data;
+					break;
+				}
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+			}
+
+			if(retry == 3){
+				rc = -1;
+				CAM_ERR(CAM_ACTUATOR, "PID data doesn't match in step %d:rc %d", i, rc);
+				return rc;
+			}
+		}
+	}
+
+	for(i=0x30; i<=0x3F; i++){
+		if(readValueOld[i] != readValueNew[i]){
+			for(retry=0; retry<3; retry++){
+				// Write all data to EEPROM
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				RamWriteByte(a_ctrl, 0x98, 0xE2, 0);		// Release Write Protect
+				RamWriteByte(a_ctrl, 0x99, 0xAF, 0);		// Release Write Protect
+				a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+				RamWriteByte(a_ctrl, i, readValueOld[i], 20);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				RamWriteByte(a_ctrl, 0x98, 0x00, 0);        // Write Protect
+				RamWriteByte(a_ctrl, 0x99, 0x00, 0);        // Write Protect
+
+				RamWriteByte(a_ctrl, 0xE0, 0x01, 0);
+
+				a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+				rc = camera_io_dev_read(
+					&(a_ctrl->io_master_info),
+					i, &reg_data,
+					CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
+				if (rc < 0){
+					CAM_ERR(CAM_ACTUATOR, "read  data error in step %d:rc %d", i, rc);
+					return rc;
+				}
+				if (reg_data == readValueOld[i]){
+					readValueNew[i] = reg_data;
+					break;
+				}
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+			}
+
+			if(retry == 3){
+				rc = -1;
+				CAM_ERR(CAM_ACTUATOR, "PID data doesn't match in step %d:rc %d", i, rc);
+				return rc;
+			}
+		}
+	}
+
+	CAM_ERR(CAM_ACTUATOR, "PID updated successfully!");
+
+	return rc;
+}
 
 int RamWriteByte(struct cam_actuator_ctrl_t *a_ctrl,
 	uint32_t addr, uint32_t data, unsigned short mdelay)
@@ -202,19 +398,23 @@ int32_t cam_actuator_update_pid(struct cam_actuator_ctrl_t *a_ctrl)
 {
 	int32_t rc = 0;
 	uint32_t IDSEL;
-	uint32_t HallCal[5];
-	uint32_t Linearity[8];
 	int i;
-	uint32_t temp = 0;
+	int j;
 	uint32_t read_data = 0;
+	struct cam_sensor_i2c_reg_setting  i2c_reg_settings;
+	struct cam_sensor_i2c_reg_array    i2c_reg_arrays[40];
+	i2c_reg_settings.addr_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_settings.data_type = CAMERA_SENSOR_I2C_TYPE_BYTE;
+	i2c_reg_settings.delay = 20;
 
 	CAM_ERR(CAM_ACTUATOR, "entry cam_actuator_update_pid");
 	if (a_ctrl->need_check_pid &&
-		0xE4 >> 1 == a_ctrl->io_master_info.cci_client->sid) {
+		LC898229_SLAVE_ADDR >> 1 == a_ctrl->io_master_info.cci_client->sid) {
 
-		a_ctrl->io_master_info.cci_client->sid = 0xE6 >> 1;//read from eeporm
+		a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;//read from eeporm
 		msleep(10);
 
+		//read original data
 		for(i=0; i< UPDATE_REG_SIZE; i++)
 		{
 			rc = camera_io_dev_read(
@@ -224,25 +424,9 @@ int32_t cam_actuator_update_pid(struct cam_actuator_ctrl_t *a_ctrl)
 			if (rc < 0){
 				CAM_ERR(CAM_ACTUATOR, "camera_io_dev_read error");
 			}
-			CAM_ERR(CAM_ACTUATOR, " original addr:%x data:%x",update_reg_arr[i][0],read_data);
+			CAM_ERR(CAM_ACTUATOR, " original addr:%x data:%x", update_reg_arr[i][0], read_data);
 		}
 
-		// backup Hall calibration data
-		for(i=0; i<5; i++)
-		{
-			temp = i+0x1E;
-			rc = camera_io_dev_read(
-				&(a_ctrl->io_master_info),
-				temp, &HallCal[i],
-				CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
-			if (rc < 0){
-				CAM_ERR(CAM_ACTUATOR, "camera_io_dev_read error");
-			}
-			CAM_ERR(CAM_ACTUATOR, "backup Hall calibration data addr:%x data:%x",temp,HallCal[i]);
-		}
-
-
-		// backup Linearity data
 		rc = camera_io_dev_read(
 			&(a_ctrl->io_master_info),
 			0x06, &IDSEL,
@@ -252,80 +436,67 @@ int32_t cam_actuator_update_pid(struct cam_actuator_ctrl_t *a_ctrl)
 		}
 		CAM_ERR(CAM_ACTUATOR, "read IDSEL data addr:0x06 data:%x",IDSEL);
 
-
-		if (IDSEL == 0xC3) // check bit1-2 = 0110b?
+		a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+		if(IDSEL != 0xEE && IDSEL != 0xEF)
 		{
-			// Linearity correction area(128h - 12Fh)
-			for(i=0; i<8; i++)
-			{
-				temp = i+0x28;
-				rc = camera_io_dev_read(
-					&(a_ctrl->io_master_info),
-					temp, &Linearity[i],
-					CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
-				if (rc < 0){
-					CAM_ERR(CAM_ACTUATOR, "camera_io_dev_read error");
-				}
-				CAM_ERR(CAM_ACTUATOR, "read data addr:%x data:%x",temp,Linearity[i]);
-			}
-
-		}else{
-			// Linearity correction area(130h - 137h)   IDSEL == 0xC2 || IDSEL == 0xE0
-			for(i=0; i<8; i++)
-			{
-				temp = i+0x30;
-				rc = camera_io_dev_read(
-					&(a_ctrl->io_master_info),
-					temp, &Linearity[i],
-					CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
-				if (rc < 0){
-					CAM_ERR(CAM_ACTUATOR, "camera_io_dev_read error");
-				}
-				CAM_ERR(CAM_ACTUATOR, "read data addr:%x data:%x",temp,Linearity[i]);
-			}
+			return 0;//The current actuator is not R4 or R9 version and cannot be directly updated to R11 version
 		}
 
-		a_ctrl->io_master_info.cci_client->sid = 0xE4 >> 1;
 		// Write all data to EEPROM
 		RamWriteByte(a_ctrl, 0x98, 0xE2, 0);		// Release Write Protect
 		RamWriteByte(a_ctrl, 0x99, 0xAF, 0);		// Release Write Protect
 
 
-		a_ctrl->io_master_info.cci_client->sid = 0xE6 >> 1;
+		a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
 
-		for(i=0; i< UPDATE_REG_SIZE; i++)
-		{
-			RamWriteByte(a_ctrl, update_reg_arr[i][0], update_reg_arr[i][1], 20);
-			// wait 20 msec
+		for (i = 0; i < 22;) {
+			i2c_reg_settings.size = 0;
+			for (j = 0; j < 8 && i < 22; j++) {
+				i2c_reg_arrays[j].reg_addr = 0x08+i;
+			    i2c_reg_arrays[j].reg_data = WriteValue1[i];
+
+				i2c_reg_arrays[j].delay = 0;
+				i2c_reg_settings.size++;
+				i++;
+				CAM_ERR(CAM_ACTUATOR, "addr:%x data:%x",i2c_reg_arrays[j].reg_addr, i2c_reg_arrays[j].reg_data);
+			}
+			i2c_reg_settings.reg_setting = i2c_reg_arrays;
+			rc = camera_io_dev_write_continuous(&a_ctrl->io_master_info, &i2c_reg_settings, 1);
+			if (rc) {
+				CAM_ERR(CAM_EEPROM, "write failed rc %d", rc);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				return rc;
+			}
+
+		}
+		for (i = 0; i < 13;){
+			i2c_reg_settings.size = 0;
+			for (j = 0; j < 8 && i < 13; j++) {
+				i2c_reg_arrays[j].reg_addr = 0x23+i;
+				i2c_reg_arrays[j].reg_data = WriteValue2[i];
+
+				i2c_reg_arrays[j].delay = 0;
+				i2c_reg_settings.size++;
+				i++;
+				CAM_ERR(CAM_ACTUATOR, "addr:%x data:%x",i2c_reg_arrays[j].reg_addr, i2c_reg_arrays[j].reg_data);
+			}
+			i2c_reg_settings.reg_setting = i2c_reg_arrays;
+			rc = camera_io_dev_write_continuous(&a_ctrl->io_master_info, &i2c_reg_settings, 1);
+			if (rc) {
+				CAM_ERR(CAM_EEPROM, "write failed rc %d", rc);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				return rc;
+			}
+
 		}
 
-		// recover Hall calibration data
-		for(i=0; i<5; i++)
-		{
-			RamWriteByte(a_ctrl, i+0x1E, HallCal[i], 20);
-			// wait 20 msec
-		}
-
-		// Linearity correction area(130h - 137h)
-		for(i=0; i<8; i++)
-		{
-			RamWriteByte(a_ctrl, i+0x30, Linearity[i], 20);
-			// wait 20 msec
-		}
-
-		if(IDSEL == 0XC3){
-			RamWriteByte(a_ctrl, 0X06, 0xEF, 20);
-		}else{
-			RamWriteByte(a_ctrl, 0X06, 0xEE, 20);
-		}
-
-		a_ctrl->io_master_info.cci_client->sid = 0xE4 >> 1;
+		a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
 		RamWriteByte(a_ctrl, 0x98, 0x00, 0);
 		RamWriteByte(a_ctrl, 0x99, 0x00, 0);
 
 		RamWriteByte(a_ctrl, 0xE0, 0x01, 0);
 
-		a_ctrl->io_master_info.cci_client->sid = 0xE6 >> 1;
+		a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
 
 		for(i=0; i< UPDATE_REG_SIZE; i++)
 		{
@@ -340,7 +511,7 @@ int32_t cam_actuator_update_pid(struct cam_actuator_ctrl_t *a_ctrl)
 		}
 	}
 
-		a_ctrl->io_master_info.cci_client->sid = 0xE4 >> 1;
+	a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
 
 	return rc;
 }
@@ -350,41 +521,52 @@ int32_t cam_actuator_check_firmware(struct cam_actuator_ctrl_t *a_ctrl)
 	int32_t cnt = 0;
 	int32_t rc = 0;
 	uint32_t reg_data = 0;
-	if (0xE4 >> 1 == a_ctrl->io_master_info.cci_client->sid) {
-		a_ctrl->io_master_info.cci_client->sid = 0xE6 >> 1;
-		for(cnt = 0; cnt < UPDATE_REG_SIZE; cnt++)
+
+    if (LC898229_SLAVE_ADDR >> 1 == a_ctrl->io_master_info.cci_client->sid) {
+
+		a_ctrl->io_master_info.cci_client->sid = LC898229_EEPROM_ADDR >> 1;
+
+		for(cnt = 0; cnt < 22; cnt++)
 		{
 		   rc = camera_io_dev_read(
 				&(a_ctrl->io_master_info),
-				update_reg_arr[cnt][0], &reg_data,
+				0x08+cnt, &reg_data,
 				CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
 			if (rc < 0){
-				CAM_ERR(CAM_ACTUATOR, "read PID data error in step %d:rc %d", cnt, rc);
-				break;
+				CAM_ERR(CAM_ACTUATOR, "read PID data error in step %d:rc %d", 0x08+cnt, rc);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				return rc;
 			}
-			if(update_reg_arr[cnt][0] >= 0x07 && update_reg_arr[cnt][0] <= 0x1d){
-				if (reg_data != update_reg_arr[cnt][1]){
-					CAM_ERR(CAM_ACTUATOR, "new PID data wrong in step %d:rc %d, reg_data is %x", cnt, rc,reg_data);
-					rc = -1;
-					break;
-				}
-			}else if(update_reg_arr[cnt][0] >= 0x23 && update_reg_arr[cnt][0] <= 0x27){
-				if (reg_data != update_reg_arr[cnt][1]){
-					CAM_ERR(CAM_ACTUATOR, "new PID data wrong in step %d:rc %d, reg_data is %x", cnt, rc,reg_data);
-					rc = -1;
-					break;
-				}
-			}else if(update_reg_arr[cnt][0] >= 0x38 && update_reg_arr[cnt][0] <= 0x3f){
-				if (reg_data != update_reg_arr[cnt][1]){
-					CAM_ERR(CAM_ACTUATOR, "new PID data wrong in step %d:rc %d, reg_data is %x", cnt, rc,reg_data);
-					rc = -1;
-					break;
-				}
+			if (reg_data != WriteValue1[cnt]){
+				CAM_ERR(CAM_ACTUATOR, "new PID data wrong in step %d:rc %d, reg_data is %x", cnt, rc,reg_data);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				rc = -1;
+				return rc;
 			}
 		}
+
+		for(cnt = 0; cnt < 13; cnt++)
+		{
+		   rc = camera_io_dev_read(
+				&(a_ctrl->io_master_info),
+				0x23+cnt, &reg_data,
+				CAMERA_SENSOR_I2C_TYPE_BYTE, CAMERA_SENSOR_I2C_TYPE_BYTE);
+			if (rc < 0){
+				CAM_ERR(CAM_ACTUATOR, "read PID data error in step %d:rc %d", 0x23+cnt, rc);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				return rc;
+			}
+			if (reg_data != WriteValue2[cnt]){
+				CAM_ERR(CAM_ACTUATOR, "new PID data wrong in step %d:rc %d, reg_data is %x", cnt, rc,reg_data);
+				a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
+				rc = -1;
+				return rc;
+			}
+		}
+
 	}
 
-	a_ctrl->io_master_info.cci_client->sid = 0xE4 >> 1;
+	a_ctrl->io_master_info.cci_client->sid = LC898229_SLAVE_ADDR >> 1;
 
 	return rc;
  }
@@ -396,13 +578,20 @@ int32_t oplus_cam_actuator_power_up(struct cam_actuator_ctrl_t *a_ctrl)
 	int rc = 0;
 
 	if (a_ctrl->need_check_pid &&
-		0xE4 >> 1 == a_ctrl->io_master_info.cci_client->sid) {
+		LC898229_SLAVE_ADDR >> 1 == a_ctrl->io_master_info.cci_client->sid) {
+
 		for (re = 0;re < retry; re++){
 			rc = cam_actuator_check_firmware(a_ctrl);
 			if (rc < 0){
 				//if rc is error ,update the pid eeprom
 				CAM_ERR(CAM_ACTUATOR, "start store the pid data!");
+				readPidRegisterOldValue(a_ctrl);
 				rc = cam_actuator_update_pid(a_ctrl);
+				readPidRegisterNewValue(a_ctrl);
+				if(CheckPidRegister(a_ctrl) != 0){
+					rc = -1;
+					return rc;
+				}
 			}
 			if (rc < 0){
 				CAM_ERR(CAM_ACTUATOR, "update the pid data error,check the io ctrl!");

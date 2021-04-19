@@ -64,7 +64,9 @@ int __attribute__((weak)) register_devinfo(char *name, struct manufacture_info *
 {
 	return 1;
 }
+#ifndef OPLUS_CHG_OP_DEF
 static int oplus_warp_convert_fast_chg_type(int fast_chg_type);
+#endif
 
 #ifdef OPLUS_CHG_OP_DEF
 static oplus_chg_swarp_curr_table[0x07] = {2500, 2000, 3000, 4000, 5000, 6500};
@@ -2446,7 +2448,11 @@ unsigned int oplus_warp_get_adapter_sid(void)
 }
 #endif
 
+#ifdef OPLUS_CHG_OP_DEF
+int oplus_warp_convert_fast_chg_type(int fast_chg_type)
+#else
 static int oplus_warp_convert_fast_chg_type(int fast_chg_type)
+#endif
 {
 	struct oplus_warp_chip *chip = g_warp_chip;
 

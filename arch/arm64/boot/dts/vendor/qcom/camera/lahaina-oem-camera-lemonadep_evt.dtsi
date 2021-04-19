@@ -209,6 +209,7 @@
         rgltr-min-voltage = <3200000>;
         rgltr-max-voltage = <3960000>;
         rgltr-load-current = <1000000>;
+        need-check-pid;
     };
 
     eeprom_rear_1: qcom,eeprom@1 {

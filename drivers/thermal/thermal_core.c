@@ -1490,13 +1490,13 @@ thermal_zone_device_register(const char *type, int trips, int mask,
 	} else if (strcmp(tz->type, "msm-therm") ==  0) {
 		msm_tz = tz;
 		dev_set_name(&tz->device, tz->type);
-	} else if (strcmp(tz->type, "mmw-pa1-usr") ==  0)
+	} else if (strcmp(tz->type, "modem-mmw1-step") ==  0)
 		xo_mmw1_tz = tz;
-	else if (strcmp(tz->type, "modem-mmw2-usr") ==  0)
+	else if (strcmp(tz->type, "modem-mmw2-step") ==  0)
 		modem_mmw2_tz = tz;
-	else if (strcmp(tz->type, "mmw-pa1-usr") ==  0)
+	else if (strcmp(tz->type, "modem-mmw0-step") ==  0)
 		pa1_mmw0_tz = tz;
-	else if (strcmp(tz->type, "skin-therm-usr") ==  0)
+	else if (strcmp(tz->type, "msm-therm-step") ==  0)
 		modem_skin_tz = tz;
 	else if (strcmp(tz->type, "camera-flash-therm") == 0)
 		dev_set_name(&tz->device, tz->type);

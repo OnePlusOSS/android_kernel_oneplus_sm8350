@@ -25,7 +25,9 @@
 #include <linux/oplus_chg_voter.h>
 #endif
 #include "oplus_chg_module.h"
+#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
 #include "oplus_chg_cfg.h"
+#endif
 #include "oplus_chg_ic.h"
 #include "oplus_chg_wls.h"
 #include "wireless/wls_chg_intf.h"
@@ -53,7 +55,7 @@ static u8 oplus_trx_id_table[] = {
 	0x02, 0x03, 0x04, 0x05
 };
 
-static int oplus_chg_wls_pwr_table[] = {0, 12000, 12000, 35000, 40000};
+static int oplus_chg_wls_pwr_table[] = {0, 12000, 12000, 35000, 50000};
 
 static const char * const oplus_chg_wls_rx_state_text[] = {
 	[OPLUS_CHG_WLS_RX_STATE_DEFAULT] = "default",
@@ -474,25 +476,34 @@ static int oplus_chg_wls_set_cp_boost_enable(struct oplus_chg_wls *wls_dev, bool
 	return rc;
 }
 
-#ifdef OPLUS_CHG_DEBUG
-void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
+#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
+int oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
 {
 	struct oplus_chg_wls *wls_dev;
 	struct oplus_chg_wls_dynamic_config *wls_cfg;
-	int m, i;
-	int index = 0;
+	struct oplus_chg_wls_dynamic_config *wls_cfg_temp;
+	int i, m;
+	int rc;
 
-	if (buf == NULL || wls_ocm == NULL)
-		return;
+	if (wls_ocm == NULL) {
+		pr_err("wls ocm is NULL\n");
+		return -ENODEV;
+	}
 
 	wls_dev = oplus_chg_mod_get_drvdata(wls_ocm);
 	wls_cfg = &wls_dev->dynamic_config;
-	
-	index = load_word_val_by_buf(buf, index, &wls_cfg->batt_vol_max_mv);
-	for (m = 0; m < OPLUS_WLS_CHG_MODE_MAX; m++) {
-		for (i = 0; i < BATT_TEMP_INVALID; i++)
-			index = load_word_val_by_buf(buf, index, &wls_cfg->iclmax_ma[OPLUS_WLS_CHG_BATT_CL_LOW][m][i]);
+
+	wls_cfg_temp = kmalloc(sizeof(struct oplus_chg_wls_dynamic_config), GFP_KERNEL);
+	if (wls_cfg_temp == NULL) {
+		pr_err("alloc wls_cfg buf error\n");
+		return -ENOMEM;
 	}
+	memcpy(wls_cfg_temp, wls_cfg, sizeof(struct oplus_chg_wls_dynamic_config));
+	rc = oplus_chg_cfg_load_param(buf, OPLUS_CHG_WLS_PARAM, (u8 *)wls_cfg_temp);
+	if (rc < 0)
+		goto out;
+	memcpy(wls_cfg, wls_cfg_temp, sizeof(struct oplus_chg_wls_dynamic_config));
+
 	for (i = 0; i < OPLUS_WLS_CHG_MODE_MAX; i++) {
 		wls_dev->icl_max_ma[i] = 0;
 		for (m = 0; m < BATT_TEMP_INVALID; m++) {
@@ -500,24 +511,13 @@ void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
 				wls_dev->icl_max_ma[i] = wls_cfg->iclmax_ma[OPLUS_WLS_CHG_BATT_CL_LOW][i][m];
 		}
 	}
-	for (m = 0; m < OPLUS_WLS_CHG_MODE_MAX; m++) {
-		for (i = 0; i < BATT_TEMP_INVALID; i++)
-			index = load_word_val_by_buf(buf, index, &wls_cfg->iclmax_ma[OPLUS_WLS_CHG_BATT_CL_HIGH][m][i]);
-	}
 	for (i = 0; i < OPLUS_WLS_CHG_MODE_MAX; i++) {
 		for (m = 0; m < BATT_TEMP_INVALID; m++) {
 			if (wls_cfg->iclmax_ma[OPLUS_WLS_CHG_BATT_CL_HIGH][i][m] > wls_dev->icl_max_ma[i])
 				wls_dev->icl_max_ma[i] = wls_cfg->iclmax_ma[OPLUS_WLS_CHG_BATT_CL_HIGH][i][m];
 		}
 	}
-	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
-		index = load_word_val_by_buf(buf, index, &wls_cfg->fcc_step[i].low_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->fcc_step[i].high_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->fcc_step[i].curr_ma);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->fcc_step[i].vol_max_mv);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->fcc_step[i].need_wait);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->fcc_step[i].max_soc);
-	}
+
 	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
 		if (wls_cfg->fcc_step[i].low_threshold == 0 &&
 		    wls_cfg->fcc_step[i].high_threshold == 0 &&
@@ -529,11 +529,7 @@ void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
 		}
 	}
 	wls_dev->wls_fcc_step.max_step = i;
-	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
-		index = load_word_val_by_buf(buf, index, &wls_cfg->epp_plus_skin_step[i].low_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->epp_plus_skin_step[i].high_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->epp_plus_skin_step[i].curr_ma);
-	}
+
 	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
 		if (wls_cfg->epp_plus_skin_step[i].low_threshold == 0 &&
 		    wls_cfg->epp_plus_skin_step[i].high_threshold == 0 &&
@@ -542,11 +538,7 @@ void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
 		}
 	}
 	wls_dev->epp_plus_skin_step.max_step = i;
-	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
-		index = load_word_val_by_buf(buf, index, &wls_cfg->epp_skin_step[i].low_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->epp_skin_step[i].high_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->epp_skin_step[i].curr_ma);
-	}
+
 	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
 		if (wls_cfg->epp_skin_step[i].low_threshold == 0 &&
 		    wls_cfg->epp_skin_step[i].high_threshold == 0 &&
@@ -555,11 +547,7 @@ void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
 		}
 	}
 	wls_dev->epp_skin_step.max_step = i;
-	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
-		index = load_word_val_by_buf(buf, index, &wls_cfg->bpp_skin_step[i].low_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->bpp_skin_step[i].high_threshold);
-		index = load_word_val_by_buf(buf, index, &wls_cfg->bpp_skin_step[i].curr_ma);
-	}
+
 	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
 		if (wls_cfg->bpp_skin_step[i].low_threshold == 0 &&
 		    wls_cfg->bpp_skin_step[i].high_threshold == 0 &&
@@ -568,7 +556,28 @@ void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf)
 		}
 	}
 	wls_dev->bpp_skin_step.max_step = i;
-	index = load_word_val_by_buf(buf, index, &wls_cfg->fastchg_curr_max_ma);
+
+	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
+		if (wls_cfg->epp_plus_led_on_skin_step[i].low_threshold == 0 &&
+		    wls_cfg->epp_plus_led_on_skin_step[i].high_threshold == 0 &&
+		    wls_cfg->epp_plus_led_on_skin_step[i].curr_ma == 0) {
+			break;
+		}
+	}
+	wls_dev->epp_plus_led_on_skin_step.max_step = i;
+
+	for (i = 0; i < WLS_MAX_STEP_CHG_ENTRIES; i++) {
+		if (wls_cfg->epp_led_on_skin_step[i].low_threshold == 0 &&
+		    wls_cfg->epp_led_on_skin_step[i].high_threshold == 0 &&
+		    wls_cfg->epp_led_on_skin_step[i].curr_ma == 0) {
+			break;
+		}
+	}
+	wls_dev->epp_led_on_skin_step.max_step = i;
+
+out:
+	kfree(wls_cfg_temp);
+	return rc;
 }
 #endif
 
@@ -590,11 +599,6 @@ static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 			pr_info("wkcs: adapter_type =0x%02x\n", wls_status->adapter_type);
 			pwr_mw = oplus_chg_wls_get_base_power_max(wls_status->adapter_id);
 			vote(wls_dev->fcc_votable, BASE_MAX_VOTER, true, (pwr_mw * 1000 / WLS_RX_VOL_MAX_MV), false);
-			if (wls_status->pwr_max_mw > 0) {
-				vote(wls_dev->fcc_votable, RX_MAX_VOTER, true,
-				     (wls_status->pwr_max_mw * 1000 / WLS_RX_VOL_MAX_MV),
-				     false);
-			}
 			if (wls_dev->wls_ocm)
 				oplus_chg_mod_changed(wls_dev->wls_ocm);
 			if ((wls_status->adapter_type == WLS_ADAPTER_TYPE_WARP) ||
@@ -611,6 +615,11 @@ static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 				wls_status->pwr_max_mw = 0;
 			else
 				wls_status->pwr_max_mw = oplus_chg_wls_pwr_table[data];
+			if (wls_status->pwr_max_mw > 0) {
+				vote(wls_dev->fcc_votable, RX_MAX_VOTER, true,
+				     (wls_status->pwr_max_mw * 1000 / WLS_RX_VOL_MAX_MV),
+				     false);
+			}
 			wls_status->charge_type = WLS_CHARGE_TYPE_FAST;
 			if (wls_dev->static_config.fastchg_fod_enable) {
 				if(wls_status->fod_parm_for_fastchg)

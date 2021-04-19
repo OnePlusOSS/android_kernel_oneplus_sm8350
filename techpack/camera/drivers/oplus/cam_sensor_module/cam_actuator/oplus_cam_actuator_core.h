@@ -21,6 +21,9 @@ int32_t cam_actuator_check_firmware(struct cam_actuator_ctrl_t *a_ctrl);
 int32_t cam_actuator_update_pid(struct cam_actuator_ctrl_t *a_ctrl);
 int RamWriteByte(struct cam_actuator_ctrl_t *a_ctrl,
 uint32_t addr, uint32_t data, unsigned short mdelay);
+int readPidRegisterOldValue(struct cam_actuator_ctrl_t *a_ctrl);
+int readPidRegisterNewValue(struct cam_actuator_ctrl_t *a_ctrl);
+int CheckPidRegister(struct cam_actuator_ctrl_t *a_ctrl);
 
 
 #endif /* _CAM_ACTUATOR_CORE_H_ */

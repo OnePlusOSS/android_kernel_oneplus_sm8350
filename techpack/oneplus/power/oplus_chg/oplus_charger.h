@@ -608,7 +608,7 @@ struct oplus_chg_dynamic_config {
 	struct oplus_chg_strategy_data normal_chg_led_off_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_general_chg_strategy_data_low[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_general_chg_strategy_data_high[CHG_STRATEGY_DATA_TABLE_MAX];
-};
+} __attribute__ ((packed));
 
 void oplus_chg_strategy_init(struct oplus_chg_strategy *strategy,
 			     struct oplus_chg_strategy_data *data,
@@ -667,6 +667,7 @@ struct oplus_chg_chip {
 	bool svid_verified;
 	bool is_oplus_svid;
 	bool usb_enum_status;
+	bool charger_exist_delay; /* Delay synchronization of the state of charger_exist */
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 	bool reg_dump;
 #endif
@@ -1071,6 +1072,11 @@ void oplus_chg_set_led_status(bool val);
 int oplus_chg_match_temp_for_chging(void);
 void oplus_chg_set_camera_status(bool val);
 void oplus_chg_update_float_voltage_by_fastchg(bool fastchg_en);
+#ifdef CONFIG_OPLUS_CHG_OOS
+#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
+int oplus_chg_usb_set_config(struct oplus_chg_mod *usb_ocm, u8 *buf);
+#endif
+#endif
 #endif
 
 #endif /*_OPLUS_CHARGER_H_*/

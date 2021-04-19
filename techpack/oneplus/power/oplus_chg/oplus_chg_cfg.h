@@ -24,18 +24,25 @@ struct oplus_chg_cfg_head {
 	u32 head_size;
 	u32 size;
 	u32 param_index[OPLUS_CHG_PARAM_MAX];
-	u8 digest[128];
-};
+	u8 signature[512];
+} __attribute__ ((packed));
 
 struct oplus_chg_param_head {
 	u32 magic;
 	u32 size;
 	u32 type;
 	u8 data[0];
-};
+} __attribute__ ((packed));
+
+struct oplus_chg_cfg_data_head {
+	u32 magic;
+	u32 index;
+	u32 size;
+	u8 data[0];
+} __attribute__ ((packed));
 
 int oplus_chg_check_cfg_data(void *buf);
 void *oplus_chg_get_param(void *buf, enum oplus_chg_param_type type);
-int load_word_val_by_buf(u8 *buf, int index, int *val);
+int oplus_chg_cfg_load_param(void *src, enum oplus_chg_param_type type, u8 *out_buf);
 
 #endif /* __OPLUS_CHG_CFG_H__ */

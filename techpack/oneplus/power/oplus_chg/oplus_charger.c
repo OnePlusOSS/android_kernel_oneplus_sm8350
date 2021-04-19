@@ -80,6 +80,10 @@
 #endif
 #endif /* OPLUS_CHG_OP_DEF */
 #endif /* CONFIG_OPLUS_CHARGER_MTK */
+#if (defined(CONFIG_OPLUS_CHG_OOS) && defined(CONFIG_OPLUS_CHG_DYNAMIC_CONFIG))
+#include "oplus_chg_cfg.h"
+#endif
+
 static struct oplus_chg_chip *g_charger_chip = NULL;
 
 #define MAX_UI_DECIMAL_TIME 24
@@ -5466,6 +5470,9 @@ void oplus_chg_variables_reset(struct oplus_chg_chip *chip, bool in)
 		chip->charger_exist = true;
 		chip->chging_on = true;
 		chip->slave_charger_enable = false;
+#ifdef OPLUS_CHG_OP_DEF
+		chip->charger_exist_delay = false;
+#endif
 	} else {
 		if(!oplus_chg_show_warp_logo_ornot()) {
 			if(chip->decimal_control) {
@@ -5486,6 +5493,7 @@ void oplus_chg_variables_reset(struct oplus_chg_chip *chip, bool in)
 		chip->pd_swarp = false;
 #ifdef OPLUS_CHG_OP_DEF
 		chip->is_oplus_svid = false;
+		chip->charger_exist_delay = true;
 #endif
 	}
 	chip->qc_abnormal_check_count = 0;
@@ -6334,6 +6342,38 @@ static void oplus_chg_check_chg_strategy_status(struct oplus_chg_chip *chip)
 		oplus_chg_set_charging_current(chip);
 	}
 }
+
+#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
+int oplus_chg_usb_set_config(struct oplus_chg_mod *usb_ocm, u8 *buf)
+{
+	struct oplus_chg_chip *chip = g_charger_chip;
+	struct oplus_chg_dynamic_config *usb_cfg;
+	struct oplus_chg_dynamic_config *usb_cfg_temp;
+	int rc;
+
+	if (chip == NULL) {
+		pr_err("g_charger_chip is NULL\n");
+		return -ENODEV;
+	}
+
+	usb_cfg = &chip->dynamic_config;
+
+	usb_cfg_temp = kmalloc(sizeof(struct oplus_chg_dynamic_config), GFP_KERNEL);
+	if (usb_cfg_temp == NULL) {
+		pr_err("alloc usb_cfg buf error\n");
+		return -ENOMEM;
+	}
+	memcpy(usb_cfg_temp, usb_cfg, sizeof(struct oplus_chg_dynamic_config));
+	rc = oplus_chg_cfg_load_param(buf, OPLUS_CHG_USB_PARAM, (u8 *)usb_cfg_temp);
+	if (rc < 0)
+		goto out;
+	memcpy(usb_cfg, usb_cfg_temp, sizeof(struct oplus_chg_dynamic_config));
+
+out:
+	kfree(usb_cfg_temp);
+	return rc;
+}
+#endif
 #endif
 
 #define ALLOW_DIFF_VALUE 1000000

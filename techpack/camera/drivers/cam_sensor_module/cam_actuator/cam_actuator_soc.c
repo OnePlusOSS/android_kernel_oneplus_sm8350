@@ -58,6 +58,7 @@ int32_t cam_actuator_parse_dt(struct cam_actuator_ctrl_t *a_ctrl,
 
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
 	if (!of_property_read_bool(of_node, "need-check-pid")) {
+		CAM_ERR(CAM_ACTUATOR, "need-check-pid not defined for ultra wide camera");
 		a_ctrl->need_check_pid = false;
 	} else {
 		CAM_ERR(CAM_ACTUATOR, "need-check-pid defined for ultra wide camera");

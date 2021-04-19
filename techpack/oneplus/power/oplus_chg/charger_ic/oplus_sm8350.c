@@ -2101,7 +2101,7 @@ static int smbchg_charging_enable(void)
 	bcdev = chip->pmic_spmi.bcdev_chip;
 	pst = &bcdev->ocm_list[OCM_TYPE_BATTERY];
 
-	pr_err("wkcs: enable chgarge, mmi_chg=%d\n", chip->mmi_chg);
+	pr_err("wkcs: enable charge, mmi_chg=%d\n", chip->mmi_chg);
 	rc = write_property_id(bcdev, pst, BATT_CHG_EN, 1);
 	if (rc)
 		chg_err("set enable charging fail, rc=%d\n", rc);
