@@ -353,7 +353,7 @@ static bool p9415_rx_is_enable(struct oplus_chg_ic_dev *dev)
 		return false;
 	}
 
-	return !!gpio_get_value(chip->rx_en_gpio);
+	return !gpio_get_value(chip->rx_en_gpio);
 }
 
 static int p9415_get_vout(struct oplus_chg_ic_dev *dev, int *vout)
@@ -1331,6 +1331,11 @@ static void p9415_event_process(struct oplus_p9415 *chip)
 	int rc = -1;
 	char temp[2] = { 0, 0 };
 	char val_buf[6] = { 0, 0, 0, 0, 0, 0};
+
+	if(!p9415_rx_is_enable(chip->ic_dev)) {
+		pr_info("RX is sleep, Ignore events");
+		return;
+	}
 
 	rc = p9415_read_data(chip, P9415_REG_STATUS, temp, 2);
 	if (rc) {

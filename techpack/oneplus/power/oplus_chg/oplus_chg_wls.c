@@ -611,10 +611,11 @@ static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 		break;
 	case WLS_RESPONE_INTO_FASTCHAGE:
 		if (rx_msg->msg_type == WLS_CMD_INTO_FASTCHAGE) {
-			if (data >= ARRAY_SIZE(oplus_chg_wls_pwr_table))
+			wls_status->adapter_power = data;
+			if (wls_status->adapter_power >= ARRAY_SIZE(oplus_chg_wls_pwr_table))
 				wls_status->pwr_max_mw = 0;
 			else
-				wls_status->pwr_max_mw = oplus_chg_wls_pwr_table[data];
+				wls_status->pwr_max_mw = oplus_chg_wls_pwr_table[wls_status->adapter_power];
 			if (wls_status->pwr_max_mw > 0) {
 				vote(wls_dev->fcc_votable, RX_MAX_VOTER, true,
 				     (wls_status->pwr_max_mw * 1000 / WLS_RX_VOL_MAX_MV),
@@ -652,6 +653,14 @@ static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 	case WLS_RESPONE_INTO_QUIET_MODE:
 		if (rx_msg->msg_type == WLS_CMD_SET_QUIET_MODE) {
 			wls_status->quiet_mode = true;
+		}
+		break;
+	case WLS_RESPONE_FAN_SPEED:
+		if (rx_msg->msg_type == WLS_CMD_SET_FAN_SPEED) {
+			if (data == QUIET_MODE_FAN_THR_SPEED)
+				wls_status->quiet_mode = true;
+			else
+				wls_status->quiet_mode = false;
 		}
 		break;
 	case WLS_RESPONE_CEP_TIMEOUT:
@@ -933,6 +942,7 @@ static void oplus_chg_wls_reset_variables(struct oplus_chg_wls *wls_dev) {
 
 	wls_status->adapter_type = WLS_ADAPTER_TYPE_UNKNOWN;
 	wls_status->adapter_id = 0;
+	wls_status->adapter_power = 0;
 	wls_status->charge_type = WLS_CHARGE_TYPE_DEFAULT;
 	wls_status->current_rx_state = OPLUS_CHG_WLS_RX_STATE_DEFAULT;
 	wls_status->next_rx_state = OPLUS_CHG_WLS_RX_STATE_DEFAULT;
@@ -2211,6 +2221,7 @@ static void oplus_chg_wls_usb_int_work(struct work_struct *work)
 	if (wls_dev->usb_present) {
 		vote(wls_dev->rx_disable_votable, USB_VOTER, true, 1, false);
 		(void)oplus_chg_wls_set_trx_enable(wls_dev, false);
+		oplus_chg_anon_mod_event(wls_dev->wls_ocm, OPLUS_CHG_EVENT_OFFLINE);
 	} else {
 		vote(wls_dev->rx_disable_votable, USB_VOTER, false, 0, false);
 	}
@@ -2785,12 +2796,44 @@ static void oplus_chg_wls_check_quiet_mode(struct oplus_chg_wls *wls_dev)
 
 	if (wls_status->quiet_mode) {
 		if (!wls_status->switch_quiet_mode && !wls_status->chg_done_quiet_mode) {
-			(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_NORMAL_MODE, 0xff, 2);
+			if (wls_status->adapter_id == WLS_ADAPTER_MODEL_0) {
+				(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_NORMAL_MODE, 0xff, 2);
+			} else if (wls_status->adapter_id == WLS_ADAPTER_MODEL_1) {
+				if (wls_status->adapter_power & WLS_ADAPTER_POWER_MASK)
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 93, 2);
+				else
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 60, 2);
+			} else if (wls_status->adapter_id == WLS_ADAPTER_MODEL_2) {
+				if (wls_status->adapter_power & WLS_ADAPTER_POWER_MASK)
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 85, 2);
+				else
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 55, 2);
+			} else if (wls_status->adapter_id <= WLS_ADAPTER_MODEL_7) {
+				if (wls_status->adapter_power & WLS_ADAPTER_POWER_MASK)
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 85, 2);
+				else
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 55, 2);
+			} else if (wls_status->adapter_id <= WLS_ADAPTER_MODEL_15) {
+				if (wls_status->adapter_power & WLS_ADAPTER_POWER_MASK)
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 70, 2);
+				else
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 40, 2);
+			} else {
+				if (wls_status->adapter_power & WLS_ADAPTER_POWER_MASK)
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 80, 2);
+				else
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 52, 2);
+			}
+
 			(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_LED_BRIGHTNESS, 100, 2);
 		}
 	} else {
 		if (wls_status->switch_quiet_mode || wls_status->chg_done_quiet_mode) {
-			(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_QUIET_MODE, 0xff, 2);
+			if (wls_status->adapter_id == WLS_ADAPTER_MODEL_0)
+				(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_QUIET_MODE, 0xff, 2);
+			else
+				(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_FAN_SPEED, 0, 2);
+
 			(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_LED_BRIGHTNESS, QUIET_MODE_LED_BRIGHTNESS, 2);
 		}
 	}

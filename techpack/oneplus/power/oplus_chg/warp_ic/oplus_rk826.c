@@ -1854,6 +1854,62 @@ static int rk826_driver_probe(struct i2c_client *client, const struct i2c_device
 			asic->warp_reply_mcu_bits);
 	}
 
+	rc = of_property_read_u32(node, "qcom,warp_cool_bat_volt", &asic->warp_cool_bat_volt);
+	if (rc) {
+		asic->warp_cool_bat_volt = 3450;
+	} else {
+		chg_debug("qcom,warp_cool_bat_volt is %d\n", asic->warp_cool_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_little_cool_bat_volt", &asic->warp_little_cool_bat_volt);
+	if (rc) {
+		asic->warp_little_cool_bat_volt = 3400;
+	} else {
+		chg_debug("qcom,warp_little_cool_bat_volt is %d\n", asic->warp_little_cool_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_normal_bat_volt", &asic->warp_normal_bat_volt);
+	if (rc) {
+		asic->warp_normal_bat_volt = 3350;
+	} else {
+		chg_debug("qcom,warp_normal_bat_volt is %d\n", asic->warp_normal_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_warm_bat_volt", &asic->warp_warm_bat_volt);
+	if (rc) {
+		asic->warp_warm_bat_volt = 3300;
+	} else {
+		chg_debug("qcom,warp_warm_bat_volt is %d\n", asic->warp_warm_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_cool_bat_suspend_volt", &asic->warp_cool_bat_suspend_volt);
+	if (rc) {
+		asic->warp_cool_bat_suspend_volt = 3450;
+	} else {
+		chg_debug("qcom,warp_cool_bat_suspend_volt is %d\n", asic->warp_cool_bat_suspend_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_little_cool_bat_suspend_volt", &asic->warp_little_cool_bat_suspend_volt);
+	if (rc) {
+		asic->warp_little_cool_bat_suspend_volt = 3400;
+	} else {
+		chg_debug("qcom,warp_little_cool_bat_suspend_volt is %d\n", asic->warp_little_cool_bat_suspend_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_normal_bat_suspend_volt", &asic->warp_normal_bat_suspend_volt);
+	if (rc) {
+		asic->warp_normal_bat_suspend_volt = 3350;
+	} else {
+		chg_debug("qcom,warp_normal_bat_suspend_volt is %d\n", asic->warp_normal_bat_suspend_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_warm_bat_suspend_volt", &asic->warp_warm_bat_suspend_volt);
+	if (rc) {
+		asic->warp_warm_bat_suspend_volt = 3300;
+	} else {
+		chg_debug("qcom,warp_warm_bat_suspend_volt is %d\n", asic->warp_warm_bat_suspend_volt);
+	}
+
 	if (asic->batt_type_4400mv) {
 		asic->firmware_data = rk826_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(rk826_fw_data_4400_warp_ffc_15c);

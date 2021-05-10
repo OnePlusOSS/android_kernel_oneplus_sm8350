@@ -8584,6 +8584,33 @@ int oplus_chg_get_batt_volt(void)
 	}
 }
 
+int oplus_chg_get_cool_bat_decidegc(void)
+{
+	if (!g_charger_chip) {
+		return -EINVAL;
+	} else {
+		return g_charger_chip->limits.cool_bat_decidegc;
+	}
+}
+
+int oplus_chg_get_little_cool_bat_decidegc(void)
+{
+	if (!g_charger_chip) {
+		return -EINVAL;
+	} else {
+		return g_charger_chip->limits.little_cool_bat_decidegc;
+	}
+}
+
+int oplus_chg_get_normal_bat_decidegc(void)
+{
+	if (!g_charger_chip) {
+		return -EINVAL;
+	} else {
+		return g_charger_chip->limits.normal_bat_decidegc;
+	}
+}
+
 int oplus_chg_get_icharging(void)
 {
 	if (!g_charger_chip) {

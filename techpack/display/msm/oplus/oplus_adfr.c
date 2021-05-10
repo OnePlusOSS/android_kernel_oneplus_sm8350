@@ -442,7 +442,7 @@ int sde_connector_send_fakeframe(void *conn)
 	}
 
 	c_conn = to_sde_connector(connector);
-	if (!c_conn->display) {
+	if ((!c_conn->display) || (c_conn->connector_type == 0xf)) {
 		SDE_ERROR("kVRR invalid connector display\n");
 		return -EINVAL;
 	}

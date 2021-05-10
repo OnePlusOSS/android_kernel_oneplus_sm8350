@@ -707,6 +707,8 @@ static int get_usb_temp(struct battery_chg_dev *bcdev)
 				con_temp_30k[i]);
 
 	temp_1 = con_temp_30k[i];
+	if (temp_1 == 125)
+            temp_1 = 25;
 	chip->usb_temp_l = temp_1;
 
 	if (bcdev->iio.op_connector_temp_chan_sec) {
@@ -734,6 +736,8 @@ static int get_usb_temp(struct battery_chg_dev *bcdev)
 				bcdev->connector_voltage,
 				con_temp_30k[i]);
 	temp_2 = con_temp_30k[i];
+	if (temp_2 == 125)
+            temp_2 = 25;
 	chip->usb_temp_r = temp_2;
 
 	if (temp_1 >= temp_2)

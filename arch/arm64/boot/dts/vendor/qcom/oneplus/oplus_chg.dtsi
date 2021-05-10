@@ -885,6 +885,15 @@
 		qcom,oplus_batt_4400mv;
 		qcom,warp-fw-type = <5>;
 		qcom,warp_reply_mcu_bits = <7>;
+		qcom,warp_cool_bat_volt = <3450>;
+		qcom,warp_little_cool_bat_volt = <3400>;
+		qcom,warp_normal_bat_volt = <3350>;
+		qcom,warp_warm_bat_volt = <3300>;
+
+		qcom,warp_cool_bat_suspend_volt = <3450>;
+		qcom,warp_little_cool_bat_suspend_volt = <3400>;
+		qcom,warp_normal_bat_suspend_volt = <3350>;
+		qcom,warp_warm_bat_suspend_volt = <3300>;
 	};
 
 	sy6610_fastcg@06{
@@ -894,6 +903,15 @@
 		qcom,oplus_batt_4400mv;
 		qcom,warp-fw-type = <5>;
 		qcom,warp_reply_mcu_bits = <7>;
+		qcom,warp_cool_bat_volt = <3450>;
+		qcom,warp_little_cool_bat_volt = <3400>;
+		qcom,warp_normal_bat_volt = <3350>;
+		qcom,warp_warm_bat_volt = <3300>;
+
+		qcom,warp_cool_bat_suspend_volt = <3450>;
+		qcom,warp_little_cool_bat_suspend_volt = <3400>;
+		qcom,warp_normal_bat_suspend_volt = <3350>;
+		qcom,warp_warm_bat_suspend_volt = <3300>;
 	};
 };
 

@@ -998,6 +998,9 @@ bool oplus_chg_wake_update_work(void);
 void oplus_chg_soc_update_when_resume(unsigned long sleep_tm_sec);
 void oplus_chg_soc_update(void);
 int oplus_chg_get_batt_volt(void);
+int oplus_chg_get_cool_bat_decidegc(void);
+int oplus_chg_get_little_cool_bat_decidegc(void);
+int oplus_chg_get_normal_bat_decidegc(void);
 int oplus_chg_get_icharging(void);
 
 int oplus_chg_get_ui_soc(void);

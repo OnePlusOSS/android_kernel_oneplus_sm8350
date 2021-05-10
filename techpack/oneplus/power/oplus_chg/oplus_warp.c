@@ -1016,6 +1016,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 			chip->fastchg_to_warm = false;
 			chip->btb_temp_over = false;
 			chip->reset_adapter = false;
+			chip->suspend_charger = false;
 		} else {
 			chip->allow_reading = false;
 			chip->fastchg_dummy_started = true;
@@ -1203,6 +1204,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 			oplus_chg_get_charger_voltage();
 			if (oplus_get_fg_i2c_err_occured() == false) {
 				volt = oplus_gauge_get_batt_mvolts();
+				chg_err("0x58 read volt = %d\n",volt);
 			}
 			if (oplus_get_fg_i2c_err_occured() == false) {
 				oplus_gauge_get_batt_temperature();
@@ -2006,6 +2008,7 @@ void oplus_warp_init(struct oplus_warp_chip *chip)
 	chip->disable_adapter_output = false;
 	chip->set_warp_current_limit = WARP_MAX_CURRENT_NO_LIMIT;
 	chip->reset_adapter = false;
+	chip->suspend_charger = false;
 	chip->temp_range_init = false;
 	chip->w_soc_temp_to_mcu = false;
 	oplus_warp_init_watchdog_timer(chip);
@@ -2771,6 +2774,15 @@ static void oplus_chg_asic_init_work(struct work_struct *work)
 	chip->firmware_data = asic->firmware_data;
 	chip->fw_data_count = asic->fw_data_count;
 	chip->fw_data_version = asic->fw_data_version;
+
+	chip->warp_cool_bat_volt = asic->warp_cool_bat_volt;
+	chip->warp_little_cool_bat_volt = asic->warp_little_cool_bat_volt;
+	chip->warp_normal_bat_volt = asic->warp_normal_bat_volt;
+	chip->warp_warm_bat_volt = asic->warp_warm_bat_volt;
+	chip->warp_cool_bat_suspend_volt = asic->warp_cool_bat_suspend_volt;
+	chip->warp_little_cool_bat_suspend_volt = asic->warp_little_cool_bat_suspend_volt;
+	chip->warp_normal_bat_suspend_volt = asic->warp_normal_bat_suspend_volt;
+	chip->warp_warm_bat_suspend_volt = asic->warp_warm_bat_suspend_volt;
 
 	chip->vops = asic->vops;
 	chip->fw_mcu_version = 0;

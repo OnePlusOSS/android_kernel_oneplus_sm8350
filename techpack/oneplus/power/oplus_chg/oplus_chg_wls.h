@@ -101,6 +101,7 @@
 
 #define WLS_ADAPTER_TYPE_MASK		0x07
 #define WLS_ADAPTER_ID_MASK		0xF8
+#define WLS_ADAPTER_POWER_MASK		0xF5
 #define WLS_ADAPTER_TYPE_UNKNOWN	0x00
 #define WLS_ADAPTER_TYPE_WARP		0x01
 #define WLS_ADAPTER_TYPE_SWARP		0x02
@@ -152,6 +153,13 @@
 #define CHARGE_FULL_FAN_THREOD_LO	350
 #define CHARGE_FULL_FAN_THREOD_HI	380
 #define QUIET_MODE_LED_BRIGHTNESS	3
+#define QUIET_MODE_FAN_THR_SPEED	0
+
+#define WLS_ADAPTER_MODEL_0		0x00
+#define WLS_ADAPTER_MODEL_1		0x01
+#define WLS_ADAPTER_MODEL_2		0x02
+#define WLS_ADAPTER_MODEL_7		0x07
+#define WLS_ADAPTER_MODEL_15		0x0F
 
 struct oplus_chg_wls;
 
@@ -271,6 +279,7 @@ struct oplus_chg_rx_msg {
 struct oplus_chg_wls_status {
 	u8 adapter_type;
 	u8 adapter_id;
+	u8 adapter_power;
 	u8 charge_type;
 	enum oplus_chg_wls_rx_state current_rx_state;
 	enum oplus_chg_wls_rx_state next_rx_state;

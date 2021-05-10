@@ -342,6 +342,65 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 	} else {
 		chg_debug("qcom,warp-high-soc is %d\n", chip->warp_high_soc);
 	}
+
+#ifndef OPLUS_CHG_OP_DEF
+	rc = of_property_read_u32(node, "qcom,warp_cool_bat_volt", &chip->warp_cool_bat_volt);
+	if (rc) {
+		chip->warp_cool_bat_volt = 3450;
+	} else {
+		chg_debug("qcom,warp_cool_bat_volt is %d\n", chip->warp_cool_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_little_cool_bat_volt", &chip->warp_little_cool_bat_volt);
+	if (rc) {
+		chip->warp_little_cool_bat_volt = 3400;
+	} else {
+		chg_debug("qcom,warp_little_cool_bat_volt is %d\n", chip->warp_little_cool_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_normal_bat_volt", &chip->warp_normal_bat_volt);
+	if (rc) {
+		chip->warp_normal_bat_volt = 3350;
+	} else {
+		chg_debug("qcom,warp_normal_bat_volt is %d\n", chip->warp_normal_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_warm_bat_volt", &chip->warp_warm_bat_volt);
+	if (rc) {
+		chip->warp_warm_bat_volt = 3300;
+	} else {
+		chg_debug("qcom,warp_warm_bat_volt is %d\n", chip->warp_warm_bat_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_cool_bat_suspend_volt", &chip->warp_cool_bat_suspend_volt);
+	if (rc) {
+		chip->warp_cool_bat_suspend_volt = 3450;
+	} else {
+		chg_debug("qcom,warp_cool_bat_suspend_volt is %d\n", chip->warp_cool_bat_suspend_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_little_cool_bat_suspend_volt", &chip->warp_little_cool_bat_suspend_volt);
+	if (rc) {
+		chip->warp_little_cool_bat_suspend_volt = 3400;
+	} else {
+		chg_debug("qcom,warp_little_cool_bat_suspend_volt is %d\n", chip->warp_little_cool_bat_suspend_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_normal_bat_suspend_volt", &chip->warp_normal_bat_suspend_volt);
+	if (rc) {
+		chip->warp_normal_bat_suspend_volt = 3350;
+	} else {
+		chg_debug("qcom,warp_normal_bat_suspend_volt is %d\n", chip->warp_normal_bat_suspend_volt);
+	}
+
+	rc = of_property_read_u32(node, "qcom,warp_warm_bat_suspend_volt", &chip->warp_warm_bat_suspend_volt);
+	if (rc) {
+		chip->warp_warm_bat_suspend_volt = 3300;
+	} else {
+		chg_debug("qcom,warp_warm_bat_suspend_volt is %d\n", chip->warp_warm_bat_suspend_volt);
+	}
+#endif
+
 	chip->warp_multistep_adjust_current_support = of_property_read_bool(node,
 		"qcom,warp_multistep_adjust_current_support");
 	chg_debug("qcom,warp_multistep_adjust_current_supportis %d\n",
@@ -1097,10 +1156,13 @@ static bool is_allow_fast_chg_real(struct oplus_warp_chip *chip)
 	int temp = 0;
 	int cap = 0;
 	int chg_type = 0;
+	int volt = 0;
+	int mcu_hwid_type = OPLUS_WARP_MCU_HWID_UNKNOW;
 
 	temp = oplus_chg_get_chg_temperature();
 	cap = oplus_chg_get_ui_soc();
 	chg_type = oplus_chg_get_chg_type();
+	volt = oplus_gauge_get_prev_batt_mvolts_2cell_min();
 
 	if (chg_type != POWER_SUPPLY_TYPE_USB_DCP) {
 		return false;
@@ -1111,6 +1173,62 @@ static bool is_allow_fast_chg_real(struct oplus_warp_chip *chip)
 	if (temp >= chip->warp_high_temp) {
 		return false;
 	}
+
+	mcu_hwid_type = get_warp_mcu_type(chip);
+	chg_err("temp is %d, volt is %d, suspend_charger is %d, mcu_hwid_type is %d\n",
+		temp, volt, chip->suspend_charger, mcu_hwid_type);
+#ifndef OPLUS_CHG_OP_DEF
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
+		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
+		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
+#else
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
+		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
+		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125
+		|| is_warp_asic_hwid_check_by_i2c(chip)) {
+#endif
+		if (!chip->suspend_charger) {
+			if (temp < oplus_chg_get_cool_bat_decidegc()) {
+				if (volt < chip->warp_cool_bat_volt) {
+					return false;
+				}
+			} else if (temp <
+				   oplus_chg_get_little_cool_bat_decidegc()) {
+				if (volt < chip->warp_little_cool_bat_volt) {
+					return false;
+				}
+			} else if (temp < oplus_chg_get_normal_bat_decidegc()) {
+				if (volt < chip->warp_normal_bat_volt) {
+					return false;
+				}
+			} else if (temp < chip->warp_high_temp) {
+				if (volt < chip->warp_warm_bat_volt) {
+					return false;
+				}
+			}
+		} else {
+			chip->suspend_charger = false;
+			if (temp < oplus_chg_get_cool_bat_decidegc()) {
+				if (volt < chip->warp_cool_bat_suspend_volt) {
+					return false;
+				}
+			} else if (temp <
+				   oplus_chg_get_little_cool_bat_decidegc()) {
+				if (volt < chip->warp_little_cool_bat_suspend_volt) {
+					return false;
+				}
+			} else if (temp < oplus_chg_get_normal_bat_decidegc()) {
+				if (volt < chip->warp_normal_bat_suspend_volt) {
+					return false;
+				}
+			} else if (temp < chip->warp_high_temp) {
+				if (volt < chip->warp_warm_bat_suspend_volt) {
+					return false;
+				}
+			}
+		}
+	}
+
 	if (cap < chip->warp_low_soc) {
 		return false;
 	}
@@ -1137,6 +1255,7 @@ static bool is_allow_fast_chg_dummy(struct oplus_warp_chip *chip)
 	chg_type = oplus_chg_get_chg_type();
 	if (chg_type != POWER_SUPPLY_TYPE_USB_DCP) {
 		chip->reset_adapter = false;
+		chg_err("chg_type unkown return false\n");
 		return false;
 	}
 	if (oplus_warp_get_fastchg_to_normal() == true) {
@@ -1164,6 +1283,7 @@ static bool is_allow_fast_chg_dummy(struct oplus_warp_chip *chip)
 #endif
 		if (oplus_warp_get_fastchg_dummy_started() == true && allow_real && !chip->reset_adapter){
 			chip->reset_adapter = true;
+			chip->suspend_charger = true;
 			oplus_chg_suspend_charger();
 			oplus_chg_set_charger_type_unknown();
 			chg_debug(" dummy_started true, allow_real true, reset adapter\n");

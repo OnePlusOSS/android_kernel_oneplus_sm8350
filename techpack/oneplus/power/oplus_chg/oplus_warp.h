@@ -146,6 +146,15 @@ struct oplus_chg_asic {
 	const unsigned char *firmware_data;
 	unsigned int fw_data_count;
 	int fw_data_version;
+
+	int warp_cool_bat_volt;
+	int warp_little_cool_bat_volt;
+	int warp_normal_bat_volt;
+	int warp_warm_bat_volt;
+	int warp_cool_bat_suspend_volt;
+	int warp_little_cool_bat_suspend_volt;
+	int warp_normal_bat_suspend_volt;
+	int warp_warm_bat_suspend_volt;
 };
 
 #endif
@@ -226,6 +235,14 @@ struct oplus_warp_chip {
 	int warp_high_temp;
 	int warp_low_soc;
 	int warp_high_soc;
+	int warp_cool_bat_volt;
+	int warp_little_cool_bat_volt;
+	int warp_normal_bat_volt;
+	int warp_warm_bat_volt;
+	int warp_cool_bat_suspend_volt;
+	int warp_little_cool_bat_suspend_volt;
+	int warp_normal_bat_suspend_volt;
+	int warp_warm_bat_suspend_volt;
 	int warp_chg_current_now;
 	int fast_chg_type;
 	bool disable_adapter_output;// 0--warp adapter output normal,  1--disable warp adapter output
@@ -266,6 +283,7 @@ struct oplus_warp_chip {
 	int detach_unexpectly;
 	bool disable_real_fast_chg;
 	bool reset_adapter;
+	bool suspend_charger;
 	bool temp_range_init;
 	bool w_soc_temp_to_mcu;
 	int soc_range;
