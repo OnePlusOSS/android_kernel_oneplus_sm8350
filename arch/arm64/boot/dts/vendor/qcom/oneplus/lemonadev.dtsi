@@ -25,6 +25,7 @@
 
 &battery_charger {
 	oplus,wls_boost_soft_start;
+	qcom,abnormal_volt_check;
 };
 
 &oplus_chg_gki {

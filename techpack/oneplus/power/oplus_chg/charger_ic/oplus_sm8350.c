@@ -670,6 +670,32 @@ int oplus_get_usb_status(void)
 }
 #endif
 
+#ifdef OPLUS_CHG_OP_DEF
+static int oplus_vph_iio_init(struct battery_chg_dev *bcdev)
+{
+	int rc;
+	struct device_node *node = bcdev->dev->of_node;
+
+	rc = of_property_match_string(node, "io-channel-names",
+			"vph_pwr_vol");
+	bcdev->op_vph_vol_chan = NULL;
+	if (rc >= 0) {
+		bcdev->op_vph_vol_chan = iio_channel_get(bcdev->dev,
+				"vph_pwr_vol");
+		if (IS_ERR(bcdev->op_vph_vol_chan)) {
+			rc = PTR_ERR(bcdev->op_vph_vol_chan);
+			if (rc != -EPROBE_DEFER)
+				dev_err(bcdev->dev,
+				"vph_pwr_vol channel unavailable,%ld\n",
+				rc);
+			bcdev->op_vph_vol_chan = NULL;
+			return rc;
+		}
+	}
+	return 0;
+}
+#endif
+
 #define USB_CONNECTOR_DEFAULT_TEMP 25
 static int get_usb_temp(struct battery_chg_dev *bcdev)
 {
@@ -2406,6 +2432,51 @@ static int smbchg_get_chargerid_volt(void)
 	return 0;
 }
 
+#ifdef OPLUS_CHG_OP_DEF
+int smbchg_get_vph_voltage(void)
+{
+	int ret, result;
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (!probe_done)
+		return 0;
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	if (bcdev->op_vph_vol_chan) {
+		ret = iio_read_channel_processed(
+				bcdev->op_vph_vol_chan,
+				&result);
+		bcdev->vph_vol = result/1000;
+	} else {
+		pr_err("op_vph_vol_chan no found!\n");
+		bcdev->vph_vol = -EINVAL;
+		return -ENODATA;
+	}
+	return bcdev->vph_vol;
+}
+
+int smbchg_get_hw_detect_status(void)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (!probe_done)
+		return 0;
+
+	if (!chip) {
+		pr_err("chip null\n");
+		return 0;
+	}
+	bcdev = chip->pmic_spmi.bcdev_chip;
+		if (!bcdev) {
+		pr_err("bcdev null\n");
+		return 0;
+	}
+	oplus_chg_hw_detect(bcdev, &bcdev->hw_detect);
+	return bcdev->hw_detect;
+}
+#endif
+
 static void smbchg_set_chargerid_switch_val(int value)
 {
 	if(!probe_done)
@@ -3112,6 +3183,50 @@ static int oplus_chg_disconnect_pd(bool disconnect)
 
 	return rc;
 }
+static void report_abnormal_vol_status(void)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	char *detected[2] = { "USB_CONTAMINANT=DETECTED", NULL };
+
+	if (!probe_done)
+		return;
+
+	if (!chip) {
+		chg_err("chip is NULL!\n");
+		return;
+	}
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	if (!bcdev)
+		return;
+	pr_info("USB_CONTAMINANT=ABNORMAL_VOLTAGE\n");
+	kobject_uevent_env(&bcdev->dev->kobj, KOBJ_CHANGE, detected);
+}
+
+static void smbchg_apsd_rerun(void)
+{
+	int rc = 0;
+	struct battery_chg_dev *bcdev = NULL;
+	struct ocm_state *pst = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (!probe_done)
+		return;
+
+	if (!chip) {
+		chg_err("chip is NULL!\n");
+		return;
+	}
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	if (!bcdev)
+		return;
+	pst = &bcdev->ocm_list[OCM_TYPE_USB];
+	rc = write_property_id(bcdev, pst, USB_CHG_RERUN_APSD, 1);
+	if (rc < 0)
+		pr_err("apsd rerun error, rc=%d\n", rc);
+	else
+		pr_info("apsd rerun\n");
+}
 #endif
 
 static int get_current_time(unsigned long *now_tm_sec)
@@ -3254,6 +3369,10 @@ struct oplus_chg_operations  battery_chg_ops = {
 	.pdo_5v = oplus_chg_set_pdo_5v,
 	.chg_lcm_en = smbchg_lcm_en,
 	.chg_direct_set_icl = oplus_chg_direct_set_icl,
+	.get_vph_volt = smbchg_get_vph_voltage,
+	.get_hw_detect = smbchg_get_hw_detect_status,
+	.report_vol_status = report_abnormal_vol_status,
+	.rerun_apsd = smbchg_apsd_rerun,
 #endif
 };
 
@@ -3713,6 +3832,9 @@ static int battery_chg_probe(struct platform_device *pdev)
 	oplus_chg_init(oplus_chip);
 
 	oplus_usbtemp_iio_init(bcdev);
+#ifdef OPLUS_CHG_OP_DEF
+	oplus_vph_iio_init(bcdev);
+#endif
 	oplus_vbus_ctrl_gpio_request(bcdev);
 	if (gpio_is_valid(bcdev->vbus_ctrl))
 		schedule_delayed_work(&bcdev->connector_check_work, msecs_to_jiffies(10000));

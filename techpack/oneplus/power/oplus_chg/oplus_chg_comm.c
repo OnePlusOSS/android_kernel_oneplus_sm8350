@@ -72,6 +72,7 @@ struct oplus_chg_comm {
 	bool batt_vol_high;
 	bool batt_ovp;
 	bool wls_chging_keep;
+	bool initialized;
 
 	int vchg_max_mv;
 	int vchg_min_mv;
@@ -1306,6 +1307,8 @@ void oplus_chg_comm_status_init(struct oplus_chg_mod *comm_ocm)
 		comm_dev->batt_temp_dynamic_thr[i] = comm_cfg->batt_temp_thr[i];
 	for (i = 0; i < FFC_TEMP_INVALID - 1; i++)
 		comm_dev->ffc_temp_dynamic_thr[i] = comm_cfg->ffc_temp_thr[i];
+
+	comm_dev->initialized = true;
 }
 
 enum oplus_chg_temp_region oplus_chg_comm_get_temp_region(struct oplus_chg_mod *comm_ocm)
@@ -1314,6 +1317,9 @@ enum oplus_chg_temp_region oplus_chg_comm_get_temp_region(struct oplus_chg_mod *
 	int temp;
 	enum oplus_chg_temp_region temp_region = BATT_TEMP_INVALID;
 	int i;
+
+	if (!comm_dev->initialized)
+		return BATT_TEMP_NORMAL;
 
 	temp = oplus_chg_get_batt_temp(comm_dev);
 	for (i = 0; i < BATT_TEMP_INVALID - 1; i++) {

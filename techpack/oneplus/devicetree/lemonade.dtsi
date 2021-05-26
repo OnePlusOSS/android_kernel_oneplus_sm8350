@@ -2,6 +2,7 @@
 
 &battery_charger {
 	oplus,otg_type = <1>;
+	qcom,abnormal_volt_check;
 };
 &qupv3_se4_i2c {
 	status = "ok";

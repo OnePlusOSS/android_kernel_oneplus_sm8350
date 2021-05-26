@@ -140,6 +140,7 @@ enum usb_property_id {
 	USB_OTG_SWITCH,
 #ifdef OPLUS_CHG_OP_DEF
 	USB_CHG_LCM_EN,
+	USB_CHG_RERUN_APSD,
 #endif
 	USB_PROP_MAX,
 };
@@ -304,6 +305,10 @@ struct battery_chg_dev {
 	struct delayed_work		check_charger_type_work;
 	struct delayed_work		usb_disconnect_work;
 	struct oplus_chg_iio iio;
+#ifdef OPLUS_CHG_OP_DEF
+	struct iio_channel	*op_vph_vol_chan;
+	int				vph_vol;
+#endif
 	int				connector_voltage;
 	int				filter_count;
 	int				connector_temp;

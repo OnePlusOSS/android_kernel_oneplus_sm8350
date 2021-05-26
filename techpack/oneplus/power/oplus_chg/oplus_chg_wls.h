@@ -335,6 +335,7 @@ struct oplus_chg_wls_status {
 	bool epp_5w;
 	bool quiet_mode;
 	bool switch_quiet_mode;
+	bool quiet_mode_init;
 	bool cep_timeout_adjusted;
 	bool upgrade_fw_pending;
 	bool fw_upgrading;

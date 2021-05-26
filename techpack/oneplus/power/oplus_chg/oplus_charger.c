@@ -92,6 +92,10 @@ static struct oplus_chg_chip *g_charger_chip = NULL;
 #define OPLUS_CHG_UPDATE_INTERVAL_SEC 			5
 #ifdef OPLUS_CHG_OP_DEF
 #define OPLUS_CHG_UPDATE_NO_CHARGE_INTERVAL_SEC 	10
+#define VOLT_LOW_DIFF_VALUE 500
+#define VOLT_HIGH_DIFF_VALUE 2000
+#define VOLT_HIGH_VBUS_VALUE 4000
+#define VOLT_LOW_VBUS_VALUE  1000
 #endif
 /* first run after init 10s */
 #define OPLUS_CHG_UPDATE_INIT_DELAY	round_jiffies_relative(msecs_to_jiffies(500))
@@ -2225,6 +2229,8 @@ static void oplus_chg_led_power_on_report_work(struct work_struct *work)
 
 #ifdef OPLUS_CHG_OP_DEF
 int oplus_chg_get_charger_voltage(void);
+int oplus_chg_get_vph_voltage(void);
+int oplus_chg_get_hw_detect_status(void);
 
 enum lcm_en_status {
      LCM_EN_DEAFULT = 1,
@@ -2238,7 +2244,8 @@ static void oplus_chg_ctrl_lcm_work(struct work_struct *work)
 		= container_of(dwork, struct oplus_chg_chip, ctrl_lcm_frequency);
 	static int lcm_en_flag = LCM_EN_DEAFULT;
 
-	if ((oplus_chg_get_charger_voltage() > 2500) || (oplus_chg_is_wls_online(chip))) {
+	if (((oplus_chg_get_charger_voltage() > CHG_VUSBIN_VOL_THR))
+		|| (oplus_chg_is_wls_online(chip))) {
 		if (chip->sw_full) {
 			if (lcm_en_flag != LCM_EN_ENABLE) {
 				lcm_en_flag = LCM_EN_ENABLE;
@@ -2263,6 +2270,42 @@ static void oplus_chg_ctrl_lcm_work(struct work_struct *work)
 			}
 	}
 }
+
+static void oplus_check_abnormal_voltage_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_chip *chip
+		= container_of(dwork, struct oplus_chg_chip, check_abnormal_voltage_work);
+
+	if (!chip) {
+		dev_err(chip->dev, "chip null\n");
+		return;
+	}
+	oplus_check_ovp_status(chip);
+}
+
+static void oplus_recovery_chg_type_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_chip *chg
+		= container_of(dwork, struct oplus_chg_chip, recovery_chg_type_work);
+
+	if (!chg) {
+		dev_err(chg->dev, "chip null\n");
+		return;
+	}
+	if (chg->hw_detected && chg->abnormal_volt_detected && (chg->charger_volt >= VOLT_HIGH_VBUS_VALUE)) {
+		oplus_warp_reset_fastchg_after_usbout();
+		oplus_chg_variables_reset(chg, false);
+		mdelay(600);
+		chg->chg_ops->rerun_apsd();
+		mdelay(600);
+		chg->chg_redetect_charger_type = true;
+		schedule_delayed_work(&chg->update_work, msecs_to_jiffies(1));
+		return;
+	}
+}
+
 #endif
 
 int oplus_chg_init(struct oplus_chg_chip *chip)
@@ -2324,6 +2367,9 @@ int oplus_chg_init(struct oplus_chg_chip *chip)
 	}
 #ifdef OPLUS_CHG_OP_DEF
 	INIT_DELAYED_WORK(&chip->ctrl_lcm_frequency, oplus_chg_ctrl_lcm_work);
+	INIT_DELAYED_WORK(&chip->check_abnormal_voltage_work, oplus_check_abnormal_voltage_work);
+	INIT_DELAYED_WORK(&chip->recovery_chg_type_work, oplus_recovery_chg_type_work);
+
 	mutex_init(&chip->update_work_lock);
 #endif
 	INIT_DELAYED_WORK(&chip->update_work, oplus_chg_update_work);
@@ -3502,7 +3548,11 @@ int oplus_chg_parse_charger_dt(struct oplus_chg_chip *chip)
 	chip->recharge_after_full = of_property_read_bool(node, "recharge_after_full");
 	chip->smooth_switch = of_property_read_bool(node, "qcom,smooth_switch");
 	chip->limits.max_chg_time_sec = chip->batt_capacity_mah / 250 * 3600;
-
+#ifdef OPLUS_CHG_OP_DEF
+	chip->support_abnormal_vol_check = of_property_read_bool(node, "qcom,abnormal_volt_check");
+	charger_xlog_printk(CHG_LOG_CRTI, "chip->support_abnormal_vol_check:%d\n",
+								chip->support_abnormal_vol_check);
+#endif
 	charger_xlog_printk(CHG_LOG_CRTI,
 			"input_current_charger_ma = %d, \
 			input_current_usb_ma = %d, \
@@ -5738,6 +5788,7 @@ static void oplus_chg_variables_init(struct oplus_chg_chip *chip)
 	chip->svid_verified = false;
 	chip->is_oplus_svid = false;
 	chip->usb_enum_status = false;
+	chip->chg_redetect_charger_type = false;
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 	chip->reg_dump = false;
 #endif
@@ -5812,6 +5863,7 @@ static void oplus_chg_variables_init(struct oplus_chg_chip *chip)
 	chip->limits.vfloat_over_counts = 0;
 #ifdef OPLUS_CHG_OP_DEF
 	chip->check_battery_vol_count = 0;
+	chip->abnormal_volt_detected = false;
 #endif
 	chip->chargerid_volt = 0;
 	chip->chargerid_volt_got = false;
@@ -5931,7 +5983,7 @@ void oplus_charger_detect_check(struct oplus_chg_chip *chip)
 	static int charger_flag = 0;
 #endif
 #ifdef OPLUS_CHG_OP_DEF
-	if ((oplus_chg_get_charger_voltage() > 2500) && (chip->chg_ops->check_chrdet_status())) {
+	if ((oplus_chg_get_charger_voltage() > CHG_VUSBIN_VOL_THR) && (chip->chg_ops->check_chrdet_status())) {
 		ac_offline = false;
 #else
 	if (chip->chg_ops->check_chrdet_status()) {
@@ -5945,9 +5997,10 @@ void oplus_charger_detect_check(struct oplus_chg_chip *chip)
 #endif // TODO: nick.hu
 #endif /* CONFIG_OPLUS_CHARGER_MTK */
 #ifdef OPLUS_CHG_OP_DEF
-		if (chip->charger_type == POWER_SUPPLY_TYPE_UNKNOWN || chip->chg_config_init) {
+		if (chip->charger_type == POWER_SUPPLY_TYPE_UNKNOWN || chip->chg_config_init || chip->chg_redetect_charger_type) {
 			chip->chg_config_init = false;
 			chip->pd_chging = false;
+			chip->chg_redetect_charger_type = false;
 #else
 		if (chip->charger_type == POWER_SUPPLY_TYPE_UNKNOWN) {
 #endif
@@ -6378,6 +6431,51 @@ out:
 
 #define ALLOW_DIFF_VALUE 1000000
 #ifdef OPLUS_CHG_OP_DEF
+void oplus_check_ovp_status(struct oplus_chg_chip *chg)
+{
+	int volt_diff = 0;
+
+	if (chg->support_abnormal_vol_check == false) {
+		return;
+	}
+	if (!chg) {
+		return;
+	}
+	if (oplus_chg_is_wls_present(chg))
+		return;
+	oplus_chg_get_charger_voltage();
+	oplus_chg_get_vph_voltage();
+	oplus_chg_get_hw_detect_status();
+	if (chg->abnormal_volt_detected)
+		chg->notify_code |= 1 << NOTIFY_OVP_VOLTAGE_ABNORMAL;
+	if (chg->vph_voltage <= 0 || chg->charger_volt <= 0) {
+		chg_err("vph:%d,vbus:%d return\n", chg->vph_voltage, chg->charger_volt);
+		return;
+	}
+	if (chg->vph_voltage < chg->charger_volt) {
+		return;
+	}
+
+	if (chg->hw_detected && ((chg->charger_volt <= VOLT_LOW_VBUS_VALUE) && (chg->charger_volt >= VOLT_HIGH_VBUS_VALUE))) {
+		pr_info("chg->hw_detected:%d return\n", chg->hw_detected);
+		return;
+	}
+	volt_diff = chg->vph_voltage - chg->charger_volt;
+	if ((volt_diff > VOLT_LOW_DIFF_VALUE) && (volt_diff < VOLT_HIGH_DIFF_VALUE)
+		&& ((chg->charger_volt >= VOLT_LOW_VBUS_VALUE) && (chg->charger_volt <= VOLT_HIGH_VBUS_VALUE))
+		&& (!chg->abnormal_volt_detected)) {
+		chg->abnormal_volt_detected = true;
+		oplus_chg_variables_reset(chg, false);
+		chg->notify_code |= 1 << NOTIFY_OVP_VOLTAGE_ABNORMAL;
+		if (is_usb_ocm_available(chg))
+			oplus_chg_mod_changed(chg->usb_ocm);
+		if (is_batt_ocm_available(chg))
+			oplus_chg_mod_changed(chg->batt_ocm);
+		chg->chg_ops->report_vol_status();
+		chg_err("abnormal_volt_detected %d \n", chg->abnormal_volt_detected);
+	}
+}
+
 static void oplus_check_battery_vol_diff(struct oplus_chg_chip *chg)
 {
 	int rc = 0;
@@ -6432,6 +6530,7 @@ static void oplus_check_battery_vol_diff(struct oplus_chg_chip *chg)
 		}
 	}
 }
+
 #endif
 static void oplus_chg_protection_check(struct oplus_chg_chip *chip)
 {
@@ -6676,6 +6775,8 @@ static void battery_notify_flag_check(struct oplus_chg_chip *chip)
 #ifdef OPLUS_CHG_OP_DEF
 	} else if (chip->notify_code & (1 << NOTIFY_BAT_VOLTAGE_DIFF)) {
 		chip->notify_flag = NOTIFY_BAT_VOLTAGE_DIFF;
+	} else if (chip->notify_code & (1 << NOTIFY_OVP_VOLTAGE_ABNORMAL)) {
+		chip->notify_flag = PROTECT_BATT_OVP_VOL_ABNORMAL;
 #endif
 	} else {
 		chip->notify_flag = 0;
@@ -7827,7 +7928,7 @@ static void oplus_chg_print_log(struct oplus_chg_chip *chip)
 			BAT[ %d / %d / %d / %d / %d / %d ], \
 			GAUGE[ %d / %d / %d / %d / %d / %d / %d / %d / %d ], "
 			"STATUS[ 0x%x / %d / %d / %d / %d / 0x%x ], \
-			OTHER[ %d / %d / %d / %d / %d/ %d / %d ]\n",
+			OTHER[ %d / %d / %d / %d / %d/ %d / %d]\n",
 			chip->charger_exist, chip->charger_type, chip->charger_volt,
 			chip->prop_status, chip->boot_mode,
 			chip->batt_exist, chip->batt_full, chip->chging_on, chip->in_rechging,
@@ -7838,6 +7939,7 @@ static void oplus_chg_print_log(struct oplus_chg_chip *chip)
 			chip->tbatt_status, chip->stop_voter, chip->notify_code,
 			chip->otg_switch, chip->mmi_chg, chip->boot_reason, chip->boot_mode,
 			chip->chargerid_volt, chip->chargerid_volt_got, chip->shell_temp);
+		charger_xlog_printk(CHG_LOG_CRTI, "OTHER[%d,%d,%d]\n", chip->vph_voltage, chip->abnormal_volt_detected, chip->hw_detected);
 	}
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -8431,6 +8533,7 @@ static void oplus_chg_update_work(struct work_struct *work)
 
 #ifdef OPLUS_CHG_OP_DEF
 	oplus_check_battery_vol_diff(chip);
+	oplus_check_ovp_status(chip);
 #endif
 	if (chip->charger_exist) {
 		oplus_chg_aicl_check(chip);
@@ -8819,13 +8922,32 @@ void oplus_chg_set_charger_type_unknown(void)
 int oplus_chg_get_charger_voltage(void)
 {
 	if (!g_charger_chip) {
-		return -500;
+		return -EINVAL;
 	} else {
 		g_charger_chip->charger_volt = g_charger_chip->chg_ops->get_charger_volt();
 	}
 	return g_charger_chip->charger_volt;
 }
-
+#ifdef OPLUS_CHG_OP_DEF
+int oplus_chg_get_vph_voltage(void)
+{
+	if (!g_charger_chip) {
+		return -EINVAL;
+	} else {
+		g_charger_chip->vph_voltage = g_charger_chip->chg_ops->get_vph_volt();
+	}
+	return g_charger_chip->vph_voltage;
+}
+int oplus_chg_get_hw_detect_status(void)
+{
+	if (!g_charger_chip) {
+		return 0;
+	} else {
+		g_charger_chip->hw_detected = g_charger_chip->chg_ops->get_hw_detect();
+	}
+	return g_charger_chip->hw_detected;
+}
+#endif
 void oplus_chg_set_chargerid_switch_val(int value)
 {
 	if (g_charger_chip && g_charger_chip->chg_ops->set_chargerid_switch_val) {

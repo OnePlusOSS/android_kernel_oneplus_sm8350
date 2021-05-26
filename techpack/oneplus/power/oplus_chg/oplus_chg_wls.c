@@ -648,11 +648,13 @@ static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 	case WLS_RESPONE_INTO_NORMAL_MODE:
 		if (rx_msg->msg_type == WLS_CMD_SET_NORMAL_MODE) {
 			wls_status->quiet_mode = false;
+			wls_status->quiet_mode_init = true;
 		}
 		break;
 	case WLS_RESPONE_INTO_QUIET_MODE:
 		if (rx_msg->msg_type == WLS_CMD_SET_QUIET_MODE) {
 			wls_status->quiet_mode = true;
+			wls_status->quiet_mode_init = true;
 		}
 		break;
 	case WLS_RESPONE_FAN_SPEED:
@@ -957,6 +959,7 @@ static void oplus_chg_wls_reset_variables(struct oplus_chg_wls *wls_dev) {
 	wls_status->epp_5w = false;
 	wls_status->quiet_mode = false;
 	wls_status->switch_quiet_mode = false;
+	wls_status->quiet_mode_init = false;
 	wls_status->cep_timeout_adjusted = false;
 	wls_status->upgrade_fw_pending = false;
 	wls_status->fw_upgrading = false;
@@ -1077,6 +1080,7 @@ static int oplus_chg_wls_set_trx_enable(struct oplus_chg_wls *wls_dev, bool en)
 	if (en) {
 		if (wls_status->wls_type == OPLUS_CHG_WLS_TRX)
 			goto out;
+		cancel_delayed_work_sync(&wls_dev->wls_connect_work);
 		//vote(wls_dev->wrx_en_votable, TRX_EN_VOTER, true, 1, false);
 		//msleep(20);
 		rc = oplus_chg_wls_nor_set_boost_vol(wls_dev->wls_nor, WLS_TRX_MODE_VOL_MV);
@@ -1089,7 +1093,7 @@ static int oplus_chg_wls_set_trx_enable(struct oplus_chg_wls *wls_dev, bool en)
 			pr_err("can't enable trx boost, rc=%d\n", rc);
 			goto out;
 		}
-		msleep(50);
+		msleep(500);
 		oplus_chg_wls_reset_variables(wls_dev);
 		wls_status->wls_type = OPLUS_CHG_WLS_TRX;
 
@@ -3024,6 +3028,10 @@ static int oplus_chg_wls_rx_handle_state_default(struct oplus_chg_wls *wls_dev)
 					wls_status->target_rx_state = OPLUS_CHG_WLS_RX_STATE_STOP;
 				else
 					wls_status->target_rx_state = OPLUS_CHG_WLS_RX_STATE_FAST;
+				if (wls_status->adapter_id == WLS_ADAPTER_MODEL_0 &&
+				    !wls_status->quiet_mode_init &&
+				    !wls_status->switch_quiet_mode)
+					(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_NORMAL_MODE, 0xff, 2);
 				rc = oplus_chg_wls_get_real_soc(wls_dev, &real_soc);
 				if ((rc < 0) || (real_soc >= dynamic_cfg->fcc_step[fcc_step->max_step - 1].max_soc)) {
 					pr_err("can't get real soc or soc is too high, rc=%d\n", rc);

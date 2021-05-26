@@ -35,7 +35,8 @@ enum chg_protect_status_type {
 	PROTECT_BATT_TEMP_REGION_COOL,/* 8:  0 < t <=  5    */
 	PROTECT_BATT_TEMP_REGION_WARM,/* 9: 45 < t <= 55   */
 	PROTECT_INVALID_CHARGER,/*10:invalid charger or slow charger*/
-	PROTECT_BATT_VOL_DIFF_TOO_LARGE/*11:dual-cell battery voltage diff too large*/
+	PROTECT_BATT_VOL_DIFF_TOO_LARGE,/*11:dual-cell battery voltage diff too large*/
+	PROTECT_BATT_OVP_VOL_ABNORMAL/*12:abnormal vol check*/
 };
 
 enum oplus_aging_type {

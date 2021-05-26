@@ -65,7 +65,6 @@ extern int charger_abnormal_log;
 extern struct oplus_warp_chip *g_warp_chip;
 #endif
 
-static int op10_set_fw_new_version(struct oplus_warp_chip *chip);
 static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info[]);
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -97,6 +96,8 @@ static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info
 #define CMD_XFER_R_DATA		0x03
 #define CMD_PRG_START			0x05
 #define CMD_USER_BOOT			0x06
+#define CMD_CHIP_ERASE			0x07
+#define CMD_GET_VERSION			0x08
 #define CMD_GET_CRC32			0x09
 #define CMD_SET_CKSM_LEN		0x0A
 #define CMD_DEV_STATUS			0x0B
@@ -310,10 +311,39 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 	int i = 0;
 	int ret = 0;
 	u8 fw_version[FW_VERSION_LEN] = {0};
+	u8 rx_buf[4] = {0};
+	u32 check_status_try_count = 100;
+	u32 fw_status_address = 0x4000 - 0x10;
+	u32 new_fw_crc32 = 0;
 
 	ret = op10_get_fw_old_version(chip, fw_version);
 	if (ret == 1)
 		return false;
+
+	ret = oplus_warp_i2c_read(chip->client, CMD_GET_VERSION, 1, rx_buf);
+	if (ret < 0) {
+		chg_err("read CMD_GET_VERSION error:%d\n", ret);
+	} else {
+		switch (rx_buf[0]) {
+		case 0x01:
+		case 0x02:
+			chg_debug("chip is sy6610:0x%02x\n", rx_buf[0]);
+			break;
+		case 0x11:
+			chg_debug("chip is sy6610c:0x%02x\n", rx_buf[0]);
+			break;
+		default:
+			chg_debug("invalid chip version:0x%02x\n", rx_buf[0]);
+		}
+	}
+
+	rx_buf[0] = fw_status_address & 0xFF;
+	rx_buf[1] = (fw_status_address >> 8) & 0xFF;
+	oplus_warp_i2c_write(chip->client, CMD_SET_ADDR, 2, rx_buf);
+	msleep(1);
+	memset(rx_buf, 0, 4);
+	oplus_warp_i2c_read(chip->client, CMD_XFER_R_DATA, 4, rx_buf);
+	chg_debug("fw crc32 status:0x%08x\n", *((u32 *)rx_buf));
 
 	chip->fw_mcu_version = fw_version[FW_VERSION_LEN-4];
 
@@ -322,6 +352,24 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 		if (fw_version[i] != chip->firmware_data[chip->fw_data_count - FW_VERSION_LEN + i])
 			return false;
 	}
+
+	*((u32 *)rx_buf) = chip->fw_data_count;
+	oplus_warp_i2c_write(chip->client, CMD_SET_CKSM_LEN, 4, rx_buf);
+	msleep(5);
+	if (check_crc32_available(chip, check_status_try_count) == -1) {
+		chg_debug("crc32 is not available, timeout!\n");
+		return false;
+	}
+
+	memset(rx_buf, 0, 4);
+	oplus_warp_i2c_read(chip->client, CMD_GET_CRC32, 4, rx_buf);
+	new_fw_crc32 = crc32_sram(chip);
+	chg_debug("fw_data_crc:0x%0x, the read data_crc32:0x%0x\n", new_fw_crc32, *((u32 *)rx_buf));
+	if (*((u32 *)rx_buf) != new_fw_crc32) {
+		chg_debug("crc32 compare fail!\n");
+		return false;
+	}
+
 
 	return true;
 }
@@ -335,8 +383,15 @@ static int op10_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 f
 	u32 fw_len = 0, fw_offset = 0;
 	u32 write_len = 0, write_len_temp = 0, chunk_index = 0, chunk_len = 0;
 	u32 new_fw_crc32 = 0;
+	int rc = 0;
 
 	chg_debug("start op_fw_update now, fw length is: %d\n", fw_size);
+	rc = oplus_warp_i2c_read(chip->client, CMD_CHIP_ERASE, 1, rx_buf);
+	if (rc < 0) {
+		chg_debug("read CMD_CHIP_ERASE error:%d\n", rc);
+		goto update_fw_err;
+	}
+	msleep(100);
 
 	/* check device status */
 	if (check_flash_idle(chip, check_status_try_count) == -1) {
@@ -400,7 +455,6 @@ static int op10_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 f
 	/* fw update success,jump to new fw */
 	oplus_warp_i2c_read(chip->client, CMD_USER_BOOT, 1, rx_buf);
 
-	op10_set_fw_new_version(chip);
 	chip->fw_mcu_version = fw_buf[fw_size - 4];
 	chg_debug("success!\n");
 	return 0;
@@ -420,8 +474,16 @@ static int op10_fw_update(struct oplus_warp_chip *chip)
 	u32 fw_len = 0, fw_offset = 0;
 	u32 write_len = 0, write_len_temp = 0, chunk_index = 0, chunk_len = 0;
 	u32 new_fw_crc32 = 0;
+	int rc = 0;
 
 	chg_debug("start op_fw_update now, fw length is: %d\n", chip->fw_data_count);
+
+	rc = oplus_warp_i2c_read(chip->client, CMD_CHIP_ERASE, 1, rx_buf);
+	if (rc < 0) {
+		chg_debug("read CMD_CHIP_ERASE error:%d\n", rc);
+		goto update_fw_err;
+	}
+	msleep(100);
 
 	/* check device status */
 	if (check_flash_idle(chip, check_status_try_count) == -1) {
@@ -485,7 +547,6 @@ static int op10_fw_update(struct oplus_warp_chip *chip)
 	/* fw update success,jump to new fw */
 	oplus_warp_i2c_read(chip->client, CMD_USER_BOOT, 1, rx_buf);
 
-	op10_set_fw_new_version(chip);
 	chip->fw_mcu_version = chip->fw_data_version;
 	chg_debug("success!\n");
 	return 0;
@@ -534,48 +595,6 @@ static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info
 	}
 	chg_debug("\n");*/
 
-	return 0;
-}
-
-static int op10_set_fw_new_version(struct oplus_warp_chip *chip)
-{
-	u8 version_info[FW_VERSION_LEN] = {0};
-	u8 rx_buf[4] = {0}, i = 0;
-	u32 check_status_try_count = 100;//try 2s
-	u32 write_done_try_count = 500;//max try 10s
-	u32 fw_len_address = 0x4000 - 8;
-
-	for (i = 0; i < FW_VERSION_LEN; i++) {
-		version_info[i] = (u8)(chip->firmware_data[chip->fw_data_count - FW_VERSION_LEN + i]);
-	}
-	chg_debug("start write fw new version...\n");
-	if (check_flash_idle(chip, check_status_try_count) == -1) {
-		chg_debug("cannot get the fw old version because of the device is always busy!\n");
-		return 1;
-	}
-
-	rx_buf[0] = fw_len_address & 0xFF;
-	rx_buf[1] = (fw_len_address >> 8) & 0xFF;
-	oplus_warp_i2c_write(chip->client, CMD_SET_ADDR, 2, rx_buf);
-	msleep(1);
-	oplus_warp_i2c_read(chip->client, CMD_XFER_R_DATA, 4, rx_buf);
-	if (*((u32 *)rx_buf) < fw_len_address - FW_VERSION_LEN) {
-		oplus_warp_i2c_write(chip->client, CMD_SET_ADDR, 2, rx_buf);
-		msleep(1);
-		oplus_warp_i2c_write(chip->client, CMD_XFER_W_DAT, FW_VERSION_LEN, version_info);
-		msleep(1);
-		oplus_warp_i2c_read(chip->client, CMD_PRG_START, 1, rx_buf);
-		msleep(10);
-		if (check_flash_idle(chip, write_done_try_count) == -1) {
-			chg_debug("cannot wait flash write done, timeout!\n");
-			return 1;
-		}
-	} else {
-		chg_debug("current fw length info is invalid!!!\n");
-		return 1;
-	}
-
-	chg_debug("success\n");
 	return 0;
 }
 
@@ -637,16 +656,9 @@ static int op10_fw_check_then_recover(struct oplus_warp_chip *chip)
 	}
 
 	if (oplus_is_power_off_charging(chip) == true || oplus_is_charger_reboot(chip) == true) {
-		chip->mcu_update_ing = true;
-		opchg_set_reset_active_force(chip);
-		msleep(5);
-		update_result = op10_fw_update(chip);
 		chip->mcu_update_ing = false;
-		if (update_result) {
-			msleep(30);
-			opchg_set_clock_sleep(chip);
-			opchg_set_reset_active_force(chip);
-		}
+		opchg_set_clock_sleep(chip);
+		opchg_set_reset_sleep(chip);
 		ret = FW_NO_CHECK_MODE;
 	} else {
 		opchg_set_clock_active(chip);

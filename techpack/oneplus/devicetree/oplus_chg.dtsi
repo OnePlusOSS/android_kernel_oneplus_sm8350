@@ -848,9 +848,11 @@
 	pinctrl-0 = <&vbus_ctrl_default>;
 
 	io-channels = <&pmk8350_vadc PM8350_ADC7_AMUX_THM5_30K_PU>,
-			<&pmk8350_vadc PM8350_ADC7_GPIO2_30K_PU>;
+			<&pmk8350_vadc PM8350_ADC7_GPIO2_30K_PU>,
+			<&pmk8350_vadc PM8350_ADC7_VPH_PWR>;
 	io-channel-names = "gpio1_voltage",
-			"gpio3_voltage";
+			"gpio3_voltage",
+			"vph_pwr_vol";
 
 	oplus_typec_ic: oplus,pm8350b_typec {
 		compatible = "oplus,pm8350b-typec";

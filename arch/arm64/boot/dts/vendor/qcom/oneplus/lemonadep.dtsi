@@ -23,6 +23,7 @@
 
 &battery_charger{
 	qcom,warm_bat_decidegc = <470>;
+	qcom,abnormal_volt_check;
 };
 
 &oplus_warp_chg {

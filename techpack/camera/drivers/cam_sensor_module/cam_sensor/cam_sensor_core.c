@@ -692,6 +692,9 @@ void cam_sensor_shutdown(struct cam_sensor_ctrl_t *s_ctrl)
                      }
                 } else {
                     CAM_ERR(CAM_SENSOR, "sensor have power down!");
+                    mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+                    s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+                    mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
                 }
                 mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
         }
@@ -1052,6 +1055,9 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
                      }
                 } else {
                     CAM_ERR(CAM_SENSOR, "sensor have power down!");
+                    mutex_lock(&(s_ctrl->sensor_initsetting_mutex));
+                    s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
+                    mutex_unlock(&(s_ctrl->sensor_initsetting_mutex));
                 }
                 mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
 #else

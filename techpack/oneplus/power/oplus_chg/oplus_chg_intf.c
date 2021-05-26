@@ -566,15 +566,14 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		if (oplus_warp_ignore_event() == true) {
 			pval->intval = true;
 			break;
-                }
+		}
 #endif
-
 		if (chip->usb_chg_disable) {
 			pval->intval = false;
 		} else {
 			pval->intval = atomic_read(&oplus_dev->usb_online) &&
 				(chip->charger_exist_delay ? 1 : chip->charger_exist);
-			if (!chip->mmi_chg && (chip->charger_volt > 2500))
+			if (!chip->mmi_chg && (chip->charger_volt > CHG_VUSBIN_VOL_THR))
 				pval->intval = true;
 			if (oplus_dev->icon_debounce)
 				pval->intval = true;
@@ -594,7 +593,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 			 */
 			pval->intval = atomic_read(&oplus_dev->usb_online) &&
 				(chip->charger_exist_delay ? 1 : chip->charger_exist);
-			if (!chip->mmi_chg && (chip->charger_volt > 2500))
+			if (!chip->mmi_chg && (chip->charger_volt > CHG_VUSBIN_VOL_THR))
 				pval->intval = true;
 			if (oplus_dev->icon_debounce)
 				pval->intval = true;
@@ -606,6 +605,10 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 			pr_info("port protect triggered in power-off mode!");
 			pval->intval = 5000000;
 		}
+#ifdef OPLUS_CHG_OP_DEF
+		if (chip->abnormal_volt_detected && (boot_mode == MSM_BOOT_MODE__CHARGE))
+			pval->intval = 0;
+#endif
 		break;
 	case OPLUS_CHG_PROP_VOLTAGE_MAX:
 		pval->intval = 9000000;
@@ -640,7 +643,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		if (oplus_warp_ignore_event() == true) {
 			pval->intval = OPLUS_CHG_USB_TYPE_SWARP;
 			break;
-                }
+		}
 		if (chip->is_oplus_svid && chip->charger_exist) {
 			pval->intval = OPLUS_CHG_USB_TYPE_SWARP;
 		} else
@@ -921,6 +924,7 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 	struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, usb_event_nb);
 	struct oplus_chg_mod *owner_ocm = v;
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
+	int boot_mode = get_boot_mode();
 
 	switch(val) {
 	case OPLUS_CHG_EVENT_ONLINE:
@@ -957,6 +961,10 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 			if (is_wls_psy_available(op_dev))
 				power_supply_changed(op_dev->wls_psy);
 		}
+#ifdef OPLUS_CHG_OP_DEF
+		if (chip && chip->check_abnormal_voltage_work.work.func)
+			schedule_delayed_work(&chip->check_abnormal_voltage_work, msecs_to_jiffies(200));
+#endif
 		break;
 	case OPLUS_CHG_EVENT_PRESENT:
 		if (owner_ocm == NULL) {
@@ -971,6 +979,9 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 		if (chip && chip->ctrl_lcm_frequency.work.func)
 			mod_delayed_work(system_highpri_wq, &chip->ctrl_lcm_frequency,
 								50);
+		if (chip && chip->recovery_chg_type_work.work.func
+			&& chip->abnormal_volt_detected && (boot_mode == MSM_BOOT_MODE__NORMAL))
+			schedule_delayed_work(&chip->recovery_chg_type_work, msecs_to_jiffies(800));
 #endif
 		break;
 	case OPLUS_CHG_EVENT_APSD_DONE:
@@ -1403,6 +1414,8 @@ static int batt_err_code_table_color_to_oos(int notify_code)
 
 	if (notify_code & (1 << NOTIFY_CHGING_OVERTIME)) {
 		ret = PROTECT_CHG_OVERTIME;
+	} else if (notify_code & (1 << NOTIFY_OVP_VOLTAGE_ABNORMAL)) {
+		ret = PROTECT_BATT_OVP_VOL_ABNORMAL;
 	} else if (notify_code & (1 << NOTIFY_CHARGER_OVER_VOL)) {
 		ret = PROTECT_CHG_OVP;/* 1: VCHG > 5.8V     */
 	} else if (notify_code & (1 << NOTIFY_CHARGER_LOW_VOL)) {
@@ -1560,7 +1573,14 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 			pval->intval = chip->temperature - chip->offset_temp;
 		break;
 	case OPLUS_CHG_PROP_HEALTH:
-		if (is_comm_ocm_available(oplus_dev))
+		if (is_wls_ocm_available(oplus_dev)) {
+			rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_PRESENT, &temp_val);
+			if (rc == 0)
+				wls_online = !!temp_val.intval;
+			else
+				rc = 0;
+		}
+		if (is_comm_ocm_available(oplus_dev) && wls_online)
 			batt_health = oplus_chg_comm_get_batt_health(oplus_dev->comm_ocm);
 		if ((batt_health == POWER_SUPPLY_HEALTH_UNKNOWN) ||
 		    (batt_health == POWER_SUPPLY_HEALTH_GOOD)) {
@@ -1640,7 +1660,9 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 		break;
 	case OPLUS_CHG_PROP_BATTERY_NOTIFY_CODE:
 #ifdef CONFIG_OPLUS_CHG_OOS
-		pval->intval = batt_err_code_table_color_to_oos(chip->notify_code | oplus_dev->notify_code);
+		if (chip->abnormal_volt_detected)
+			chip->notify_code |= 1 << NOTIFY_OVP_VOLTAGE_ABNORMAL;
+		pval->intval =  batt_err_code_table_color_to_oos(chip->notify_code | oplus_dev->notify_code);
 #else
 		pval->intval = chip->notify_code | oplus_dev->notify_code;
 #endif

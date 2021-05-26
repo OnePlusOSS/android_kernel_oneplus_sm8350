@@ -107,7 +107,9 @@
 #ifdef OPLUS_CHG_OP_DEF
 #include "oplus_chg_strategy.h"
 #endif
-
+#ifdef OPLUS_CHG_OP_DEF
+#define CHG_VUSBIN_VOL_THR  3700
+#endif
 #define CHG_LOG_CRTI 1
 #define CHG_LOG_FULL 2
 
@@ -157,6 +159,7 @@
 #define	NOTIFY_CHARGER_TERMINAL			20
 #define NOTIFY_GAUGE_I2C_ERR			21
 #define NOTIFY_BAT_VOLTAGE_DIFF			22
+#define NOTIFY_OVP_VOLTAGE_ABNORMAL		23
 
 
 #define OPLUS_CHG_500_CHARGING_CURRENT	500
@@ -648,6 +651,8 @@ struct oplus_chg_chip {
 /*	struct battery_data battery_main	*/
 #ifdef OPLUS_CHG_OP_DEF
 	struct delayed_work ctrl_lcm_frequency;
+	struct delayed_work check_abnormal_voltage_work;
+	struct delayed_work recovery_chg_type_work;
 #endif
 	struct delayed_work update_work;
 	struct delayed_work ui_soc_decimal_work;
@@ -687,6 +692,12 @@ struct oplus_chg_chip {
 	bool wireless_support;
 	bool wpc_no_chargerpump;
 	bool charger_exist;
+#ifdef OPLUS_CHG_OP_DEF
+	bool abnormal_volt_detected;
+	bool hw_detected;
+	bool support_abnormal_vol_check;
+	int vph_voltage;
+#endif
 	int charger_type;
 	int real_charger_type;
 	int charger_volt;
@@ -774,6 +785,7 @@ struct oplus_chg_chip {
 	bool start_pd_check;
 	bool chg_config_init;
 	bool usb_chg_disable;
+	bool chg_redetect_charger_type;
 	int pd_config_count;
 #endif
 	int unwakelock_chg;
@@ -947,8 +959,12 @@ struct oplus_chg_operations {
 	void (*otg_switch)(bool enable);
 	int (*disconnect_pd)(bool);
 	int(*pdo_5v)(void);
+	int (*get_vph_volt)(void);
+	int (*get_hw_detect)(void);
 	int (*chg_lcm_en)(bool);
 	int (*chg_direct_set_icl)(int current_ma);
+	void (*report_vol_status)(void);
+	void(*rerun_apsd)(void);
 #endif
 };
 
@@ -1075,6 +1091,7 @@ void oplus_chg_set_led_status(bool val);
 int oplus_chg_match_temp_for_chging(void);
 void oplus_chg_set_camera_status(bool val);
 void oplus_chg_update_float_voltage_by_fastchg(bool fastchg_en);
+void oplus_check_ovp_status(struct oplus_chg_chip *chg);
 #ifdef CONFIG_OPLUS_CHG_OOS
 #ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
 int oplus_chg_usb_set_config(struct oplus_chg_mod *usb_ocm, u8 *buf);
