@@ -10,6 +10,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/dma-noncoherent.h>
+#include <linux/msm_ion.h>
 
 #define CREATE_TRACE_POINTS
 #include "ion_trace.h"
@@ -146,6 +147,18 @@ static int ion_sglist_zero(struct scatterlist *sgl, unsigned int nents,
 	return ret;
 }
 
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+static inline unsigned int boost_pool_extra_flags(unsigned int heap_id_mask)
+{
+	unsigned int extra_flags = 0;
+
+	if (heap_id_mask & ION_CAMERA_HEAP_ID)
+		extra_flags |= ION_FLAG_CAMERA_BUFFER;
+
+	return extra_flags;
+}
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
+
 struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 				    unsigned int heap_id_mask,
 				    unsigned int flags)
@@ -153,6 +166,10 @@ struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 	struct ion_buffer *buffer = NULL;
 	struct ion_heap *heap;
 	char task_comm[TASK_COMM_LEN];
+
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+	unsigned int extra_flags = boost_pool_extra_flags(heap_id_mask);
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
 
 	if (!dev || !len) {
 		return ERR_PTR(-EINVAL);
@@ -179,7 +196,14 @@ struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 		/* if the caller didn't specify this heap id */
 		if (!((1 << heap->id) & heap_id_mask))
 			continue;
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+		if ((1 << heap->id) == ION_SYSTEM_HEAP_ID)
+			buffer = ion_buffer_create(heap, dev, len, flags | extra_flags);
+		else
+			buffer = ion_buffer_create(heap, dev, len, flags);
+#else
 		buffer = ion_buffer_create(heap, dev, len, flags);
+#endif
 		if (!IS_ERR(buffer))
 			break;
 	}

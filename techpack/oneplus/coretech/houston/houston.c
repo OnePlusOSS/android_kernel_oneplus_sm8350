@@ -60,11 +60,16 @@ static const char *ht_monitor_case[HT_MONITOR_SIZE] = {
 	"util-0", "util-1", "util-2", "util-3", "util-4",
 	"util-5", "util-6", "util-7",
 	"process name", "layer name", "pid", "fps_align", "actualFps",
-	"predictFps", "appSwapTime", "appSwapDuration",
-	"appEnqueueDuration", "sfTotalDuration", "sfPresentTime",
-	"Vsync", "missedLayer", "render_pid", "render_util",
+	"predictFps", "Vsync", "gameFps",
+	"NULL", "NULL", "NULL",
+	"NULL", "missedLayer", "render_pid", "render_util",
 	"nt_rtg", "rtg_util_sum"
 };
+
+static struct game_fps_data {
+	u64 fps;
+	u64 enqueue_time;
+} game_fps_data_;
 
 /*
  * log output
@@ -89,6 +94,9 @@ module_param_named(ai_on, ai_on, int, 0664);
 
 static int render_pid;
 module_param_named(render_pid, render_pid, int, 0664);
+
+static int game_fps_pid = -1;
+module_param_named(game_fps_pid, game_fps_pid, int, 0664);
 
 static int pccore_always_on;
 module_param_named(pcc_always_on, pccore_always_on, int, 0664);
@@ -1607,33 +1615,26 @@ static int ht_fps_data_sync_store(const char *buf, const struct kernel_param *kp
 {
 	u64 fps_data[FPS_COLS] = {0};
 	static long long fps_align = 0;
-	char fps_layer_name[FPS_DATA_BUF_SIZE] = {0};
-	char process_name[FPS_DATA_BUF_SIZE] = {0};
 	static int cur_idx = 0;
 	//size_t len;
-	int i = 0, ret;
+	int ret;
 
 	if (strlen(buf) >= FPS_DATA_BUF_SIZE)
 		return 0;
 
-	memset(fps_layer_name, 0, FPS_DATA_BUF_SIZE);
-
-	ret = sscanf(buf, "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%lld,%s %s\n",
+	ret = sscanf(buf, "%llu,%llu,%llu,%llu,%llu,%lld\n",
 			&fps_data[0], &fps_data[1], &fps_data[2], &fps_data[3],
-			&fps_data[4], &fps_data[5], &fps_data[6], &fps_data[7],
-			&fps_data[8], &fps_align,
-			process_name, fps_layer_name);
-
-	if (ret != 12) {
+			&fps_data[4], &fps_align);
+	if (ret != 6) {
 		/* instead of return -EINVAL, just return 0 to keep fd connection keep working */
 		ht_loge("fps data params invalid. ret %d, %s. IGNORED.\n", ret, buf);
 		return 0;
 	}
+	game_fps_data_.enqueue_time = fps_align;
+	game_fps_data_.fps = fps_data[3];
 
-	ht_logv("fps data params: %llu %llu %llu %llu %llu %llu %llu %llu %llu %lld %s %s\n",
-		fps_data[0], fps_data[1], fps_data[2], fps_data[3], fps_data[4],
-		fps_data[5], fps_data[6], fps_data[7], fps_data[8], fps_align,
-		process_name, fps_layer_name);
+	ht_logv("fps data params: %llu %llu %llu %llu %llu %lld\n",
+		fps_data[0], fps_data[1], fps_data[2], fps_data[3], fps_data[4], fps_align);
 
 	/*
 	 * cached_fps should be always updated
@@ -1684,29 +1685,11 @@ static int ht_fps_data_sync_store(const char *buf, const struct kernel_param *kp
 
 	monitor.buf->data[cur_idx][HT_FPS_1] = fps_data[0]; //actualFps
 	monitor.buf->data[cur_idx][HT_FPS_2] = fps_data[1]; //predictFps
-	monitor.buf->data[cur_idx][HT_FPS_3] = fps_data[2]; //appSwapTime
-	monitor.buf->data[cur_idx][HT_FPS_4] = fps_data[3]; //appSwapDuration
-	monitor.buf->data[cur_idx][HT_FPS_5] = fps_data[4]; //appEnqueueDuration
-	monitor.buf->data[cur_idx][HT_FPS_6] = fps_data[5]; //sfTotalDuration
-	monitor.buf->data[cur_idx][HT_FPS_7] = fps_data[6]; //sfPresentTime
-	monitor.buf->data[cur_idx][HT_FPS_8] = fps_data[7]; //vSync
-	monitor.buf->data[cur_idx][HT_FPS_PID] = fps_data[8]; //pid
+	monitor.buf->data[cur_idx][HT_FPS_3] = fps_data[2];
+	monitor.buf->data[cur_idx][HT_FPS_4] = fps_data[3];
+	monitor.buf->data[cur_idx][HT_FPS_PID] = fps_data[4];
 	monitor.buf->data[cur_idx][HT_FPS_ALIGN]= fps_align; //fps align ts
 
-	fps_layer_name[FPS_LAYER_LEN - 1] = '\0';
-	process_name[FPS_PROCESS_NAME_LEN - 1] = '\0';
-
-	i = 0;
-	while (fps_layer_name[i]) {
-		monitor.buf->layer[cur_idx][i] = fps_layer_name[i];
-		++i;
-	}
-
-	i = 0;
-	while (process_name[i]) {
-		monitor.buf->process[cur_idx][i] = process_name[i];
-		++i;
-	}
 	return 0;
 }
 
@@ -2542,6 +2525,49 @@ static struct kernel_param_ops rtg_dump_ops = {
 };
 module_param_cb(rtg_dump, &rtg_dump_ops, NULL, 0444);
 
+
+static int get_gpu_percentage()
+{
+	struct kgsl_clk_stats *stats = NULL;
+	if (gpwr) {
+	 	stats = &gpwr->clk_stats;
+		return stats->total_old != 0 ? stats->busy_old * 100 / stats->total_old : 0;
+	}
+	return 0;
+}
+
+static int game_info_show(char *buf, const struct kernel_param *kp)
+{
+	int gpu, cpu, fps;
+	static u64 last_enqueue_time;
+	if (game_fps_pid == -1) {
+		gpu = -1;
+		cpu = -1;
+		fps = -1;
+	} else {
+		wake_up_interruptible(&ht_poll_waitq);
+		cpu = ohm_get_cur_cpuload(true);
+		gpu = get_gpu_percentage();
+		fps = game_fps_data_.fps / 10;
+
+		if (fps < 0 || fps > 150) {
+			ht_loge("fps %d out of range", fps);
+			fps = 0;
+		}
+		if (game_fps_data_.enqueue_time == last_enqueue_time) {
+			ht_loge("Didn't update new fps data");
+			fps = 0;
+		}
+
+		last_enqueue_time = game_fps_data_.enqueue_time;
+	}
+	return snprintf(buf, PAGE_SIZE, "%d %d %d\n", gpu, cpu, fps);
+}
+
+static struct kernel_param_ops game_info_ops = {
+	.get = game_info_show,
+};
+module_param_cb(game_info, &game_info_ops, NULL, 0664);
 
 static int get_util(bool isRender, int *num)
 {

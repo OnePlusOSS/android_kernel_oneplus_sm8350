@@ -13,7 +13,7 @@
 #include "msm_ion_priv.h"
 #include "ion_msm_page_pool.h"
 
-static inline struct page
+inline struct page
 *ion_msm_page_pool_alloc_pages(struct ion_msm_page_pool *pool)
 {
 	if (fatal_signal_pending(current))
@@ -136,14 +136,24 @@ struct page *ion_msm_page_pool_alloc(struct ion_msm_page_pool *pool,
 	if (fatal_signal_pending(current))
 		return ERR_PTR(-EINTR);
 
-	if (*from_pool && mutex_trylock(&pool->mutex)) {
-		if (pool->high_count)
-			page = ion_msm_page_pool_remove(pool, true);
-		else if (pool->low_count)
-			page = ion_msm_page_pool_remove(pool, false);
-		mutex_unlock(&pool->mutex);
+	if (*from_pool) {
+		if (pool->boost_flag) {
+			mutex_lock(&pool->mutex);
+			if (pool->high_count)
+				page = ion_msm_page_pool_remove(pool, true);
+			else if (pool->low_count)
+				page = ion_msm_page_pool_remove(pool, false);
+			mutex_unlock(&pool->mutex);
+		} else if (mutex_trylock(&pool->mutex)) {
+			if (pool->high_count)
+				page = ion_msm_page_pool_remove(pool, true);
+			else if (pool->low_count)
+				page = ion_msm_page_pool_remove(pool, false);
+			mutex_unlock(&pool->mutex);
+		}
 	}
-	if (!page) {
+
+	if (!page && !(pool->boost_flag)) {
 		page = ion_msm_page_pool_alloc_pages(pool);
 		*from_pool = false;
 	}

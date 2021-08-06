@@ -45,7 +45,7 @@
 #define ht_loge(fmt...) pr_err(HT_TAG fmt)
 #define ht_logd(fmt...) pr_debug(HT_TAG fmt)
 
-#define FPS_COLS (9)
+#define FPS_COLS (5)
 #define FPS_LAYER_LEN (128)
 #define FPS_PROCESS_NAME_LEN (64)
 #define FPS_DATA_BUF_SIZE (256)
