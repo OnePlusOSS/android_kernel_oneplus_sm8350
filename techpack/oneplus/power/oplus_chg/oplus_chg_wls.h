@@ -54,6 +54,7 @@
 #define RX_IIC_VOTER		"RX_IIC_VOTER"
 #define TIMEOUT_VOTER		"TIMEOUT_VOTER"
 #define CHG_DONE_VOTER		"CHG_DONE_VOTER"
+#define VERITY_VOTER		"VERITY_VOTER"
 
 #define WLS_SUPPORT_OPLUS_CHG
 
@@ -80,6 +81,12 @@
 #define WLS_CMD_SET_LED_BRIGHTNESS	0xAC
 #define WLS_CMD_SET_CEP_TIMEOUT		0xAD
 #define WLS_CMD_SET_FAN_SPEED		0xAE
+#define WLS_CMD_GET_ENCRYPT_DATA1	0xB1
+#define WLS_CMD_GET_ENCRYPT_DATA2	0xB2
+#define WLS_CMD_GET_ENCRYPT_DATA3	0xB3
+#define WLS_CMD_GET_ENCRYPT_DATA4	0xB4
+#define WLS_CMD_GET_ENCRYPT_DATA5	0xB5
+#define WLS_CMD_GET_ENCRYPT_DATA6	0xB6
 
 #define WLS_CMD_GET_TX_ID		0x05
 #define WLS_CMD_GET_TX_PWR		0x4A
@@ -98,6 +105,12 @@
 #define WLS_RESPONE_FAN_SPEED		0xFE
 #define WLS_RESPONE_READY_FOR_EPP	0xFA
 #define WLS_RESPONE_WORKING_IN_EPP	0xFB
+#define WLS_RESPONE_ENCRYPT_DATA1	0xE1
+#define WLS_RESPONE_ENCRYPT_DATA2	0xE2
+#define WLS_RESPONE_ENCRYPT_DATA3	0xE3
+#define WLS_RESPONE_ENCRYPT_DATA4	0xE4
+#define WLS_RESPONE_ENCRYPT_DATA5	0xE5
+#define WLS_RESPONE_ENCRYPT_DATA6	0xE6
 
 #define WLS_ADAPTER_TYPE_MASK		0x07
 #define WLS_ADAPTER_ID_MASK		0xF8
@@ -160,6 +173,10 @@
 #define WLS_ADAPTER_MODEL_2		0x02
 #define WLS_ADAPTER_MODEL_7		0x07
 #define WLS_ADAPTER_MODEL_15		0x0F
+
+#define WLS_AUTH_RANDOM_LEN		8
+#define WLS_AUTH_ENCODE_LEN		8
+#define WLS_ENCODE_MASK			3
 
 struct oplus_chg_wls;
 
@@ -272,8 +289,25 @@ enum oplus_chg_wls_batt_cl {
 struct oplus_chg_rx_msg {
 	u8 msg_type;
 	u8 data;
+	u8 buf[3];
 	u8 respone_type;
 	bool pending;
+	bool long_data;
+};
+
+enum wls_dev_cmd_type {
+	WLS_DEV_CMD_WLS_AUTH,
+	WLS_DEV_CMD_FOD_PARAM,
+};
+struct wls_dev_cmd {
+	unsigned int cmd;
+	unsigned int data_size;
+	unsigned char data_buf[128];
+};
+
+struct wls_auth_result {
+	u8 random_num[WLS_AUTH_RANDOM_LEN];
+	u8 encode_num[WLS_AUTH_ENCODE_LEN];
 };
 
 struct oplus_chg_wls_status {
@@ -357,6 +391,14 @@ struct oplus_chg_wls_status {
 	bool fod_parm_for_fastchg;
 	bool chg_done;
 	bool chg_done_quiet_mode;
+
+	bool verity_pass;
+	bool verity_data_ok;
+	bool verity_started;
+	bool verity_state_keep;
+	int verity_count;
+	u8 encrypt_data[WLS_AUTH_RANDOM_LEN];
+	struct wls_auth_result verfity_data;
 };
 
 #define WLS_MAX_STEP_CHG_ENTRIES	8
@@ -454,12 +496,15 @@ struct oplus_chg_wls {
 	struct delayed_work rx_restore_work;
 	struct delayed_work rx_iic_restore_work;
 	struct delayed_work rx_restart_work;
+	struct delayed_work rx_verity_restore_work;
 	struct delayed_work online_keep_remove_work;
+	struct delayed_work verity_state_remove_work;
+	struct delayed_work wls_verity_work;
 	struct wakeup_source *rx_wake_lock;
 	struct wakeup_source *trx_wake_lock;
 	struct mutex connect_lock;
 	struct mutex read_lock;
-	struct mutex fod_data_lock;
+	struct mutex cmd_data_lock;
 	struct mutex send_msg_lock;
 
 	struct votable *fcc_votable;
@@ -490,6 +535,7 @@ struct oplus_chg_wls {
 	enum oplus_chg_wls_type wls_type;
 	struct oplus_chg_rx_msg rx_msg;
 	struct completion msg_ack;
+	struct wls_dev_cmd cmd;
 
 	u8 *fw_buf;
 	int fw_size;
@@ -519,6 +565,7 @@ struct oplus_chg_wls {
 	bool fod_is_cal;  // fod is calibrated
 	bool fod_cal_data_ok;
 	bool msg_callback_ok;
+	bool cmd_data_ok;
 
 	struct oplus_chg_wls_fod_cal_data cal_data;
 

@@ -1584,14 +1584,14 @@ int oplus_chg_comm_check_ffc(struct oplus_chg_mod *comm_ocm)
 						rc = -ENODEV;
 						goto err;
 					}
-					if (!is_wls_fv_votable_available(comm_dev)) {
-						pr_err("wls_fv_votable not found\n");
+					if (!is_wls_fcc_votable_available(comm_dev)) {
+						pr_err("wls_fcc_votable not found\n");
 						rc = -ENODEV;
 						goto err;
 					}
 					vote(comm_dev->wls_icl_votable, USER_VOTER, true,
 						comm_cfg->wls_ffc_icl_ma[comm_dev->ffc_step][ffc_temp_region - 1], true);
-					vote(comm_dev->wls_fv_votable, USER_VOTER, true,
+					vote(comm_dev->wls_fcc_votable, USER_VOTER, true,
 						comm_cfg->wls_ffc_fcc_ma[comm_dev->ffc_step][ffc_temp_region - 1], false);
 				} else {
 					pr_err("Unknown charger type\n");

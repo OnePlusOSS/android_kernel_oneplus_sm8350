@@ -802,7 +802,7 @@ static int p9415_set_fod_parm(struct oplus_chg_ic_dev *dev, u8 data[], int len)
 	return rc;
 }
 
-static int p9415_send_msg(struct oplus_chg_ic_dev *dev, unsigned char msg, unsigned char data)
+static int p9415_send_msg(struct oplus_chg_ic_dev *dev, unsigned char msg[], int len)
 {
 	struct oplus_p9415 *chip;
 	char write_data[2] = { 0, 0 };
@@ -811,9 +811,13 @@ static int p9415_send_msg(struct oplus_chg_ic_dev *dev, unsigned char msg, unsig
 		pr_err("oplus_chg_ic_dev is NULL");
 		return -ENODEV;
 	}
+	if (len != 4) {
+		pr_err("data length error\n");
+		return -EINVAL;
+	}
 	chip = oplus_chg_ic_get_drvdata(dev);
 
-	if (msg == WLS_CMD_INDENTIFY_ADAPTER) {
+	if (msg[0] == WLS_CMD_INDENTIFY_ADAPTER) {
 		write_data[0] = 0x10;
 		write_data[1] = 0x00;
 		p9415_write_data(chip, 0x0038, write_data, 2);
@@ -827,15 +831,15 @@ static int p9415_send_msg(struct oplus_chg_ic_dev *dev, unsigned char msg, unsig
 		p9415_write_data(chip, 0x004E, write_data, 2);
 	}
 
-	if ((msg != WLS_CMD_GET_TX_ID) && (msg != WLS_CMD_GET_TX_PWR)) {
+	if ((msg[0] != WLS_CMD_GET_TX_ID) && (msg[0] != WLS_CMD_GET_TX_PWR)) {
 		p9415_write_byte(chip, 0x0050, 0x48);
-		p9415_write_byte(chip, 0x0051, msg);
-		p9415_write_byte(chip, 0x0052, (~msg));
-		p9415_write_byte(chip, 0x0053, data);
-		p9415_write_byte(chip, 0x0054, (~data));
+		p9415_write_byte(chip, 0x0051, msg[0]);
+		p9415_write_byte(chip, 0x0052, msg[1]);
+		p9415_write_byte(chip, 0x0053, msg[2]);
+		p9415_write_byte(chip, 0x0054, msg[3]);
 	} else {
 		p9415_write_byte(chip, 0x0050, 0x18);
-		p9415_write_byte(chip, 0x0051, msg);
+		p9415_write_byte(chip, 0x0051, msg[0]);
 	}
 
 	p9415_write_byte_mask(chip, 0x004E, 0x01, 0x01);

@@ -682,6 +682,7 @@ struct oplus_chg_chip {
 	int factory_mode;
 	int reconnect_count;
 	int norchg_reconnect_count;
+	spinlock_t strategy_lock;
 	int ibat_save[10];
 	struct mutex update_work_lock;
 #ifndef CONFIG_OPLUS_CHG_OOS

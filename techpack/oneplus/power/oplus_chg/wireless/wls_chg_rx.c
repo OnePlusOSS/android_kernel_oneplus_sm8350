@@ -512,6 +512,7 @@ int oplus_chg_wls_rx_send_msg(struct oplus_wls_chg_rx *wls_rx, unsigned char msg
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
+	unsigned char buf[4] = {msg, ~msg, data, ~data};
 	int rc;
 
 	if (!is_rx_ic_available(wls_rx)) {
@@ -521,8 +522,35 @@ int oplus_chg_wls_rx_send_msg(struct oplus_wls_chg_rx *wls_rx, unsigned char msg
 	rx_ic = wls_rx->rx_ic;
 
 	rx_ic_ops = rx_ic->dev_ops;
-	rc = rx_ic_ops->rx_send_msg(rx_ic, msg, data);
+	rc = rx_ic_ops->rx_send_msg(rx_ic, buf, ARRAY_SIZE(buf));
 	pr_info("send msg, msg=0x%02x, data=0x%02x\n", msg, data);
+
+	return rc;
+}
+
+int oplus_chg_wls_rx_send_data(struct oplus_wls_chg_rx *wls_rx, unsigned char msg,
+			       unsigned char data[], int len)
+{
+	struct oplus_chg_ic_dev *rx_ic;
+	struct oplus_chg_ic_rx_ops *rx_ic_ops;
+	unsigned char *buf;
+	int rc;
+
+	if (!is_rx_ic_available(wls_rx)) {
+		pr_err("rx_ic is NULL\n");
+		return -ENODEV;
+	}
+	rx_ic = wls_rx->rx_ic;
+	buf = devm_kzalloc(wls_rx->dev, len + 1, GFP_KERNEL);
+	if (!buf) {
+		pr_err("alloc data buf error\n");
+		return -ENOMEM;
+	}
+	buf[0] = msg;
+	memcpy(buf + 1, data, len);
+
+	rx_ic_ops = rx_ic->dev_ops;
+	rc = rx_ic_ops->rx_send_msg(rx_ic, buf, len + 1);
 
 	return rc;
 }

@@ -2366,11 +2366,12 @@ int oplus_chg_init(struct oplus_chg_chip *chip)
 		goto power_psy_reg_failed;
 	}
 #ifdef OPLUS_CHG_OP_DEF
+	mutex_init(&chip->update_work_lock);
+	spin_lock_init(&chip->strategy_lock);
+
 	INIT_DELAYED_WORK(&chip->ctrl_lcm_frequency, oplus_chg_ctrl_lcm_work);
 	INIT_DELAYED_WORK(&chip->check_abnormal_voltage_work, oplus_check_abnormal_voltage_work);
 	INIT_DELAYED_WORK(&chip->recovery_chg_type_work, oplus_recovery_chg_type_work);
-
-	mutex_init(&chip->update_work_lock);
 #endif
 	INIT_DELAYED_WORK(&chip->update_work, oplus_chg_update_work);
 	INIT_DELAYED_WORK(&chip->ui_soc_decimal_work, oplus_chg_show_ui_soc_decimal);
@@ -5575,7 +5576,9 @@ void oplus_chg_variables_reset(struct oplus_chg_chip *chip, bool in)
 	chip->charging_state = CHARGING_STATUS_CCCV;
 #ifdef OPLUS_CHG_OP_DEF
 	chip->chg_strategy_batt_curr_ma = 0;
+	spin_lock(&chip->strategy_lock);
 	chip->strategy = NULL;
+	spin_unlock(&chip->strategy_lock);
 	chip->start_pd_check = false;
 	chip->chg_config_init = false;
 	for (i = 0; i < ARRAY_SIZE(chip->ibat_save); i++)
@@ -6386,8 +6389,13 @@ static void oplus_chg_check_chg_strategy_status(struct oplus_chg_chip *chip)
 			chg_err("can't get skin temp\n");
 			skin_temp = 250;
 		}
-		curr_ma = oplus_chg_strategy_get_data(chip->strategy, &chip->strategy->temp_region, skin_temp);
 	}
+	spin_lock(&chip->strategy_lock);
+	if (chip->strategy && chip->strategy->initialized)
+		curr_ma = oplus_chg_strategy_get_data(
+			chip->strategy, &chip->strategy->temp_region,
+			skin_temp);
+	spin_unlock(&chip->strategy_lock);
 
 	if (chip->chg_strategy_batt_curr_ma != curr_ma) {
 		chip->chg_strategy_batt_curr_ma = curr_ma;

@@ -30,6 +30,7 @@ int oplus_chg_wls_rx_send_match_q(struct oplus_wls_chg_rx *wls_rx, u8 data);
 int oplus_chg_wls_rx_set_fod_parm(struct oplus_wls_chg_rx *wls_rx, u8 buf[], int len);
 bool oplus_chg_wls_rx_is_connected(struct oplus_wls_chg_rx *wls_rx);
 int oplus_chg_wls_rx_send_msg(struct oplus_wls_chg_rx *wls_rx, unsigned char msg, unsigned char data);
+int oplus_chg_wls_rx_send_data(struct oplus_wls_chg_rx *wls_rx, unsigned char msg, unsigned char data[], int len);
 int oplus_chg_wls_rx_register_msg_callback(struct oplus_wls_chg_rx *wls_rx,
 					   void *dev_data,
 					   void (*call_back)(void *wls_rx, u8 []));
