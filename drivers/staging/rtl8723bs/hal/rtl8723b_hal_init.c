@@ -2968,7 +2968,7 @@ static void rtl8723b_cal_txdesc_chksum(struct tx_desc *ptxdesc)
 
 	/*  checksume is always calculated by first 32 bytes, */
 	/*  and it doesn't depend on TX DESC length. */
-	/*  Thomas, Lucas@SD4, 20130515 */
+	
 	count = 16;
 
 	for (index = 0; index < count; index++) {
@@ -4376,9 +4376,9 @@ u8 GetHalDefVar8723B(struct adapter *padapter, enum HAL_DEF_VARIABLE variable, v
 		break;
 
 	case HW_VAR_MAX_RX_AMPDU_FACTOR:
-		/*  Stanley@BB.SD3 suggests 16K can get stable performance */
+		
 		/*  The experiment was done on SDIO interface */
-		/*  coding by Lucas@20130730 */
+		
 		*(u32 *)pval = MAX_AMPDU_FACTOR_16K;
 		break;
 	case HAL_DEF_TX_LDPC:

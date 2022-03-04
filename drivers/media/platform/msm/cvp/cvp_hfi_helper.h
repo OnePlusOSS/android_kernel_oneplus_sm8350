@@ -473,4 +473,4 @@ struct cvp_hfi_msg_sys_session_flush_done_packet {
 	struct cvp_hfi_client client_data;
 };
 
-#endif
+#endif /*__H_CVP_HFI_HELPER_H__*/

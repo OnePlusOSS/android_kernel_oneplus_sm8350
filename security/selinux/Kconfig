@@ -47,7 +47,11 @@ config SECURITY_SELINUX_DISABLE
 config SECURITY_SELINUX_DEVELOP
 	bool "NSA SELinux Development Support"
 	depends on SECURITY_SELINUX
-	default y
+	#ifndef OPLUS_FEATURE_FORCE_SELINUX
+	#default y
+	#else OPLUS_FEATURE_FORCE_SELINUX
+	default n
+	#endif OPLUS_FEATURE_FORCE_SELINUX
 	help
 	  This enables the development support option of NSA SELinux,
 	  which is useful for experimenting with SELinux and developing

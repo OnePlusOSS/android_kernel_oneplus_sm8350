@@ -1,0 +1,15 @@
+#include "../../qcom/lahaina-mtp-v2.1-overlay.dts"
+//#include "lahaina_overlay_oplus_common.dtsi"
+//#include "lahaina_overlay_oplus_common_pinctrl.dtsi"
+#include "lahaina-camera-sensor-20820.dtsi"
+#include "martini-common.dtsi"
+#include "martini-20820.dtsi"
+#include "nfc/martini-nfc-sn100t.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Lahaina MTP v2.1";
+	compatible = "qcom,lahaina-mtp", "qcom,lahaina", "qcom,mtp";
+	qcom,board-id = <0x20108 0>;
+	oplus,dtsi_no = <20820>;
+	oplus,pcb_range = <12 34 >;
+};

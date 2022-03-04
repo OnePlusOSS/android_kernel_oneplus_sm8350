@@ -124,6 +124,7 @@ static void __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int 
 						wake_flags, key, &bookmark);
 		spin_unlock_irqrestore(&wq_head->lock, flags);
 	} while (bookmark.flags & WQ_FLAG_BOOKMARK);
+
 }
 
 /**

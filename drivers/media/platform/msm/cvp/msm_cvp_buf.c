@@ -42,34 +42,35 @@ void print_smem(u32 tag, const char *str, struct msm_cvp_inst *inst,
 }
 
 static void print_internal_buffer(u32 tag, const char *str,
-		struct msm_cvp_inst *inst, struct cvp_internal_buf *cbuf)
+				  struct msm_cvp_inst *inst, struct cvp_internal_buf *cbuf)
 {
 	if (!(tag & msm_cvp_debug) || !inst || !cbuf)
 		return;
 
 	if (cbuf->smem->dma_buf) {
 		dprintk(tag,
-		"%s: %x : fd %d off %d %s size %d iova %#x",
-		str, hash32_ptr(inst->session), cbuf->fd,
-		cbuf->offset, cbuf->smem->dma_buf->name, cbuf->size,
-		cbuf->smem->device_addr);
+			"%s: %x : fd %d off %d %s size %d iova %#x",
+			str, hash32_ptr(inst->session), cbuf->fd,
+			cbuf->offset, cbuf->smem->dma_buf->name, cbuf->size,
+			cbuf->smem->device_addr);
+
 	} else {
 		dprintk(tag,
-		"%s: %x : idx %2d fd %d off %d size %d iova %#x",
-		str, hash32_ptr(inst->session), cbuf->fd,
-		cbuf->offset, cbuf->size, cbuf->smem->device_addr);
+			"%s: %x : idx %2d fd %d off %d size %d iova %#x",
+			str, hash32_ptr(inst->session), cbuf->fd,
+			cbuf->offset, cbuf->size, cbuf->smem->device_addr);
 	}
 }
 
 void print_cvp_buffer(u32 tag, const char *str, struct msm_cvp_inst *inst,
-		struct cvp_internal_buf *cbuf)
+		      struct cvp_internal_buf *cbuf)
 {
 	dprintk(tag, "%s addr: %x size %u\n", str,
-			cbuf->smem->device_addr, cbuf->size);
+		cbuf->smem->device_addr, cbuf->size);
 }
 
 void print_client_buffer(u32 tag, const char *str,
-		struct msm_cvp_inst *inst, struct cvp_kmd_buffer *cbuf)
+			 struct msm_cvp_inst *inst, struct cvp_kmd_buffer *cbuf)
 {
 	if (!(tag & msm_cvp_debug) || !inst || !cbuf)
 		return;
@@ -117,27 +118,32 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 				mutex_unlock(&inst->cvpdspbufs.lock);
 				return -EINVAL;
 			}
+
 			found = true;
 			break;
 		}
 	}
 	mutex_unlock(&inst->cvpdspbufs.lock);
+
 	if (found) {
 		print_internal_buffer(CVP_ERR, "duplicate", inst, cbuf);
 		return -EINVAL;
 	}
 
 	dma_buf = msm_cvp_smem_get_dma_buf(buf->fd);
+
 	if (!dma_buf) {
 		dprintk(CVP_ERR, "%s: Invalid fd = %d", __func__, buf->fd);
 		return 0;
 	}
 
 	cbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+
 	if (!cbuf)
 		return -ENOMEM;
 
 	smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+
 	if (!smem) {
 		kmem_cache_free(cvp_driver->buf_cache, cbuf);
 		return -ENOMEM;
@@ -147,6 +153,7 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 	smem->bitmap_index = MAX_DMABUF_NUMS;
 	dprintk(CVP_MEM, "%s: dma_buf = %llx\n", __func__, dma_buf);
 	rc = msm_cvp_map_smem(inst, smem, "map dsp");
+
 	if (rc) {
 		print_client_buffer(CVP_ERR, "map failed", inst, buf);
 		goto exit;
@@ -154,14 +161,16 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 
 	if (buf->index) {
 		rc = cvp_dsp_register_buffer(hash32_ptr(session), buf->fd,
-			smem->dma_buf->size, buf->size, buf->offset,
-			buf->index, (uint32_t)smem->device_addr);
+					     smem->dma_buf->size, buf->size, buf->offset,
+					     buf->index, (uint32_t)smem->device_addr);
+
 		if (rc) {
 			dprintk(CVP_ERR,
 				"%s: failed dsp registration for fd=%d rc=%d",
 				__func__, buf->fd, rc);
 			goto exit;
 		}
+
 	} else {
 		dprintk(CVP_ERR, "%s: buf index is 0 fd=%d", __func__, buf->fd);
 		rc = -EINVAL;
@@ -182,10 +191,12 @@ int msm_cvp_map_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 	return rc;
 
 exit:
+
 	if (smem->device_addr) {
 		msm_cvp_unmap_smem(inst, smem, "unmap dsp");
 		msm_cvp_smem_put_dma_buf(smem->dma_buf);
 	}
+
 	kmem_cache_free(cvp_driver->buf_cache, cbuf);
 	cbuf = NULL;
 	kmem_cache_free(cvp_driver->smem_cache, smem);
@@ -206,6 +217,7 @@ int msm_cvp_unmap_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 	}
 
 	session = (struct cvp_hal_session *)inst->session;
+
 	if (!session) {
 		dprintk(CVP_ERR, "%s: invalid session\n", __func__);
 		return -EINVAL;
@@ -220,6 +232,7 @@ int msm_cvp_unmap_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 		}
 	}
 	mutex_unlock(&inst->cvpdspbufs.lock);
+
 	if (!found) {
 		print_client_buffer(CVP_ERR, "invalid", inst, buf);
 		return -EINVAL;
@@ -227,8 +240,9 @@ int msm_cvp_unmap_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 
 	if (buf->index) {
 		rc = cvp_dsp_deregister_buffer(hash32_ptr(session), buf->fd,
-			cbuf->smem->dma_buf->size, buf->size, buf->offset,
-			buf->index, (uint32_t)cbuf->smem->device_addr);
+					       cbuf->smem->dma_buf->size, buf->size, buf->offset,
+					       buf->index, (uint32_t)cbuf->smem->device_addr);
+
 		if (rc) {
 			dprintk(CVP_ERR,
 				"%s: failed dsp deregistration fd=%d rc=%d",
@@ -252,7 +266,7 @@ int msm_cvp_unmap_buf_dsp(struct msm_cvp_inst *inst, struct cvp_kmd_buffer *buf)
 }
 
 void msm_cvp_cache_operations(struct msm_cvp_smem *smem, u32 type,
-				u32 offset, u32 size)
+			      u32 offset, u32 size)
 {
 	enum smem_cache_ops cache_op;
 
@@ -268,9 +282,11 @@ void msm_cvp_cache_operations(struct msm_cvp_smem *smem, u32 type,
 	case CVP_KMD_BUFTYPE_INPUT:
 		cache_op = SMEM_CACHE_CLEAN;
 		break;
+
 	case CVP_KMD_BUFTYPE_OUTPUT:
 		cache_op = SMEM_CACHE_INVALIDATE;
 		break;
+
 	default:
 		cache_op = SMEM_CACHE_CLEAN_INVALIDATE;
 	}
@@ -282,7 +298,7 @@ void msm_cvp_cache_operations(struct msm_cvp_smem *smem, u32 type,
 }
 
 static struct msm_cvp_smem *msm_cvp_session_find_smem(struct msm_cvp_inst *inst,
-				struct dma_buf *dma_buf)
+		struct dma_buf *dma_buf)
 {
 	struct msm_cvp_smem *smem;
 	int i;
@@ -291,7 +307,7 @@ static struct msm_cvp_smem *msm_cvp_session_find_smem(struct msm_cvp_inst *inst,
 		return NULL;
 
 	mutex_lock(&inst->dma_cache.lock);
-	for (i = 0; i < inst->dma_cache.nr; i++)
+	for (i = 0; i < inst->dma_cache.nr; i++) {
 		if (inst->dma_cache.entries[i]->dma_buf == dma_buf) {
 			SET_USE_BITMAP(i, inst);
 			smem = inst->dma_cache.entries[i];
@@ -307,28 +323,31 @@ static struct msm_cvp_smem *msm_cvp_session_find_smem(struct msm_cvp_inst *inst,
 			print_smem(CVP_MEM, "found", inst, smem);
 			return smem;
 		}
-
+	}
 	mutex_unlock(&inst->dma_cache.lock);
 
 	return NULL;
 }
 
 static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
-				struct msm_cvp_smem *smem)
+				    struct msm_cvp_smem *smem)
 {
 	unsigned int i;
 	struct msm_cvp_smem *smem2;
 
 	mutex_lock(&inst->dma_cache.lock);
+
 	if (inst->dma_cache.nr < MAX_DMABUF_NUMS) {
 		inst->dma_cache.entries[inst->dma_cache.nr] = smem;
 		SET_USE_BITMAP(inst->dma_cache.nr, inst);
 		smem->bitmap_index = inst->dma_cache.nr;
 		inst->dma_cache.nr++;
 		i = smem->bitmap_index;
+
 	} else {
 		i = find_first_zero_bit(&inst->dma_cache.usage_bitmap,
-				MAX_DMABUF_NUMS);
+					MAX_DMABUF_NUMS);
+
 		if (i < MAX_DMABUF_NUMS) {
 			smem2 = inst->dma_cache.entries[i];
 			msm_cvp_unmap_smem(inst, smem2, "unmap cpu");
@@ -338,6 +357,7 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 			inst->dma_cache.entries[i] = smem;
 			smem->bitmap_index = i;
 			SET_USE_BITMAP(i, inst);
+
 		} else {
 			dprintk(CVP_WARN, "%s: not enough memory\n", __func__);
 			mutex_unlock(&inst->dma_cache.lock);
@@ -353,7 +373,7 @@ static int msm_cvp_session_add_smem(struct msm_cvp_inst *inst,
 }
 
 static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
-						struct cvp_buf_type *buf)
+		struct cvp_buf_type *buf)
 {
 	int rc = 0, found = 1;
 	struct msm_cvp_smem *smem = NULL;
@@ -365,29 +385,36 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 	}
 
 	dma_buf = msm_cvp_smem_get_dma_buf(buf->fd);
+
 	if (!dma_buf) {
 		dprintk(CVP_ERR, "%s: Invalid fd = %d", __func__, buf->fd);
 		return NULL;
 	}
 
 	smem = msm_cvp_session_find_smem(inst, dma_buf);
+
 	if (!smem) {
 		found = 0;
 		smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+
 		if (!smem)
 			return NULL;
 
 		smem->dma_buf = dma_buf;
 		smem->bitmap_index = MAX_DMABUF_NUMS;
 		rc = msm_cvp_map_smem(inst, smem, "map cpu");
+
 		if (rc)
 			goto exit;
+
 		if (buf->size > smem->size || buf->size > smem->size - buf->offset) {
 			dprintk(CVP_ERR, "%s: invalid offset %d or size %d for a new entry\n",
 				__func__, buf->offset, buf->size);
 			goto exit2;
 		}
+
 		rc = msm_cvp_session_add_smem(inst, smem);
+
 		if (rc && rc != -ENOMEM)
 			goto exit2;
 	}
@@ -395,12 +422,14 @@ static struct msm_cvp_smem *msm_cvp_session_get_smem(struct msm_cvp_inst *inst,
 	if (buf->size > smem->size || buf->size > smem->size - buf->offset) {
 		dprintk(CVP_ERR, "%s: invalid offset %d or size %d\n",
 			__func__, buf->offset, buf->size);
+
 		if (found) {
 			mutex_lock(&inst->dma_cache.lock);
 			atomic_dec(&smem->refcount);
 			mutex_unlock(&inst->dma_cache.lock);
 			return NULL;
 		}
+
 		goto exit2;
 	}
 
@@ -416,7 +445,7 @@ exit:
 }
 
 static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
-				struct cvp_buf_type *buf)
+					struct cvp_buf_type *buf)
 {
 	u32 iova = 0;
 	struct msm_cvp_smem *smem = NULL;
@@ -428,10 +457,12 @@ static u32 msm_cvp_map_user_persist_buf(struct msm_cvp_inst *inst,
 	}
 
 	pbuf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+
 	if (!pbuf)
 		return 0;
 
 	smem = msm_cvp_session_get_smem(inst, buf);
+
 	if (!smem)
 		goto exit;
 
@@ -457,8 +488,8 @@ exit:
 }
 
 u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
-			struct cvp_buf_type *buf,
-			struct msm_cvp_frame *frame)
+			  struct cvp_buf_type *buf,
+			  struct msm_cvp_frame *frame)
 {
 	u32 iova = 0;
 	struct msm_cvp_smem *smem = NULL;
@@ -471,12 +502,14 @@ u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 	}
 
 	nr = frame->nr;
+
 	if (nr == MAX_FRAME_BUFFER_NUMS) {
 		dprintk(CVP_ERR, "%s: max frame buffer reached\n", __func__);
 		return 0;
 	}
 
 	smem = msm_cvp_session_get_smem(inst, buf);
+
 	if (!smem)
 		return 0;
 
@@ -498,7 +531,7 @@ u32 msm_cvp_map_frame_buf(struct msm_cvp_inst *inst,
 }
 
 static void msm_cvp_unmap_frame_buf(struct msm_cvp_inst *inst,
-			struct msm_cvp_frame *frame)
+				    struct msm_cvp_frame *frame)
 {
 	u32 i;
 	u32 type;
@@ -518,13 +551,16 @@ static void msm_cvp_unmap_frame_buf(struct msm_cvp_inst *inst,
 			dma_buf_put(smem->dma_buf);
 			kmem_cache_free(cvp_driver->smem_cache, smem);
 			buf->smem = NULL;
+
 		} else {
 			mutex_lock(&inst->dma_cache.lock);
+
 			if (atomic_dec_and_test(&smem->refcount)) {
 				CLEAR_USE_BITMAP(smem->bitmap_index, inst);
 				print_smem(CVP_MEM, "Map dereference",
-					inst, smem);
+					   inst, smem);
 			}
+
 			mutex_unlock(&inst->dma_cache.lock);
 		}
 	}
@@ -544,7 +580,7 @@ void msm_cvp_unmap_frame(struct msm_cvp_inst *inst, u64 ktid)
 
 	ktid &= (FENCE_BIT - 1);
 	dprintk(CVP_MEM, "%s: (%#x) unmap frame %llu\n",
-			__func__, hash32_ptr(inst->session), ktid);
+		__func__, hash32_ptr(inst->session), ktid);
 
 	found = false;
 	mutex_lock(&inst->frames.lock);
@@ -559,13 +595,14 @@ void msm_cvp_unmap_frame(struct msm_cvp_inst *inst, u64 ktid)
 
 	if (found)
 		msm_cvp_unmap_frame_buf(inst, frame);
+
 	else
 		dprintk(CVP_WARN, "%s frame %llu not found!\n", __func__, ktid);
 }
 
 int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
-				struct cvp_kmd_hfi_packet *in_pkt,
-				unsigned int offset, unsigned int buf_num)
+			       struct cvp_kmd_hfi_packet *in_pkt,
+			       unsigned int offset, unsigned int buf_num)
 {
 	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
 	struct cvp_internal_buf *pbuf, *dummy;
@@ -592,18 +629,21 @@ int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 			if (smem->bitmap_index >= MAX_DMABUF_NUMS) {
 				/* smem not in dmamap cache */
 				msm_cvp_unmap_smem(inst, smem,
-						"unmap cpu");
+						   "unmap cpu");
 				dma_buf_put(smem->dma_buf);
 				kmem_cache_free(
 					cvp_driver->smem_cache,
 					smem);
 				pbuf->smem = NULL;
+
 			} else {
 				mutex_lock(&inst->dma_cache.lock);
+
 				if (atomic_dec_and_test(&smem->refcount))
 					CLEAR_USE_BITMAP(
 						smem->bitmap_index,
 						inst);
+
 				mutex_unlock(&inst->dma_cache.lock);
 			}
 
@@ -615,8 +655,8 @@ int msm_cvp_unmap_user_persist(struct msm_cvp_inst *inst,
 }
 
 int msm_cvp_mark_user_persist(struct msm_cvp_inst *inst,
-			struct cvp_kmd_hfi_packet *in_pkt,
-			unsigned int offset, unsigned int buf_num)
+			      struct cvp_kmd_hfi_packet *in_pkt,
+			      unsigned int offset, unsigned int buf_num)
 {
 	struct cvp_hfi_cmd_session_hdr *cmd_hdr;
 	struct cvp_internal_buf *pbuf, *dummy;
@@ -641,31 +681,35 @@ int msm_cvp_mark_user_persist(struct msm_cvp_inst *inst,
 
 		mutex_lock(&inst->persistbufs.lock);
 		list_for_each_entry_safe(pbuf, dummy, &inst->persistbufs.list,
-				list) {
+					 list) {
 			if (pbuf->ownership == CLIENT) {
 				if (pbuf->fd == buf->fd &&
-					pbuf->size == buf->size)
+						pbuf->size == buf->size)
 					buf->fd = pbuf->smem->device_addr;
+
 				rc = 1;
 				break;
 			}
 		}
 		mutex_unlock(&inst->persistbufs.lock);
+
 		if (!rc) {
 			dprintk(CVP_ERR, "%s No persist buf %d found\n",
 				__func__, buf->fd);
 			rc = -EFAULT;
 			break;
 		}
+
 		pbuf->ktid = ktid;
 		rc = 0;
 	}
+
 	return rc;
 }
 
 int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
-			struct cvp_kmd_hfi_packet *in_pkt,
-			unsigned int offset, unsigned int buf_num)
+			     struct cvp_kmd_hfi_packet *in_pkt,
+			     unsigned int offset, unsigned int buf_num)
 {
 	struct cvp_buf_type *buf;
 	int i;
@@ -682,6 +726,7 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 			continue;
 
 		iova = msm_cvp_map_user_persist_buf(inst, buf);
+
 		if (!iova) {
 			dprintk(CVP_ERR,
 				"%s: buf %d register failed.\n",
@@ -689,14 +734,16 @@ int msm_cvp_map_user_persist(struct msm_cvp_inst *inst,
 
 			return -EINVAL;
 		}
+
 		buf->fd = iova;
 	}
+
 	return 0;
 }
 
 int msm_cvp_map_frame(struct msm_cvp_inst *inst,
-		struct cvp_kmd_hfi_packet *in_pkt,
-		unsigned int offset, unsigned int buf_num)
+		      struct cvp_kmd_hfi_packet *in_pkt,
+		      unsigned int offset, unsigned int buf_num)
 {
 	struct cvp_buf_type *buf;
 	int i;
@@ -714,6 +761,7 @@ int msm_cvp_map_frame(struct msm_cvp_inst *inst,
 	cmd_hdr->client_data.kdata = ktid;
 
 	frame = kmem_cache_zalloc(cvp_driver->frame_cache, GFP_KERNEL);
+
 	if (!frame)
 		return -ENOMEM;
 
@@ -729,6 +777,7 @@ int msm_cvp_map_frame(struct msm_cvp_inst *inst,
 			continue;
 
 		iova = msm_cvp_map_frame_buf(inst, buf, frame);
+
 		if (!iova) {
 			dprintk(CVP_ERR,
 				"%s: buf %d register failed.\n",
@@ -737,6 +786,7 @@ int msm_cvp_map_frame(struct msm_cvp_inst *inst,
 			msm_cvp_unmap_frame_buf(inst, frame);
 			return -EINVAL;
 		}
+
 		buf->fd = iova;
 	}
 
@@ -766,28 +816,33 @@ int msm_cvp_session_deinit_buffers(struct msm_cvp_inst *inst)
 	mutex_unlock(&inst->frames.lock);
 
 	mutex_lock(&inst->dma_cache.lock);
+
 	for (i = 0; i < inst->dma_cache.nr; i++) {
 		smem = inst->dma_cache.entries[i];
-		if (atomic_read(&smem->refcount) == 0) {
+
+		if (atomic_read(&smem->refcount) == 0)
 			print_smem(CVP_MEM, "free", inst, smem);
-		} else {
+
+		else
 			print_smem(CVP_WARN, "in use", inst, smem);
-		}
+
 		msm_cvp_unmap_smem(inst, smem, "unmap cpu");
 		msm_cvp_smem_put_dma_buf(smem->dma_buf);
 		kmem_cache_free(cvp_driver->smem_cache, smem);
 		inst->dma_cache.entries[i] = NULL;
 	}
+
 	mutex_unlock(&inst->dma_cache.lock);
 
 	mutex_lock(&inst->cvpdspbufs.lock);
 	list_for_each_entry_safe(cbuf, dummy, &inst->cvpdspbufs.list,
-			list) {
+				 list) {
 		print_internal_buffer(CVP_MEM, "remove dspbufs", inst, cbuf);
 		rc = cvp_dsp_deregister_buffer(hash32_ptr(session),
-			cbuf->fd, cbuf->smem->dma_buf->size, cbuf->size,
-			cbuf->offset, cbuf->index,
-			(uint32_t)cbuf->smem->device_addr);
+					       cbuf->fd, cbuf->smem->dma_buf->size, cbuf->size,
+					       cbuf->offset, cbuf->index,
+					       (uint32_t)cbuf->smem->device_addr);
+
 		if (rc)
 			dprintk(CVP_ERR,
 				"%s: failed dsp deregistration fd=%d rc=%d",
@@ -816,14 +871,16 @@ void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst)
 
 	dprintk(CVP_ERR, "active session cmd %d\n", inst->cur_cmd_type);
 	dprintk(CVP_ERR,
-			"---Buffer details for inst: %pK of type: %d---\n",
-			inst, inst->session_type);
+		"---Buffer details for inst: %pK of type: %d---\n",
+		inst, inst->session_type);
 	mutex_lock(&inst->dma_cache.lock);
 	dprintk(CVP_ERR, "dma cache:\n");
-	if (inst->dma_cache.nr <= MAX_DMABUF_NUMS)
+
+	if (inst->dma_cache.nr <= MAX_DMABUF_NUMS) {
 		for (i = 0; i < inst->dma_cache.nr; i++)
 			print_smem(CVP_ERR, "bufdump", inst,
-					inst->dma_cache.entries[i]);
+				   inst->dma_cache.entries[i]);
+	}
 	mutex_unlock(&inst->dma_cache.lock);
 
 	mutex_lock(&inst->cvpdspbufs.lock);
@@ -840,7 +897,7 @@ void msm_cvp_print_inst_bufs(struct msm_cvp_inst *inst)
 }
 
 struct cvp_internal_buf *cvp_allocate_arp_bufs(struct msm_cvp_inst *inst,
-			u32 buffer_size)
+		u32 buffer_size)
 {
 	struct cvp_internal_buf *buf;
 	struct msm_cvp_list *buf_list;
@@ -861,19 +918,22 @@ struct cvp_internal_buf *cvp_allocate_arp_bufs(struct msm_cvp_inst *inst,
 	smem_flags |= SMEM_SECURE | SMEM_NON_PIXEL;
 
 	buf = kmem_cache_zalloc(cvp_driver->buf_cache, GFP_KERNEL);
+
 	if (!buf) {
 		dprintk(CVP_ERR, "%s Out of memory\n", __func__);
 		goto fail_kzalloc;
 	}
 
 	buf->smem = kmem_cache_zalloc(cvp_driver->smem_cache, GFP_KERNEL);
+
 	if (!buf->smem) {
 		dprintk(CVP_ERR, "%s Out of memory\n", __func__);
 		goto fail_kzalloc;
 	}
 
 	rc = msm_cvp_smem_alloc(buffer_size, 1, smem_flags, 0,
-			&(inst->core->resources), buf->smem);
+				&(inst->core->resources), buf->smem);
+
 	if (rc) {
 		dprintk(CVP_ERR, "Failed to allocate ARP memory\n");
 		goto err_no_mem;
@@ -909,11 +969,14 @@ int cvp_release_arp_buffers(struct msm_cvp_inst *inst)
 	}
 
 	core = inst->core;
+
 	if (!core) {
 		dprintk(CVP_ERR, "Invalid core pointer = %pK\n", core);
 		return -EINVAL;
 	}
+
 	hdev = core->device;
+
 	if (!hdev) {
 		dprintk(CVP_ERR, "Invalid device pointer = %pK\n", hdev);
 		return -EINVAL;
@@ -922,27 +985,31 @@ int cvp_release_arp_buffers(struct msm_cvp_inst *inst)
 	dprintk(CVP_MEM, "release persist buffer!\n");
 
 	mutex_lock(&inst->persistbufs.lock);
+
 	/* Workaround for FW: release buffer means release all */
 	if (inst->state <= MSM_CVP_CLOSE_DONE) {
 		rc = call_hfi_op(hdev, session_release_buffers,
-				(void *)inst->session);
+				 (void *)inst->session);
+
 		if (!rc) {
 			mutex_unlock(&inst->persistbufs.lock);
 			rc = wait_for_sess_signal_receipt(inst,
-				HAL_SESSION_RELEASE_BUFFER_DONE);
+							  HAL_SESSION_RELEASE_BUFFER_DONE);
+
 			if (rc)
 				dprintk(CVP_WARN,
-				"%s: wait for signal failed, rc %d\n",
-				__func__, rc);
+					"%s: wait for signal failed, rc %d\n",
+					__func__, rc);
+
 			mutex_lock(&inst->persistbufs.lock);
-		} else {
+		} else
 			dprintk(CVP_WARN, "Fail to send Rel prst buf\n");
-		}
 	}
 
 	list_for_each_safe(ptr, next, &inst->persistbufs.list) {
 		buf = list_entry(ptr, struct cvp_internal_buf, list);
 		smem = buf->smem;
+
 		if (!smem) {
 			dprintk(CVP_ERR, "%s invalid smem\n", __func__);
 			mutex_unlock(&inst->persistbufs.lock);
@@ -953,12 +1020,13 @@ int cvp_release_arp_buffers(struct msm_cvp_inst *inst)
 
 		if (buf->ownership == DRIVER) {
 			dprintk(CVP_MEM,
-			"%s: %x : fd %d %s size %d",
-			"free arp", hash32_ptr(inst->session), buf->fd,
-			smem->dma_buf->name, buf->size);
+				"%s: %x : fd %d %s size %d",
+				"free arp", hash32_ptr(inst->session), buf->fd,
+				smem->dma_buf->name, buf->size);
 			msm_cvp_smem_free(smem);
 			kmem_cache_free(cvp_driver->smem_cache, smem);
 		}
+
 		buf->smem = NULL;
 		kmem_cache_free(cvp_driver->buf_cache, buf);
 	}

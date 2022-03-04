@@ -324,7 +324,7 @@ extern struct msm_cvp_drv *cvp_driver;
 
 void cvp_handle_cmd_response(enum hal_command_response cmd, void *data);
 int msm_cvp_trigger_ssr(struct msm_cvp_core *core,
-	enum hal_ssr_trigger_type type);
+			enum hal_ssr_trigger_type type);
 int msm_cvp_noc_error_info(struct msm_cvp_core *core);
 void msm_cvp_comm_handle_thermal_event(void);
 
@@ -336,4 +336,4 @@ void msm_cvp_ssr_handler(struct work_struct *work);
  */
 int msm_cvp_destroy(struct msm_cvp_inst *inst);
 void *cvp_get_drv_data(struct device *dev);
-#endif
+#endif/*_MSM_CVP_INTERNAL_H_*/

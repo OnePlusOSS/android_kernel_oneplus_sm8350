@@ -50,6 +50,12 @@ MODULE_PARM_DESC(max_user_congthresh,
  "Global limit for the maximum congestion threshold an "
  "unprivileged user can set");
 
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+static bool shortcircuit = true;
+module_param(shortcircuit, bool, 0644);
+MODULE_PARM_DESC(shortcircuit, "Enable or disable fuse shortcircuit. Default: y/Y/1");
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
+
 #define FUSE_SUPER_MAGIC 0x65735546
 
 #define FUSE_DEFAULT_BLKSIZE 512
@@ -966,6 +972,13 @@ static void process_init_reply(struct fuse_conn *fc, struct fuse_args *args,
 					min_t(unsigned int, FUSE_MAX_MAX_PAGES,
 					max_t(unsigned int, arg->max_pages, 1));
 			}
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+			if (arg->flags & FUSE_SHORTCIRCUIT
+					|| fc->writeback_cache) {
+				fc->shortcircuit = shortcircuit ? 1 : 0;
+				pr_info("fuse sct flag: %d\n", shortcircuit);
+			}
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
 			fc->no_lock = 1;
@@ -1003,7 +1016,11 @@ void fuse_send_init(struct fuse_conn *fc)
 		FUSE_WRITEBACK_CACHE | FUSE_NO_OPEN_SUPPORT |
 		FUSE_PARALLEL_DIROPS | FUSE_HANDLE_KILLPRIV | FUSE_POSIX_ACL |
 		FUSE_ABORT_ERROR | FUSE_MAX_PAGES | FUSE_CACHE_SYMLINKS |
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+		FUSE_NO_OPENDIR_SUPPORT | FUSE_EXPLICIT_INVAL_DATA | FUSE_SHORTCIRCUIT;
+#else
 		FUSE_NO_OPENDIR_SUPPORT | FUSE_EXPLICIT_INVAL_DATA;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	ia->args.opcode = FUSE_INIT;
 	ia->args.in_numargs = 1;
 	ia->args.in_args[0].size = sizeof(ia->in);
@@ -1274,6 +1291,11 @@ static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 	 */
 	fput(file);
 	fuse_send_init(get_fuse_conn_super(sb));
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	acm_fuse_init_cache();
+#endif
+
 	return 0;
 
  err_put_conn:
@@ -1341,7 +1363,9 @@ static void fuse_sb_destroy(struct super_block *sb)
 	if (fc) {
 		if (fc->destroy)
 			fuse_send_destroy(fc);
-
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+		acm_fuse_free_cache();
+#endif
 		fuse_abort_conn(fc);
 		fuse_wait_aborted(fc);
 

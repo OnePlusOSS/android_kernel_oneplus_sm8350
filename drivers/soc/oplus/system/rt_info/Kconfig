@@ -1,0 +1,5 @@
+config OPLUS_FEATURE_RT_OPT_INFO
+	tristate "rt info stat"
+	default n
+	help
+		Schedule info statistics for render thread

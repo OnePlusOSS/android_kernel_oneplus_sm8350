@@ -1,0 +1,7 @@
+&mdss_dsi_phy0 {
+	oplus,dsi-pll-ssc-disalbed;
+};
+
+&mdss_dsi_phy1 {
+	oplus,dsi-pll-ssc-disalbed;
+};

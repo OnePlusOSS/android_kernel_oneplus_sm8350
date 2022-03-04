@@ -22,6 +22,9 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <soc/qcom/minidump.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+#include "internal.h"
+#endif
 
 #define RAMOOPS_KERNMSG_HDR "===="
 #define MIN_MEM_SIZE 4096UL
@@ -69,7 +72,37 @@ MODULE_PARM_DESC(ramoops_ecc,
 		"if non-zero, the option enables ECC support and specifies "
 		"ECC buffer size in bytes (1 is a special value, means 16 "
 		"bytes ECC)");
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+static ulong ramoops_device_info_size = MIN_MEM_SIZE;
+module_param_named(device_info_size, ramoops_device_info_size, ulong, 0400);
+MODULE_PARM_DESC(device_info_size, "size of device info");
 
+static ulong ramoops_dump_info_size = MIN_MEM_SIZE;
+module_param_named(dump_info_size, ramoops_dump_info_size, ulong, 0400);
+MODULE_PARM_DESC(dump_info_size, "size of dump info");
+
+static ulong ramoops_rsv01_info_size = MIN_MEM_SIZE;
+module_param_named(rsv01_info_siz, ramoops_rsv01_info_size, ulong, 0400);
+MODULE_PARM_DESC(rsv01_info_siz, "size of rsv01 info");
+
+static ulong ramoops_rsv02_info_size = MIN_MEM_SIZE;
+module_param_named(rsv02_info_siz, ramoops_rsv02_info_size, ulong, 0400);
+MODULE_PARM_DESC(rsv02_info_siz, "size of rsv02 info");
+
+static ulong ramoops_rsv03_info_size = MIN_MEM_SIZE;
+module_param_named(rsv03_info_siz, ramoops_rsv03_info_size, ulong, 0400);
+MODULE_PARM_DESC(rsv03_info_siz, "size of rsv03 info");
+
+static ulong ramoops_rsv04_info_size = MIN_MEM_SIZE;
+module_param_named(rsv04_info_siz, ramoops_rsv04_info_size, ulong, 0400);
+MODULE_PARM_DESC(rsv4_info_siz, "size of rsv04 info");
+
+static ulong ramoops_rsv05_info_size = MIN_MEM_SIZE;
+module_param_named(rsv05_info_siz, ramoops_rsv05_info_size, ulong, 0400);
+MODULE_PARM_DESC(rsv05_info_siz, "size of rsv05 info");
+#endif
+
+#if (!IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO))
 struct ramoops_context {
 	struct persistent_ram_zone **dprzs;	/* Oops dump zones */
 	struct persistent_ram_zone *cprz;	/* Console zone */
@@ -95,6 +128,7 @@ struct ramoops_context {
 	unsigned int pmsg_read_cnt;
 	struct pstore_info pstore;
 };
+#endif
 
 static struct platform_device *dummy;
 
@@ -154,6 +188,15 @@ static int ramoops_pstore_open(struct pstore_info *psi)
 	cxt->console_read_cnt = 0;
 	cxt->ftrace_read_cnt = 0;
 	cxt->pmsg_read_cnt = 0;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	cxt->dev_info_cnt = 0;
+	cxt->dump_cnt = 0;
+	cxt->rsv01_cnt = 0;
+	cxt->rsv02_cnt = 0;
+	cxt->rsv03_cnt = 0;
+	cxt->rsv04_cnt = 0;
+	cxt->rsv05_cnt = 0;
+#endif
 	return 0;
 }
 
@@ -308,6 +351,28 @@ static ssize_t ramoops_pstore_read(struct pstore_record *record)
 
 	if (!prz_ok(prz) && !cxt->pmsg_read_cnt++)
 		prz = ramoops_get_next_prz(&cxt->mprz, 0 /* single */, record);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	if (!prz_ok(prz) && !cxt->dev_info_cnt++)
+		prz = ramoops_get_next_prz(&cxt->devprz, 0, record);
+
+	if (!prz_ok(prz) && !cxt->dump_cnt++)
+		prz = ramoops_get_next_prz(&cxt->dumpprz, 0, record);
+
+	if (!prz_ok(prz) && !cxt->rsv01_cnt++)
+		prz = ramoops_get_next_prz(&cxt->rsv01prz, 0, record);
+
+	if (!prz_ok(prz) && !cxt->rsv02_cnt++)
+		prz = ramoops_get_next_prz(&cxt->rsv02prz, 0, record);
+
+	if (!prz_ok(prz) && !cxt->rsv03_cnt++)
+		prz = ramoops_get_next_prz(&cxt->rsv03prz, 0, record);
+
+	if (!prz_ok(prz) && !cxt->rsv04_cnt++)
+		prz = ramoops_get_next_prz(&cxt->rsv04prz, 0, record);
+
+	if (!prz_ok(prz) && !cxt->rsv05_cnt++)
+		prz = ramoops_get_next_prz(&cxt->rsv05prz, 0, record);
+#endif
 
 	/* ftrace is last since it may want to dynamically allocate memory. */
 	if (!prz_ok(prz)) {
@@ -425,6 +490,43 @@ static int notrace ramoops_pstore_write(struct pstore_record *record)
 	} else if (record->type == PSTORE_TYPE_PMSG) {
 		pr_warn_ratelimited("PMSG shouldn't call %s\n", __func__);
 		return -EINVAL;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	} else if (record->type == PSTORE_TYPE_DEVICE_INFO) {
+		if (!cxt->devprz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->devprz, record->buf, record->size);
+		return 0;
+	} else if (record->type == PSTORE_TYPE_DUMP_INFO) {
+		if (!cxt->dumpprz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->dumpprz, record->buf, record->size);
+		return 0;
+	} else if (record->type == PSTORE_TYPE_RESERVE01) {
+		if (!cxt->rsv01prz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->rsv01prz, record->buf, record->size);
+		return 0;
+	} else if (record->type == PSTORE_TYPE_RESERVE02) {
+		if (!cxt->rsv02prz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->rsv02prz, record->buf, record->size);
+		return 0;
+	} else if (record->type == PSTORE_TYPE_RESERVE03) {
+		if (!cxt->rsv03prz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->rsv03prz, record->buf, record->size);
+		return 0;
+	} else if (record->type == PSTORE_TYPE_RESERVE04) {
+		if (!cxt->rsv04prz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->rsv04prz, record->buf, record->size);
+		return 0;
+	} else if (record->type == PSTORE_TYPE_RESERVE05) {
+		if (!cxt->rsv05prz)
+			return -ENOMEM;
+		persistent_ram_write(cxt->rsv05prz, record->buf, record->size);
+		return 0;
+#endif
 	}
 
 	if (record->type != PSTORE_TYPE_DMESG)
@@ -518,6 +620,29 @@ static int ramoops_pstore_erase(struct pstore_record *record)
 	case PSTORE_TYPE_PMSG:
 		prz = cxt->mprz;
 		break;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	case PSTORE_TYPE_DEVICE_INFO:
+		prz = cxt->devprz;
+		break;
+	case PSTORE_TYPE_DUMP_INFO:
+		prz = cxt->dumpprz;
+		break;
+	case PSTORE_TYPE_RESERVE01:
+		prz = cxt->rsv01prz;
+		break;
+	case PSTORE_TYPE_RESERVE02:
+		prz = cxt->rsv02prz;
+		break;
+	case PSTORE_TYPE_RESERVE03:
+		prz = cxt->rsv03prz;
+		break;
+	case PSTORE_TYPE_RESERVE04:
+		prz = cxt->rsv04prz;
+		break;
+	case PSTORE_TYPE_RESERVE05:
+		prz = cxt->rsv05prz;
+		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -752,7 +877,15 @@ static int ramoops_parse_dt(struct platform_device *pdev,
 	parse_size("pmsg-size", pdata->pmsg_size);
 	parse_size("ecc-size", pdata->ecc_info.ecc_size);
 	parse_size("flags", pdata->flags);
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	parse_size("devinfo-size", pdata->device_info_size);
+	parse_size("dumpinfo-size", pdata->dump_size);
+	parse_size("rsv01info-size", pdata->rsv01_size);
+	parse_size("rsv02info-size", pdata->rsv02_size);
+	parse_size("rsv03info-size", pdata->rsv03_size);
+	parse_size("rsv04info-size", pdata->rsv04_size);
+	parse_size("rsv05info-size", pdata->rsv05_size);
+#endif
 #undef parse_size
 
 	/*
@@ -813,6 +946,12 @@ static int ramoops_probe(struct platform_device *pdev)
 	}
 
 	if (!pdata->mem_size || (!pdata->record_size && !pdata->console_size &&
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+			!pdata->device_info_size && !pdata->dump_size &&
+			!pdata->rsv01_size && !pdata->rsv02_size &&
+		    !pdata->rsv03_size && !pdata->rsv04_size &&
+			!pdata->rsv05_size &&
+#endif
 			!pdata->ftrace_size && !pdata->pmsg_size)) {
 		pr_err("The memory size and the record/console size must be "
 			"non-zero\n");
@@ -827,7 +966,23 @@ static int ramoops_probe(struct platform_device *pdev)
 		pdata->ftrace_size = rounddown_pow_of_two(pdata->ftrace_size);
 	if (pdata->pmsg_size && !is_power_of_2(pdata->pmsg_size))
 		pdata->pmsg_size = rounddown_pow_of_two(pdata->pmsg_size);
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	if (pdata->device_info_size && !is_power_of_2(pdata->device_info_size))
+		pdata->device_info_size =
+				rounddown_pow_of_two(pdata->device_info_size);
+	if (pdata->dump_size && !is_power_of_2(pdata->dump_size))
+		pdata->dump_size = rounddown_pow_of_two(pdata->dump_size);
+	if (pdata->rsv01_size && !is_power_of_2(pdata->rsv01_size))
+		pdata->rsv01_size = rounddown_pow_of_two(pdata->rsv01_size);
+	if (pdata->rsv02_size && !is_power_of_2(pdata->rsv02_size))
+		pdata->rsv02_size = rounddown_pow_of_two(pdata->rsv02_size);
+	if (pdata->rsv03_size && !is_power_of_2(pdata->rsv03_size))
+		pdata->rsv03_size = rounddown_pow_of_two(pdata->rsv03_size);
+	if (pdata->rsv04_size && !is_power_of_2(pdata->rsv04_size))
+		pdata->rsv04_size = rounddown_pow_of_two(pdata->rsv04_size);
+	if (pdata->rsv05_size && !is_power_of_2(pdata->rsv05_size))
+		pdata->rsv05_size = rounddown_pow_of_two(pdata->rsv05_size);
+#endif
 	cxt->size = pdata->mem_size;
 	cxt->phys_addr = pdata->mem_address;
 	cxt->memtype = pdata->mem_type;
@@ -838,10 +993,24 @@ static int ramoops_probe(struct platform_device *pdev)
 	cxt->dump_oops = pdata->dump_oops;
 	cxt->flags = pdata->flags;
 	cxt->ecc_info = pdata->ecc_info;
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	cxt->device_info_size = pdata->device_info_size;
+	cxt->dump_size = pdata->dump_size;
+	cxt->rsv01_size = pdata->rsv01_size;
+	cxt->rsv02_size = pdata->rsv02_size;
+	cxt->rsv03_size = pdata->rsv03_size;
+	cxt->rsv04_size = pdata->rsv04_size;
+	cxt->rsv05_size = pdata->rsv05_size;
+#endif
 	paddr = cxt->phys_addr;
 
 	dump_mem_sz = cxt->size - cxt->console_size - cxt->ftrace_size
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+			- cxt->device_info_size - cxt->dump_size
+			- cxt->rsv01_size - cxt->rsv02_size
+			- cxt->rsv03_size - cxt->rsv04_size
+			- cxt->rsv05_size
+#endif
 			- cxt->pmsg_size;
 	err = ramoops_init_przs("dmesg", dev, cxt, &cxt->dprzs, &paddr,
 				dump_mem_sz, cxt->record_size,
@@ -869,7 +1038,42 @@ static int ramoops_probe(struct platform_device *pdev)
 				cxt->pmsg_size, 0);
 	if (err)
 		goto fail_init_mprz;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	err = ramoops_init_prz("devinfo", dev, cxt, &cxt->devprz, &paddr,
+				cxt->device_info_size, 0);
+	if (err)
+		goto fail_init_dprz;
 
+	err = ramoops_init_prz("dumpinfo", dev, cxt, &cxt->dumpprz, &paddr,
+				cxt->dump_size, 0);
+	if (err)
+		goto fail_init_dprz;
+
+	err = ramoops_init_prz("rsv01", dev, cxt, &cxt->rsv01prz, &paddr,
+				cxt->rsv01_size, 0);
+	if (err)
+		goto fail_init_dprz;
+
+	err = ramoops_init_prz("rsv02", dev, cxt, &cxt->rsv02prz, &paddr,
+			cxt->rsv02_size, 0);
+	if (err)
+		goto fail_init_dprz;
+
+	err = ramoops_init_prz("rsv03", dev, cxt, &cxt->rsv03prz, &paddr,
+				cxt->rsv03_size, 0);
+	if (err)
+		goto fail_init_dprz;
+
+	err = ramoops_init_prz("rsv04", dev, cxt, &cxt->rsv04prz, &paddr,
+				cxt->rsv04_size, 0);
+	if (err)
+		goto fail_init_dprz;
+
+	err = ramoops_init_prz("rsv05", dev, cxt, &cxt->rsv05prz, &paddr,
+				cxt->rsv05_size, 0);
+	if (err)
+		goto fail_init_dprz;
+#endif
 	cxt->pstore.data = cxt;
 	/*
 	 * Prepare frontend flags based on which areas are initialized.
@@ -919,17 +1123,46 @@ static int ramoops_probe(struct platform_device *pdev)
 	ramoops_console_size = pdata->console_size;
 	ramoops_pmsg_size = pdata->pmsg_size;
 	ramoops_ftrace_size = pdata->ftrace_size;
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	ramoops_device_info_size = pdata->device_info_size;
+	ramoops_dump_info_size = pdata->dump_size;
+	ramoops_rsv01_info_size = pdata->rsv01_size;
+	ramoops_rsv02_info_size = pdata->rsv02_size;
+	ramoops_rsv03_info_size = pdata->rsv03_size;
+	ramoops_rsv04_info_size = pdata->rsv04_size;
+	ramoops_rsv05_info_size = pdata->rsv05_size;
+#endif
 	pr_info("using 0x%lx@0x%llx, ecc: %d\n",
 		cxt->size, (unsigned long long)cxt->phys_addr,
 		cxt->ecc_info.ecc_size);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	pr_err("dprzs=0X%llX dprzss=0X%lX consprz=0X%llX cons=0X%lX mprz=0x%llX ps=0X%lX ft=0X%lX\n",
+			cxt->dprzs[0]->paddr, cxt->record_size,
+			cxt->cprz->paddr, cxt->console_size,
+			cxt->mprz->paddr, cxt->pmsg_size,
+			cxt->ftrace_size);
 
+	pr_err("devprz=0X%llX device_info_size=0X%lX dumpprz=0x%llX dump_size=0X%lX\n"
+			"rsv01prz=0X%llX rsv01_size=0X%lX rsv02prz=0x%llX rsv02_size=0X%lX\n"
+			"rsv03prz=0X%llX rsv03_size=0X%lX rsv04prz=0x%llX rsv04_size=0X%lX\n"
+			"rsv05prz=0X%llX rsv05_size=0X%lX",
+			cxt->devprz->paddr, cxt->device_info_size,
+			cxt->dumpprz->paddr, cxt->dump_size,
+			cxt->rsv01prz->paddr, cxt->rsv01_size,
+			cxt->rsv02prz->paddr, cxt->rsv02_size,
+			cxt->rsv03prz->paddr, cxt->rsv03_size,
+			cxt->rsv04prz->paddr, cxt->rsv04_size,
+			cxt->rsv05prz->paddr, cxt->rsv05_size);
+#endif
 	register_minidump(cxt);
 
 	return 0;
 
 fail_buf:
 	kfree(cxt->pstore.buf);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+fail_init_dprz:
+#endif
 fail_clear:
 	cxt->pstore.bufsize = 0;
 	persistent_ram_free(cxt->mprz);

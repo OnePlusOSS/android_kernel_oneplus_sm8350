@@ -233,4 +233,4 @@
 #define CVP_CC_MVS1C_GDSCR			(CVP_CC_BASE_OFFS + 0xC98)
 #define CVP_CC_MVS1C_CBCR			(CVP_CC_BASE_OFFS + 0xCD4)
 #define CVP_CC_MVS1_GDSCR			(CVP_CC_BASE_OFFS + 0xD98)
-#endif
+#endif /*__CVP_HFI_IO_H__*/

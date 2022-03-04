@@ -506,7 +506,25 @@ struct cnss_plat_data {
 	struct device_node *dev_node;
 	u64 feature_list;
 	bool adsp_pc_enabled;
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+	unsigned long loadBdfState;
+	unsigned long loadRegdbState;
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 };
+
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+enum cnss_load_state {
+	CNSS_LOAD_BDF_FAIL = 1,
+	CNSS_LOAD_BDF_SUCCESS,
+	CNSS_LOAD_REGDB_FAIL,
+	CNSS_LOAD_REGDB_SUCCESS,
+	CNSS_PROBE_FAIL,
+	CNSS_PROBE_SUCCESS,
+};
+
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 #ifdef CONFIG_ARCH_QCOM
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)

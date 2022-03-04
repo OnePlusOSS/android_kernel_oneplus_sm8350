@@ -10,11 +10,23 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/dma-noncoherent.h>
+#include <linux/msm_ion.h>
 
 #define CREATE_TRACE_POINTS
 #include "ion_trace.h"
 #include "ion_private.h"
 
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#if defined(CONFIG_OPLUS_HEALTHINFO) && defined (CONFIG_OPLUS_MEM_MONITOR)
+#include <linux/healthinfo/memory_monitor.h>
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+#include <linux/healthinfo/ion.h>
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 static atomic_long_t total_heap_bytes;
 
 static void track_buffer_created(struct ion_buffer *buffer)
@@ -30,6 +42,7 @@ static void track_buffer_destroyed(struct ion_buffer *buffer)
 
 	trace_ion_stat(buffer->sg_table, -buffer->size, total);
 }
+
 
 /* this function should only be called while dev->lock is held */
 static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
@@ -84,6 +97,18 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
 	track_buffer_created(buffer);
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	if (ion_cnt_enable)
+		atomic_long_add(buffer->size, &ion_total_size);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_DUMP_TASKS_MEM)
+	buffer->tsk = current->group_leader;
+	get_task_struct(buffer->tsk);
+	atomic64_add(buffer->size, &buffer->tsk->ions);
+#endif
+
 	return buffer;
 
 err1:
@@ -128,6 +153,18 @@ static int ion_sglist_zero(struct scatterlist *sgl, unsigned int nents,
 	return ret;
 }
 
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+static inline unsigned int boost_pool_extra_flags(unsigned int heap_id_mask)
+{
+	unsigned int extra_flags = 0;
+
+	if (heap_id_mask & ION_CAMERA_HEAP_ID)
+		extra_flags |= ION_FLAG_CAMERA_BUFFER;
+
+	return extra_flags;
+}
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
+
 struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 				    unsigned int heap_id_mask,
 				    unsigned int flags)
@@ -135,6 +172,15 @@ struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 	struct ion_buffer *buffer = NULL;
 	struct ion_heap *heap;
 	char task_comm[TASK_COMM_LEN];
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#if defined(CONFIG_OPLUS_HEALTHINFO) && defined (CONFIG_OPLUS_MEM_MONITOR)
+	unsigned long ionwait_start = jiffies;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+	unsigned int extra_flags = boost_pool_extra_flags(heap_id_mask);
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
 
 	if (!dev || !len) {
 		return ERR_PTR(-EINVAL);
@@ -161,7 +207,14 @@ struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 		/* if the caller didn't specify this heap id */
 		if (!((1 << heap->id) & heap_id_mask))
 			continue;
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+		if ((1 << heap->id) == ION_SYSTEM_HEAP_ID)
+			buffer = ion_buffer_create(heap, dev, len, flags | extra_flags);
+		else
+			buffer = ion_buffer_create(heap, dev, len, flags);
+#else
 		buffer = ion_buffer_create(heap, dev, len, flags);
+#endif
 		if (!IS_ERR(buffer))
 			break;
 	}
@@ -172,7 +225,11 @@ struct ion_buffer *ion_buffer_alloc(struct ion_device *dev, size_t len,
 
 	if (IS_ERR(buffer))
 		return ERR_CAST(buffer);
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#if defined(CONFIG_OPLUS_HEALTHINFO) && defined (CONFIG_OPLUS_MEM_MONITOR)
+	ionwait_monitor(jiffies_to_msecs(jiffies - ionwait_start));
+#endif 
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 	return buffer;
 }
 
@@ -239,6 +296,19 @@ int ion_buffer_destroy(struct ion_device *dev, struct ion_buffer *buffer)
 		pr_warn("%s: invalid argument\n", __func__);
 		return -EINVAL;
 	}
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	if (ion_cnt_enable)
+		atomic_long_sub(buffer->size, &ion_total_size);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_DUMP_TASKS_MEM)
+	if (buffer->tsk) {
+		atomic64_sub(buffer->size, &buffer->tsk->ions);
+		put_task_struct(buffer->tsk);
+		buffer->tsk = NULL;
+	}
+#endif /* OPLUS_FEATURE_MEMLEAK_DETECT && CONFIG_MEMLEAK_DETECT_THREAD */
 
 	heap = buffer->heap;
 	track_buffer_destroyed(buffer);

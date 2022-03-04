@@ -53,6 +53,18 @@ config QCOM_KGSL_IOCOHERENCY_DEFAULT
 	 will use I/O coherency regardless of the user flags. If not enabled
 	 the user can still selectively enable I/O coherency with a flag.
 
+config DRM_OPLUS_NOTIFY
+	tristate "CONFIG_DRM_OPLUS_NOTIFY"
+	help
+	 Say 'y' or 'm' to support oplus notify
+	 Say 'n' to not support oplus notify
+
+config DRM_OPLUS_PANEL_NOTIFY
+	tristate "CONFIG_DRM_OPLUS_PANEL_NOTIFY"
+	help
+	 Say 'y' or 'm' to support oplus notify
+	 Say 'n' to not support oplus notify
+
 config QCOM_KGSL_IDLE_TIMEOUT
 	int
 	default 100000 if !QGKI

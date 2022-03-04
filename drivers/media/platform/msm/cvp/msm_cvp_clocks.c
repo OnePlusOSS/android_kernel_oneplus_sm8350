@@ -20,6 +20,6 @@ int msm_cvp_set_clocks(struct msm_cvp_core *core)
 
 	hdev = core->device;
 	rc = call_hfi_op(hdev, scale_clocks,
-		hdev->hfi_device_data, core->curr_freq);
+			 hdev->hfi_device_data, core->curr_freq);
 	return rc;
 }

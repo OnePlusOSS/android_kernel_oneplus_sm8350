@@ -77,6 +77,17 @@ static u64 suspend_cycles;
 static u64 resume_cycles;
 #endif
 
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#ifdef CONFIG_PRINT_SUSPEND_EPOCH_QGKI
+#define MSM_ARCH_TIMER_FREQ 19200000
+static inline u64 get_time_in_sec(u64 counter)
+{
+	do_div(counter, MSM_ARCH_TIMER_FREQ);
+	return counter;
+}
+#endif
+#endif
+
 core_param(irqtime, irqtime, int, 0400);
 
 static u64 notrace jiffy_sched_clock_read(void)
@@ -293,6 +304,16 @@ int sched_clock_suspend(void)
 	pr_info("suspend ns:%17llu      suspend cycles:%17llu\n",
 				rd->epoch_ns, rd->epoch_cyc);
 #endif
+
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#ifdef CONFIG_PRINT_SUSPEND_EPOCH_QGKI
+	pr_info("Resumed for %llu.%03llu seconds\n",
+				suspend_cycles > resume_cycles ?  get_time_in_sec(suspend_cycles - resume_cycles) : 0,
+				suspend_cycles > resume_cycles ?  get_time_in_sec((suspend_cycles - resume_cycles) % MSM_ARCH_TIMER_FREQ * 1000) : 0
+	);
+#endif
+#endif
+
 	hrtimer_cancel(&sched_clock_timer);
 	rd->read_sched_clock = suspended_sched_clock_read;
 
@@ -309,6 +330,16 @@ void sched_clock_resume(void)
 	resume_cycles = rd->epoch_cyc;
 	pr_info("resume cycles:%17llu\n", rd->epoch_cyc);
 #endif
+
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#ifdef CONFIG_PRINT_SUSPEND_EPOCH_QGKI
+	pr_info("Suspended for %llu.%03llu seconds\n",
+				resume_cycles > suspend_cycles ?  get_time_in_sec(resume_cycles - suspend_cycles) : 0,
+				resume_cycles > suspend_cycles ?  get_time_in_sec((resume_cycles - suspend_cycles) % MSM_ARCH_TIMER_FREQ * 1000) : 0
+	);
+#endif
+#endif
+
 	rd->read_sched_clock = cd.actual_read_sched_clock;
 }
 

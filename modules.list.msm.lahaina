@@ -12,6 +12,7 @@ gcc-lahaina.ko
 qnoc-qos.ko
 qnoc-lahaina.ko
 icc-bcm-voter.ko
+oplus_bsp_midas.ko
 pinctrl-msm.ko
 pinctrl-lahaina.ko
 iommu-logger.ko

@@ -136,6 +136,65 @@ struct ramoops_platform_data {
 	int		dump_oops;
 	u32		flags;
 	struct persistent_ram_ecc_info ecc_info;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	unsigned long	 device_info_size;
+	unsigned long	 dump_size;
+	unsigned long	 rsv01_size;
+	unsigned long	 rsv02_size;
+	unsigned long	 rsv03_size;
+	unsigned long	 rsv04_size;
+	unsigned long	 rsv05_size;
+#endif
 };
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+struct ramoops_context {
+	struct persistent_ram_zone **dprzs;	/* Oops dump zones */
+	struct persistent_ram_zone *cprz;	/* Console zone */
+	struct persistent_ram_zone **fprzs;	/* Ftrace zones */
+	struct persistent_ram_zone *mprz;	/* PMSG zone */
+	phys_addr_t phys_addr;
+	unsigned long size;
+	unsigned int memtype;
+	size_t record_size;
+	size_t console_size;
+	size_t ftrace_size;
+	size_t pmsg_size;
+	int dump_oops;
+	u32 flags;
+	struct persistent_ram_ecc_info ecc_info;
+	unsigned int max_dump_cnt;
+	unsigned int dump_write_cnt;
+	/* _read_cnt need clear on ramoops_pstore_open */
+	unsigned int dump_read_cnt;
+	unsigned int console_read_cnt;
+	unsigned int max_ftrace_cnt;
+	unsigned int ftrace_read_cnt;
+	unsigned int pmsg_read_cnt;
+
+	struct pstore_info pstore;
+	struct persistent_ram_zone *devprz;
+	struct persistent_ram_zone *dumpprz;
+	struct persistent_ram_zone *rsv01prz;
+	struct persistent_ram_zone *rsv02prz;
+	struct persistent_ram_zone *rsv03prz;
+	struct persistent_ram_zone *rsv04prz;
+	struct persistent_ram_zone *rsv05prz;
+	unsigned int dev_info_cnt;
+	unsigned int dump_cnt;
+	unsigned int rsv01_cnt;
+	unsigned int rsv02_cnt;
+	unsigned int rsv03_cnt;
+	unsigned int rsv04_cnt;
+	unsigned int rsv05_cnt;
+	size_t device_info_size;
+	size_t dump_size;
+	size_t rsv01_size;
+	size_t rsv02_size;
+	size_t rsv03_size;
+	size_t rsv04_size;
+	size_t rsv05_size;
+};
+#endif
 
 #endif

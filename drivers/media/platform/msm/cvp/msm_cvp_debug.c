@@ -42,7 +42,7 @@ static int core_info_open(struct inode *inode, struct file *file)
 }
 
 static u32 write_str(char *buffer,
-		size_t size, const char *fmt, ...)
+		     size_t size, const char *fmt, ...)
 {
 	va_list args;
 	u32 len;
@@ -54,7 +54,7 @@ static u32 write_str(char *buffer,
 }
 
 static ssize_t core_info_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
+			      size_t count, loff_t *ppos)
 {
 	struct msm_cvp_core *core = file->private_data;
 	struct cvp_hfi_device *hdev;
@@ -69,10 +69,12 @@ static ssize_t core_info_read(struct file *file, char __user *buf,
 	}
 
 	dbuf = kzalloc(MAX_DBG_BUF_SIZE, GFP_KERNEL);
+
 	if (!dbuf) {
 		dprintk(CVP_ERR, "%s: Allocation failed!\n", __func__);
 		return -ENOMEM;
 	}
+
 	cur = dbuf;
 	end = cur + MAX_DBG_BUF_SIZE;
 	hdev = core->device;
@@ -82,29 +84,32 @@ static ssize_t core_info_read(struct file *file, char __user *buf,
 	cur += write_str(cur, end - cur, "===============================\n");
 	cur += write_str(cur, end - cur, "Core state: %d\n", core->state);
 	rc = call_hfi_op(hdev, get_fw_info, hdev->hfi_device_data, &fw_info);
+
 	if (rc) {
 		dprintk(CVP_WARN, "Failed to read FW info\n");
 		goto err_fw_info;
 	}
 
 	cur += write_str(cur, end - cur,
-		"FW version : %s\n", &fw_info.version);
+			 "FW version : %s\n", &fw_info.version);
 	cur += write_str(cur, end - cur,
-		"base addr: 0x%x\n", fw_info.base_addr);
+			 "base addr: 0x%x\n", fw_info.base_addr);
 	cur += write_str(cur, end - cur,
-		"register_base: 0x%x\n", fw_info.register_base);
+			 "register_base: 0x%x\n", fw_info.register_base);
 	cur += write_str(cur, end - cur,
-		"register_size: %u\n", fw_info.register_size);
+			 "register_size: %u\n", fw_info.register_size);
 	cur += write_str(cur, end - cur, "irq: %u\n", fw_info.irq);
 
 err_fw_info:
+
 	for (i = SYS_MSG_START; i < SYS_MSG_END; i++) {
 		cur += write_str(cur, end - cur, "completions[%d]: %s\n", i,
-			completion_done(&core->completions[SYS_MSG_INDEX(i)]) ?
-			"pending" : "done");
+				 completion_done(&core->completions[SYS_MSG_INDEX(i)]) ?
+				 "pending" : "done");
 	}
+
 	len = simple_read_from_buffer(buf, count, ppos,
-			dbuf, cur - dbuf);
+				      dbuf, cur - dbuf);
 
 	kfree(dbuf);
 	return len;
@@ -123,7 +128,7 @@ static int trigger_ssr_open(struct inode *inode, struct file *file)
 }
 
 static ssize_t trigger_ssr_write(struct file *filp, const char __user *buf,
-		size_t count, loff_t *ppos)
+				 size_t count, loff_t *ppos)
 {
 	unsigned long ssr_trigger_val = 0;
 	int rc = 0;
@@ -147,13 +152,16 @@ static ssize_t trigger_ssr_write(struct file *filp, const char __user *buf,
 	}
 
 	rc = kstrtoul(kbuf, 0, &ssr_trigger_val);
+
 	if (rc) {
 		dprintk(CVP_WARN, "returning error err %d\n", rc);
 		rc = -EINVAL;
+
 	} else {
 		msm_cvp_trigger_ssr(core, ssr_trigger_val);
 		rc = count;
 	}
+
 exit:
 	return rc;
 }
@@ -170,13 +178,17 @@ static int cvp_power_get(void *data, u64 *val)
 	struct iris_hfi_device *hfi_device;
 
 	core = list_first_entry(&cvp_driver->cores, struct msm_cvp_core, list);
+
 	if (!core)
 		return 0;
+
 	hfi_ops = core->device;
+
 	if (!hfi_ops)
 		return 0;
 
 	hfi_device = hfi_ops->hfi_device_data;
+
 	if (!hfi_device)
 		return 0;
 
@@ -195,20 +207,24 @@ static int cvp_power_set(void *data, u64 val)
 	int rc = 0;
 
 	core = list_first_entry(&cvp_driver->cores, struct msm_cvp_core, list);
+
 	if (!core)
 		return -EINVAL;
 
 	hfi_ops = core->device;
+
 	if (!hfi_ops)
 		return -EINVAL;
 
 	hfi_device = hfi_ops->hfi_device_data;
+
 	if (!hfi_device)
 		return -EINVAL;
 
-	if (val >= MAX_PC_INTERVAL) {
+	if (val >= MAX_PC_INTERVAL)
 		hfi_device->res->sw_power_collapsible = 0;
-	} else if (val > MIN_PC_INTERVAL) {
+
+	else if (val > MIN_PC_INTERVAL) {
 		hfi_device->res->sw_power_collapsible = 1;
 		hfi_device->res->msm_cvp_pwr_collapse_delay =
 			(unsigned int)val;
@@ -219,9 +235,11 @@ static int cvp_power_set(void *data, u64 val)
 
 	if (val > 0) {
 		rc = call_hfi_op(hfi_ops, resume, hfi_ops->hfi_device_data);
+
 		if (rc)
 			dprintk(CVP_ERR, "debugfs fail to power on cvp\n");
 	}
+
 	return rc;
 }
 
@@ -233,6 +251,7 @@ struct dentry *msm_cvp_debugfs_init_drv(void)
 	struct dentry *dir = NULL;
 
 	dir = debugfs_create_dir("msm_cvp", NULL);
+
 	if (IS_ERR_OR_NULL(dir)) {
 		dir = NULL;
 		goto failed_create_dir;
@@ -250,19 +269,19 @@ struct dentry *msm_cvp_debugfs_init_drv(void)
 })
 
 	ok =
-	__debugfs_create(x32, "debug_level", &msm_cvp_debug) &&
-	__debugfs_create(x32, "fw_level", &msm_cvp_fw_debug) &&
-	__debugfs_create(u32, "fw_debug_mode", &msm_cvp_fw_debug_mode) &&
-	__debugfs_create(bool, "fw_coverage", &msm_cvp_fw_coverage) &&
-	__debugfs_create(u32, "fw_low_power_mode",
-			&msm_cvp_fw_low_power_mode) &&
-	__debugfs_create(u32, "debug_output", &msm_cvp_debug_out) &&
-	__debugfs_create(bool, "disable_thermal_mitigation",
-			&msm_cvp_thermal_mitigation_disabled) &&
-	__debugfs_create(bool, "disable_cacheop",
-			&msm_cvp_cacheop_disabled) &&
-	__debugfs_create(bool, "disable_cvp_syscache",
-			&msm_cvp_syscache_disable);
+		__debugfs_create(x32, "debug_level", &msm_cvp_debug) &&
+		__debugfs_create(x32, "fw_level", &msm_cvp_fw_debug) &&
+		__debugfs_create(u32, "fw_debug_mode", &msm_cvp_fw_debug_mode) &&
+		__debugfs_create(bool, "fw_coverage", &msm_cvp_fw_coverage) &&
+		__debugfs_create(u32, "fw_low_power_mode",
+				 &msm_cvp_fw_low_power_mode) &&
+		__debugfs_create(u32, "debug_output", &msm_cvp_debug_out) &&
+		__debugfs_create(bool, "disable_thermal_mitigation",
+				 &msm_cvp_thermal_mitigation_disabled) &&
+		__debugfs_create(bool, "disable_cacheop",
+				 &msm_cvp_cacheop_disabled) &&
+		__debugfs_create(bool, "disable_cvp_syscache",
+				 &msm_cvp_syscache_disable);
 
 #undef __debugfs_create
 
@@ -274,6 +293,7 @@ struct dentry *msm_cvp_debugfs_init_drv(void)
 	return dir;
 
 failed_create_dir:
+
 	if (dir)
 		debugfs_remove_recursive(cvp_driver->debugfs_root);
 
@@ -305,15 +325,16 @@ static int _clk_rate_set(void *data, u64 val)
 			break;
 
 	if (i == tbl_size)
-		msm_cvp_clock_voting = tbl[tbl_size-1].clock_rate;
+		msm_cvp_clock_voting = tbl[tbl_size - 1].clock_rate;
+
 	else
 		msm_cvp_clock_voting = tbl[i].clock_rate;
 
 	dprintk(CVP_WARN, "Override cvp_clk_rate with %d\n",
-			msm_cvp_clock_voting);
+		msm_cvp_clock_voting);
 
 	call_hfi_op(dev, scale_clocks, dev->hfi_device_data,
-		msm_cvp_clock_voting);
+		    msm_cvp_clock_voting);
 
 	return 0;
 }
@@ -325,8 +346,10 @@ static int _clk_rate_get(void *data, u64 *val)
 
 	core = list_first_entry(&cvp_driver->cores, struct msm_cvp_core, list);
 	hdev = core->device->hfi_device_data;
+
 	if (msm_cvp_clock_voting)
 		*val = msm_cvp_clock_voting;
+
 	else
 		*val = hdev->clk_freq;
 
@@ -349,22 +372,26 @@ struct dentry *msm_cvp_debugfs_init_core(struct msm_cvp_core *core,
 
 	snprintf(debugfs_name, MAX_DEBUGFS_NAME, "core%d", core->id);
 	dir = debugfs_create_dir(debugfs_name, parent);
+
 	if (IS_ERR_OR_NULL(dir)) {
 		dir = NULL;
 		dprintk(CVP_ERR, "Failed to create debugfs for msm_cvp\n");
 		goto failed_create_dir;
 	}
+
 	if (!debugfs_create_file("info", 0444, dir, core, &core_info_fops)) {
 		dprintk(CVP_ERR, "debugfs_create_file: fail\n");
 		goto failed_create_dir;
 	}
+
 	if (!debugfs_create_file("trigger_ssr", 0200,
-			dir, core, &ssr_fops)) {
+				 dir, core, &ssr_fops)) {
 		dprintk(CVP_ERR, "debugfs_create_file: fail\n");
 		goto failed_create_dir;
 	}
+
 	if (!debugfs_create_file("clock_rate", 0644, dir,
-			NULL, &clk_rate_fops)) {
+				 NULL, &clk_rate_fops)) {
 		dprintk(CVP_ERR, "debugfs_create_file: clock_rate fail\n");
 		goto failed_create_dir;
 	}
@@ -381,7 +408,7 @@ static int inst_info_open(struct inode *inode, struct file *file)
 }
 
 static int publish_unreleased_reference(struct msm_cvp_inst *inst,
-		char **dbuf, char *end)
+					char **dbuf, char *end)
 {
 	dprintk(CVP_SESS, "%s deprecated function\n", __func__);
 	return 0;
@@ -390,13 +417,13 @@ static int publish_unreleased_reference(struct msm_cvp_inst *inst,
 static void put_inst_helper(struct kref *kref)
 {
 	struct msm_cvp_inst *inst = container_of(kref,
-			struct msm_cvp_inst, kref);
+				    struct msm_cvp_inst, kref);
 
 	msm_cvp_destroy(inst);
 }
 
 static ssize_t inst_info_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
+			      size_t count, loff_t *ppos)
 {
 	struct cvp_core_inst_pair *idata = file->private_data;
 	struct msm_cvp_core *core;
@@ -419,7 +446,7 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 			break;
 	}
 	inst = ((temp == inst) && kref_get_unless_zero(&inst->kref)) ?
-		inst : NULL;
+	       inst : NULL;
 	mutex_unlock(&core->lock);
 
 	if (!inst) {
@@ -428,31 +455,34 @@ static ssize_t inst_info_read(struct file *file, char __user *buf,
 	}
 
 	dbuf = kzalloc(MAX_DBG_BUF_SIZE, GFP_KERNEL);
+
 	if (!dbuf) {
 		dprintk(CVP_ERR, "%s: Allocation failed!\n", __func__);
 		len = -ENOMEM;
 		goto failed_alloc;
 	}
+
 	cur = dbuf;
 	end = cur + MAX_DBG_BUF_SIZE;
 
 	cur += write_str(cur, end - cur, "==============================\n");
 	cur += write_str(cur, end - cur, "INSTANCE: %pK (%s)\n", inst,
-		inst->session_type == MSM_CVP_USER ? "User" : "Kernel");
+			 inst->session_type == MSM_CVP_USER ? "User" : "Kernel");
 	cur += write_str(cur, end - cur, "==============================\n");
 	cur += write_str(cur, end - cur, "core: %pK\n", inst->core);
 	cur += write_str(cur, end - cur, "state: %d\n", inst->state);
 	cur += write_str(cur, end - cur, "secure: %d\n",
-		!!(inst->flags & CVP_SECURE));
+			 !!(inst->flags & CVP_SECURE));
+
 	for (i = SESSION_MSG_START; i < SESSION_MSG_END; i++) {
 		cur += write_str(cur, end - cur, "completions[%d]: %s\n", i,
-		completion_done(&inst->completions[SESSION_MSG_INDEX(i)]) ?
-		"pending" : "done");
+				 completion_done(&inst->completions[SESSION_MSG_INDEX(i)]) ?
+				 "pending" : "done");
 	}
 
 	publish_unreleased_reference(inst, &cur, end);
 	len = simple_read_from_buffer(buf, count, ppos,
-		dbuf, cur - dbuf);
+				      dbuf, cur - dbuf);
 
 	kfree(dbuf);
 failed_alloc:
@@ -484,9 +514,11 @@ struct dentry *msm_cvp_debugfs_init_inst(struct msm_cvp_inst *inst,
 		dprintk(CVP_ERR, "Invalid params, inst: %pK\n", inst);
 		goto exit;
 	}
+
 	snprintf(debugfs_name, MAX_DEBUGFS_NAME, "inst_%p", inst);
 
 	idata = kzalloc(sizeof(*idata), GFP_KERNEL);
+
 	if (!idata) {
 		dprintk(CVP_ERR, "%s: Allocation failed!\n", __func__);
 		goto exit;
@@ -496,6 +528,7 @@ struct dentry *msm_cvp_debugfs_init_inst(struct msm_cvp_inst *inst,
 	idata->inst = inst;
 
 	dir = debugfs_create_dir(debugfs_name, parent);
+
 	if (IS_ERR_OR_NULL(dir)) {
 		dir = NULL;
 		dprintk(CVP_ERR, "Failed to create debugfs for msm_cvp\n");
@@ -503,7 +536,8 @@ struct dentry *msm_cvp_debugfs_init_inst(struct msm_cvp_inst *inst,
 	}
 
 	info = debugfs_create_file("info", 0444, dir,
-			idata, &inst_info_fops);
+				   idata, &inst_info_fops);
+
 	if (!info) {
 		dprintk(CVP_ERR, "debugfs_create_file: info fail\n");
 		goto failed_create_file;
@@ -530,11 +564,13 @@ void msm_cvp_debugfs_deinit_inst(struct msm_cvp_inst *inst)
 		return;
 
 	dentry = inst->debugfs_root;
+
 	if (dentry->d_inode) {
 		dprintk(CVP_INFO, "Destroy %pK\n", dentry->d_inode->i_private);
 		kfree(dentry->d_inode->i_private);
 		dentry->d_inode->i_private = NULL;
 	}
+
 	debugfs_remove_recursive(dentry);
 	inst->debugfs_root = NULL;
 }

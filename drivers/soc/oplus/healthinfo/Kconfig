@@ -1,0 +1,11 @@
+#ifdef OPLUS_FEATURE_HEALTHINFO
+config OPLUS_HEALTHINFO
+bool "config healthinfo"
+help
+    define this config to init  healthinfo.
+
+config OPLUS_HEALTHINFO_CPUFREQ_MAX
+bool "config cpufreq max"
+help
+    define this config for cpufreq max.
+#endif /* OPLUS_FEATURE_HEALTHINFO */

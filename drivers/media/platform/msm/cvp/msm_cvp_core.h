@@ -34,10 +34,10 @@ void *msm_cvp_open(int core_id, int session_type);
 int msm_cvp_close(void *instance);
 int msm_cvp_suspend(int core_id);
 int msm_cvp_poll(void *instance, struct file *filp,
-		struct poll_table_struct *pt);
+		 struct poll_table_struct *pt);
 int msm_cvp_private(void *cvp_inst, unsigned int cmd,
-		struct cvp_kmd_arg *arg);
+		    struct cvp_kmd_arg *arg);
 int msm_cvp_est_cycles(struct cvp_kmd_usecase_desc *cvp_desc,
-		struct cvp_kmd_request_power *cvp_voting);
+		       struct cvp_kmd_request_power *cvp_voting);
 
-#endif
+#endif /*_MSM_CVP_CORE_H_*/

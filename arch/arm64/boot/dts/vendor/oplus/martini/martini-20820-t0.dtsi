@@ -1,0 +1,27 @@
+//#ifdef OPLUS_FEATURE_TP_BASIC
+//Zhenbo.zhao@network.RF 2021/05/26 modify for rf_cable
+&soc {
+	oem_rf_cable:oem_rf_cable{
+		compatible = "oem,rf_cable";
+		interrupt-parent = <&tlmm>;
+		rf,cable-gpio-0 = <&tlmm 165 0>;
+		rf,cable-support-timer = <0>;
+		rf,cable-gpio-num = <1>;
+		oem,rf_uevent_feature_enable;
+		pinctrl-names = "oem_rf_cable_active";
+		pinctrl-0= <&rf_cable_ant0_active>;
+	};
+};
+&tlmm {
+    rf_cable_ant0_active: rf_cable_ant0_active {
+        mux {
+            pins = "gpio165";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio165";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+};

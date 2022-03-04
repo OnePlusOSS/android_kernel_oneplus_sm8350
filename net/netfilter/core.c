@@ -519,6 +519,15 @@ int nf_hook_slow(struct sk_buff *skb, struct nf_hook_state *state,
 			if (ret == 0)
 				ret = -EPERM;
 			return ret;
+			
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED)
+		case NF_IMQ_QUEUE:
+			ret = nf_queue(skb, state, s, verdict);
+			if (ret == -ECANCELED)
+				continue;
+			return ret;
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
+
 		case NF_QUEUE:
 			ret = nf_queue(skb, state, s, verdict);
 			if (ret == 1)

@@ -941,6 +941,25 @@ config NETFILTER_XT_TARGET_LOG
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
+config OPLUS_FEATURE_WIFI_LIMMITBGSPEED
+	bool "Add for limit speed function"
+	help
+	  Add for limit speed function.
+
+#ifdef OPLUS_FEATURE_WIFI_LIMMITBGSPEED
+config NETFILTER_XT_TARGET_IMQ
+	tristate '"IMQ" target support'
+	depends on NETFILTER_XTABLES
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE
+	select IMQ
+	default y
+	help
+	  This option adds a IMQ target which is used to specify if and
+	  to which imq device packets should get enqueued/dequeued.
+
+	  To compile it as a module, choose M here.  If unsure, say N.
+#endif /* OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
+
 config NETFILTER_XT_TARGET_MARK
 	tristate '"MARK" target support'
 	depends on NETFILTER_ADVANCED

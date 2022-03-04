@@ -1,0 +1,28 @@
+ccflags-y += -I$(srctree)/kernel/msm-5.4/include/soc/oplus/
+
+oplus_chg-y += oplus_debug_info.o
+oplus_chg-y += oplus_charger.o
+oplus_chg-y += oplus_gauge.o
+oplus_chg-y += oplus_warp.o
+oplus_chg-y += oplus_adapter.o
+oplus_chg-y += oplus_short.o
+oplus_chg-y += oplus_wireless.o
+oplus_chg-y += oplus_configfs.o
+oplus_chg-y += oplus_chg_ops_manager.o
+
+oplus_chg-y += adapter_ic/oplus_stm.o
+
+oplus_chg-y += charger_ic/oplus_short_ic.o
+
+oplus_chg-y += gauge_ic/oplus_bq27541.o
+
+oplus_chg-y += warp_ic/oplus_warp_fw.o
+
+oplus_chg-y += wireless_ic/oplus_nu1619.o
+oplus_chg-y += wireless_ic/oplus_chargepump.o
+
+oplus_chg-$(CONFIG_OPLUS_SM8350_CHARGER) += charger_ic/oplus_battery_sm8350.o charger_ic/oplus_da9313.o charger_ic/oplus_mp2650.o
+
+obj-$(CONFIG_OPLUS_CHG) := oplus_chg.o
+
+oplus_chg-y += oplus_pps.o

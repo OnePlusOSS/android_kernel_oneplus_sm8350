@@ -20,6 +20,10 @@
 #include "debug.h"
 #include "genl.h"
 
+#ifdef OPLUS_BUG_STABILITY
+#include <soc/oplus/boot_mode.h>
+#endif /* OPLUS_BUG_STABILITY */
+
 #define CNSS_DUMP_FORMAT_VER		0x11
 #define CNSS_DUMP_FORMAT_VER_V2		0x22
 #define CNSS_DUMP_MAGIC_VER_V2		0x42445953
@@ -69,6 +73,11 @@ struct cnss_driver_event {
 	int ret;
 	void *data;
 };
+
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+static unsigned int cnssprobestate = 0;
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -543,6 +552,7 @@ static int cnss_setup_dms_mac(struct cnss_plat_data *plat_priv)
 	/* DTSI property use-nv-mac is used to force DMS MAC address for WLAN.
 	 * Thus assert on failure to get MAC from DMS even after retries
 	 */
+#ifndef OPLUS_BUG_STABILITY
 	if (plat_priv->use_nv_mac) {
 		for (i = 0; i < CNSS_DMS_QMI_CONNECTION_WAIT_RETRY; i++) {
 			if (plat_priv->dms.mac_valid)
@@ -559,6 +569,24 @@ static int cnss_setup_dms_mac(struct cnss_plat_data *plat_priv)
 			return -EINVAL;
 		}
 	}
+#else
+	if ((get_boot_mode() !=  MSM_BOOT_MODE__WLAN) && plat_priv->use_nv_mac) {
+		for (i = 0; i < CNSS_DMS_QMI_CONNECTION_WAIT_RETRY; i++) {
+			if (plat_priv->dms.mac_valid)
+				break;
+
+			ret = cnss_qmi_get_dms_mac(plat_priv);
+			if (ret == 0)
+				break;
+			msleep(CNSS_DMS_QMI_CONNECTION_WAIT_MS);
+		}
+		if (!plat_priv->dms.mac_valid) {
+			cnss_pr_err("Unable to get MAC from DMS after retries\n");
+			CNSS_ASSERT(0);
+			return -EINVAL;
+		}
+	}
+#endif /* OPLUS_BUG_STABILITY */
 qmi_send:
 	if (plat_priv->dms.mac_valid)
 		ret =
@@ -3121,6 +3149,41 @@ static const struct of_device_id cnss_of_match_table[] = {
 };
 MODULE_DEVICE_TABLE(of, cnss_of_match_table);
 
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+static void icnss_create_fw_state_kobj(void);
+static ssize_t icnss_show_fw_ready(struct device_driver *driver, char *buf)
+{
+	bool firmware_ready = false;
+	bool bdfloadsuccess = false;
+	bool regdbloadsuccess = false;
+	bool cnssprobesuccess = false;
+	if (!plat_env) {
+           cnss_pr_err("icnss_show_fw_ready plat_env is NULL!\n");
+	} else {
+           firmware_ready = test_bit(CNSS_FW_READY, &plat_env->driver_state);
+           regdbloadsuccess = test_bit(CNSS_LOAD_REGDB_SUCCESS, &plat_env->loadRegdbState);
+           bdfloadsuccess = test_bit(CNSS_LOAD_BDF_SUCCESS, &plat_env->loadBdfState);
+	}
+	cnssprobesuccess = (cnssprobestate == CNSS_PROBE_SUCCESS);
+	return sprintf(buf, "%s:%s:%s:%s",
+           (firmware_ready ? "fwstatus_ready" : "fwstatus_not_ready"),
+           (regdbloadsuccess ? "regdb_loadsuccess" : "regdb_loadfail"),
+           (bdfloadsuccess ? "bdf_loadsuccess" : "bdf_loadfail"),
+           (cnssprobesuccess ? "cnssprobe_success" : "cnssprobe_fail")
+           );
+}
+
+struct driver_attribute fw_ready_attr = {
+	.attr = {
+		.name = "firmware_ready",
+		.mode = S_IRUGO,
+	},
+	.show = icnss_show_fw_ready,
+	//read only so we don't need to impl store func
+};
+#endif
+
 static inline bool
 cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 {
@@ -3182,6 +3245,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 	cnss_get_tcs_info(plat_priv);
 	cnss_get_cpr_info(plat_priv);
 	cnss_init_control_params(plat_priv);
+
+	#ifdef OPLUS_FEATURE_SWITCH_CHECK
+	//Add for: check fw status for switch issue
+	icnss_create_fw_state_kobj();
+	#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 	ret = cnss_get_resources(plat_priv);
 	if (ret)
@@ -3248,6 +3316,11 @@ retry:
 	if (ret < 0)
 		cnss_pr_err("CNSS genl init failed %d\n", ret);
 
+	#ifdef OPLUS_FEATURE_SWITCH_CHECK
+	//Add for: check fw status for switch issue
+	cnssprobestate = CNSS_PROBE_SUCCESS;
+	#endif /* OPLUS_FEATURE_SWITCH_CHECK */
+
 	cnss_pr_info("Platform driver probed successfully.\n");
 
 	return 0;
@@ -3277,6 +3350,10 @@ reset_ctx:
 	platform_set_drvdata(plat_dev, NULL);
 	cnss_set_plat_priv(plat_dev, NULL);
 out:
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+	cnssprobestate = CNSS_PROBE_FAIL;
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 	return ret;
 }
 
@@ -3314,6 +3391,15 @@ static struct platform_driver cnss_platform_driver = {
 #endif
 	},
 };
+
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+//Add for: check fw status for switch issue
+static void icnss_create_fw_state_kobj(void) {
+	if (driver_create_file(&(cnss_platform_driver.driver), &fw_ready_attr)) {
+		cnss_pr_info("failed to create %s", fw_ready_attr.attr.name);
+	}
+}
+#endif /* OPLUS_FEATURE_SWITCH_CHECK */
 
 static int __init cnss_initialize(void)
 {

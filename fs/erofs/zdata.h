@@ -10,6 +10,11 @@
 #include "internal.h"
 #include "zpvec.h"
 
+/*
+ *  - 0x6A110C8D ('pallocated', Z_EROFS_MAPPING_PREALLOCATED) -
+ * preallocated cached pages, and will be added into managed cache space
+ */
+#define Z_EROFS_MAPPING_PREALLOCATED	((void *)0x6A110C8D)
 #define Z_EROFS_NR_INLINE_PAGEVECS      3
 
 /*

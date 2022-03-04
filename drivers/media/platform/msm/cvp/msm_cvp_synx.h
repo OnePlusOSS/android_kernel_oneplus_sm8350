@@ -33,7 +33,7 @@ struct cvp_fence_command {
 	u32 num_fences;
 	u32 output_index;
 	u32 type;
-	u32 synx[MAX_HFI_FENCE_SIZE/2];
+	u32 synx[MAX_HFI_FENCE_SIZE / 2];
 	struct cvp_hfi_cmd_session_hdr *pkt;
 };
 
@@ -45,11 +45,11 @@ enum cvp_synx_type {
 };
 
 int cvp_import_synx(struct msm_cvp_inst *inst, struct cvp_fence_command *fc,
-		u32 *fence);
+		    u32 *fence);
 int cvp_release_synx(struct msm_cvp_inst *inst, struct cvp_fence_command *fc);
 int cvp_cancel_synx(struct msm_cvp_inst *inst, enum cvp_synx_type type,
-		struct cvp_fence_command *fc, int synx_state);
+		    struct cvp_fence_command *fc, int synx_state);
 int cvp_synx_ops(struct msm_cvp_inst *inst, enum cvp_synx_type type,
-		struct cvp_fence_command *fc, u32 *synx_state);
+		 struct cvp_fence_command *fc, u32 *synx_state);
 void cvp_dump_fence_queue(struct msm_cvp_inst *inst);
-#endif
+#endif /*_MSM_CVP_SYNX_H_*/

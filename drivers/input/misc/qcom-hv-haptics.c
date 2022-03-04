@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
+/* SPDX-License-Identifier: GPL-2.0-only
+ *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -24,12 +24,31 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/qpnp/qpnp-pbs.h>
+#include <soc/oplus/system/boot_mode.h>
 
+#define RICHTAP_FOR_PMIC_ENABLE
+
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+#include <linux/miscdevice.h>
+#include <linux/mman.h>
+
+#define RICHTAP_NAME "awinic_haptic"
+#endif
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#undef dev_dbg
+#define dev_dbg dev_err
+#endif
 /* status register definitions in HAPTICS_CFG module */
 #define HAP_CFG_REVISION2_REG			0x01
 #define HAP_CFG_V1				0x1
 #define HAP_CFG_V2				0x2
 #define HAP_CFG_V3				0x3
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define OPLUS_RESERVE1_PATH    "/dev/block/by-name/oplusreserve1"
+#define OPLUS_RESERVE1_UFS_LINEAR_VIBRATOR_CALIBRATION_DATA_OFFSET     (1150 * 4096)
+#endif
 
 #define HAP_CFG_STATUS_DATA_MSB_REG		0x09
 /* STATUS_DATA_MSB definitions while MOD_STATUS_SEL is 0 */
@@ -75,7 +94,9 @@
 #define MAX_VMAX_MV				11000
 #define CLAMPED_VMAX_MV				5000
 #define DEFAULT_VMAX_MV				5000
-
+#define DEFAULT_CL_VMAX_MV			2000
+#define DEFAULT_FIFO_VMAX			9500
+#define DEFAULT_OLD_STEADY_VMAX		9700
 #define HAP_CFG_DRV_WF_SEL_REG			0x49
 #define DRV_WF_FMT_BIT				BIT(4)
 #define DRV_WF_SEL_MASK				GENMASK(1, 0)
@@ -130,6 +151,8 @@
 #define HAP_CFG_AUTORES_CFG_REG			0x63
 #define AUTORES_EN_BIT				BIT(7)
 #define AUTORES_EN_DLY_MASK			GENMASK(5, 2)
+#define AUTORES_EN_DLY_1_CYCLE			0x2
+#define AUTORES_EN_DLY_6_CYCLE			0x0C
 #define AUTORES_EN_DLY(cycles)			((cycles) * 2)
 #define AUTORES_EN_DLY_6_CYCLES			AUTORES_EN_DLY(6)
 #define AUTORES_EN_DLY_SHIFT			2
@@ -465,6 +488,13 @@ struct haptics_play_info {
 struct haptics_hw_config {
 	struct brake_cfg	brake;
 	u32			vmax_mv;
+	u32			cl_vmax_mv;
+	u32			cali_time;
+	u32			fifo_vmax_mv;
+	u32			old_steady_vmax_mv;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	u32			vibrator_type;
+#endif
 	u32			t_lra_us;
 	u32			cl_t_lra_us;
 	u32			lra_min_mohms;
@@ -484,6 +514,58 @@ struct custom_fifo_data {
 	u8	*data;
 };
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+struct haptics_calibration_data {
+	u32			cl_t_lra_us;
+	u16			rc_clk_cal_count;
+};
+#endif
+
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+enum {
+	RICHTAP_UNKNOWN = -1,
+	RICHTAP_AW_8697 = 0x05,
+	RICHTAP_PMIC_8350BH = 0x06,
+};
+
+enum {
+	MMAP_BUF_DATA_VALID = 0x55,
+	MMAP_BUF_DATA_FINISHED = 0xAA,
+	MMAP_BUF_DATA_INVALID = 0xFF,
+};
+
+#define RICHTAP_IOCTL_GROUP 0x52
+#define RICHTAP_GET_HWINFO          _IO(RICHTAP_IOCTL_GROUP, 0x03)
+#define RICHTAP_SET_FREQ            _IO(RICHTAP_IOCTL_GROUP, 0x04)
+#define RICHTAP_SETTING_GAIN        _IO(RICHTAP_IOCTL_GROUP, 0x05)
+#define RICHTAP_OFF_MODE            _IO(RICHTAP_IOCTL_GROUP, 0x06)
+#define RICHTAP_TIMEOUT_MODE        _IO(RICHTAP_IOCTL_GROUP, 0x07)
+#define RICHTAP_RAM_MODE            _IO(RICHTAP_IOCTL_GROUP, 0x08)
+#define RICHTAP_RTP_MODE            _IO(RICHTAP_IOCTL_GROUP, 0x09)
+#define RICHTAP_STREAM_MODE         _IO(RICHTAP_IOCTL_GROUP, 0x0A)
+#define RICHTAP_UPDATE_RAM          _IO(RICHTAP_IOCTL_GROUP, 0x10)
+#define RICHTAP_GET_F0              _IO(RICHTAP_IOCTL_GROUP, 0x11)
+#define RICHTAP_STOP_MODE           _IO(RICHTAP_IOCTL_GROUP, 0x12)
+#define RICHTAP_F0_UPDATE           _IO(RICHTAP_IOCTL_GROUP, 0x13)
+
+#define RICHTAP_MMAP_BUF_SIZE   1000
+#define RICHTAP_MMAP_PAGE_ORDER   2
+#define RICHTAP_MMAP_BUF_SUM    16
+
+#pragma pack(4)
+struct mmap_buf_format {
+	uint8_t status;
+	uint8_t bit;
+	int16_t length;
+	uint32_t reserve;
+	struct mmap_buf_format *kernel_next;
+	struct mmap_buf_format *user_next;
+	uint8_t data[RICHTAP_MMAP_BUF_SIZE];
+};
+#pragma pack()
+
+#endif
+
 struct haptics_chip {
 	struct device			*dev;
 	struct regmap			*regmap;
@@ -494,6 +576,14 @@ struct haptics_chip {
 	struct haptics_play_info	play;
 	struct dentry			*debugfs_dir;
 	struct regulator_dev		*swr_slave_rdev;
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	struct mutex			irq_lock;
+#endif
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct haptics_calibration_data cal_data;
+	struct mutex			fd_lock;
+	bool				cal_data_restore;
+#endif
 	struct nvmem_cell		*cl_brake_nvmem;
 	struct nvmem_device		*hap_cfg_nvmem;
 	struct device_node		*pbs_node;
@@ -514,12 +604,24 @@ struct haptics_chip {
 	bool				swr_slave_enabled;
 	bool				clamp_at_5v;
 	bool				hpwr_vreg_enabled;
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	uint8_t *rtp_ptr;
+	struct mmap_buf_format *start_buf;
+	struct mmap_buf_format *current_buf;
+	struct work_struct richtap_stream_work;
+	struct work_struct richtap_erase_work;
+	int16_t pos;
+	atomic_t richtap_mode;
+	bool f0_flag;
+#endif
 };
 
 struct haptics_reg_info {
 	u8 addr;
 	u8 val;
 };
+
+static int haptics_config_openloop_lra_period(struct haptics_chip *chip, u32 t_lra_us);
 
 static inline int get_max_fifo_samples(struct haptics_chip *chip)
 {
@@ -601,6 +703,10 @@ static bool is_haptics_external_powered(struct haptics_chip *chip)
 	return false;
 }
 
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+struct haptics_chip *g_richtap_ptr;
+#endif
+
 static int haptics_read(struct haptics_chip *chip,
 		u16 base, u8 offset, u8 *val, u32 length)
 {
@@ -639,6 +745,105 @@ static int haptics_masked_write(struct haptics_chip *chip,
 
 	return rc;
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static int haptics_save_calibration_data(struct haptics_chip *chip, const char * filepath,
+			size_t offset_of_start, struct haptics_calibration_data *cal_data)
+{
+	struct file *opfile;
+	loff_t offset;
+	size_t len = 0;
+	int result = -1;
+	size_t bytes_writed = 0;
+
+	opfile = filp_open(filepath, O_WRONLY | O_TRUNC, 0666);
+	if (IS_ERR(opfile)) {
+		dev_err(chip->dev, "filp_open %s failed, error: %ld\n", filepath, PTR_ERR(opfile));
+		return -1;
+	}
+	offset = offset_of_start;
+
+	len = sizeof(struct haptics_calibration_data);
+
+	mutex_lock(&chip->fd_lock);
+	bytes_writed = kernel_write(opfile, cal_data, sizeof(struct haptics_calibration_data), &offset);
+
+	if(len != bytes_writed) {
+		dev_err(chip->dev, "kernel_write %s failed, len: %lu bytes_writed: %lu\n", filepath, len, bytes_writed);
+		result = -1;
+		goto save_fail;
+	}
+	result = 0;
+
+save_fail:
+	mutex_unlock(&chip->fd_lock);
+	vfs_fsync(opfile, 0);
+	filp_close(opfile, NULL);
+
+	return result;
+}
+
+static int haptics_read_calibration_data(struct haptics_chip *chip, const char * filepath,
+			size_t offset_of_start, struct haptics_calibration_data *cal_data)
+{
+	struct file *opfile;
+	loff_t offset;
+	char line[1024] = {0};
+	size_t len = 0;
+	int result = -1;
+	size_t bytes_read = 0;
+	struct haptics_calibration_data *data = NULL;
+
+	opfile = filp_open(filepath, O_RDONLY | O_TRUNC, 0666);
+	if (IS_ERR(opfile)) {
+		dev_err(chip->dev, "filp_open %s failed, error: %ld\n", filepath, PTR_ERR(opfile));
+		return -1;
+	}
+	offset = offset_of_start;
+	len = sizeof(struct haptics_calibration_data);
+
+	mutex_lock(&chip->fd_lock);
+	bytes_read = kernel_read(opfile, line, len, &offset);
+
+	data = (struct haptics_calibration_data *)line;
+	dev_err(chip->dev, "data read from reserve cl_t_lra_us: %d , rc_clk_cal_count : %d\n", data->cl_t_lra_us, data->rc_clk_cal_count);
+
+	cal_data->cl_t_lra_us = data->cl_t_lra_us;
+	cal_data->rc_clk_cal_count = data->rc_clk_cal_count;
+
+	if(len != bytes_read) {
+		dev_err(chip->dev, "kernel_write %s failed, len: %lu bytes_writed: %lu\n", filepath, len, bytes_read);
+		result = -1;
+		goto read_fail;
+	}
+	result = 0;
+
+read_fail:
+	mutex_unlock(&chip->fd_lock);
+	vfs_fsync(opfile, 0);
+	filp_close(opfile, NULL);
+
+	return result;
+}
+
+int haptics_calibration_data_save(struct haptics_chip *chip, struct haptics_calibration_data *cal_data)
+{
+	if(0 != haptics_save_calibration_data(chip, OPLUS_RESERVE1_PATH,
+				OPLUS_RESERVE1_UFS_LINEAR_VIBRATOR_CALIBRATION_DATA_OFFSET, cal_data)) {
+		dev_err(chip->dev, "save calibrationdata to OPLUS_RESERVE1_PATH failed\n");
+	}
+	return 1;
+}
+
+int haptics_calibration_data_read(struct haptics_chip *chip, struct haptics_calibration_data *cal_data)
+{
+	if(0 != haptics_read_calibration_data(chip, OPLUS_RESERVE1_PATH,
+				OPLUS_RESERVE1_UFS_LINEAR_VIBRATOR_CALIBRATION_DATA_OFFSET, cal_data)) {
+		dev_err(chip->dev, "read calibrationdata to OPLUS_RESERVE1_PATH failed\n");
+	}
+	return 1;
+}
+#endif
 
 static void __dump_effects(struct haptics_chip *chip)
 {
@@ -1460,9 +1665,16 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 			dev_dbg(chip->dev, "Toggle CAL_EN in open-loop-VREG playing\n");
 		}
 	} else if (!is_haptics_external_powered(chip)) {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		val = en ? FORCE_VREG_RDY_BIT : 0;
+		rc = haptics_masked_write(chip, chip->cfg_addr_base,
+				HAP_CFG_VSET_CFG_REG,
+				FORCE_VREG_RDY_BIT, val);
+#else
 		rc = haptics_masked_write(chip, chip->cfg_addr_base,
 				HAP_CFG_VSET_CFG_REG,
 				FORCE_VREG_RDY_BIT, 0);
+#endif
 	}
 
 	return rc;
@@ -1839,6 +2051,9 @@ static int haptics_set_fifo_empty_threshold(struct haptics_chip *chip,
 static void haptics_fifo_empty_irq_config(struct haptics_chip *chip,
 						bool enable)
 {
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	mutex_lock(&chip->irq_lock);
+#endif
 	if (!chip->fifo_empty_irq_en && enable) {
 		enable_irq(chip->fifo_empty_irq);
 		chip->fifo_empty_irq_en = true;
@@ -1846,6 +2061,9 @@ static void haptics_fifo_empty_irq_config(struct haptics_chip *chip,
 		disable_irq_nosync(chip->fifo_empty_irq);
 		chip->fifo_empty_irq_en = false;
 	}
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	mutex_unlock(&chip->irq_lock);
+#endif
 }
 
 static int haptics_module_enable(struct haptics_chip *chip, bool enable)
@@ -1911,7 +2129,7 @@ static int haptics_set_fifo(struct haptics_chip *chip, struct fifo_cfg *fifo)
 
 	/*
 	 * Write the 1st set of the data into FIFO if there are
-	 * more than MAX_FIFO_SAMPLES samples, the rest will be
+	 * more than get_max_fifo_samples samples, the rest will be
 	 * written if any FIFO memory is available after playing.
 	 */
 	num = min_t(u32, fifo->num_s, get_max_fifo_samples(chip));
@@ -1975,6 +2193,19 @@ static int haptics_load_constant_effect(struct haptics_chip *chip, u8 amplitude)
 		vmax_mv = chip->hpwr_voltage_mv - hdrm_mv;
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (get_boot_mode() == MSM_BOOT_MODE__FACTORY ||
+			get_boot_mode() == MSM_BOOT_MODE__RF ||
+			get_boot_mode() == MSM_BOOT_MODE__WLAN) {
+		if (chip->config.vibrator_type == 9595) {
+			vmax_mv = 4000;
+			rc = haptics_config_openloop_lra_period(chip, 10000);
+			if (rc < 0)
+				return rc;
+		}
+	}
+#endif
+
 	/* configure VMAX in case it was changed in previous effect playing */
 	rc = haptics_set_vmax_mv(chip, vmax_mv);
 	if (rc < 0)
@@ -1992,8 +2223,7 @@ static int haptics_load_constant_effect(struct haptics_chip *chip, u8 amplitude)
 	if (rc < 0)
 		goto unlock;
 
-	/* Always enable LRA auto resonance for DIRECT_PLAY */
-	rc = haptics_enable_autores(chip, !chip->config.is_erm);
+	rc = haptics_enable_autores(chip, false);
 	if (rc < 0)
 		goto unlock;
 
@@ -2025,7 +2255,7 @@ static int haptics_load_predefined_effect(struct haptics_chip *chip,
 	if (rc < 0)
 		return rc;
 
-	rc = haptics_enable_autores(chip, !play->effect->auto_res_disable);
+	rc = haptics_enable_autores(chip, false);
 	if (rc < 0)
 		return rc;
 
@@ -2084,7 +2314,7 @@ static int haptics_init_custom_effect(struct haptics_chip *chip)
 	chip->custom_effect->pattern = NULL;
 	chip->custom_effect->brake = NULL;
 	chip->custom_effect->id = UINT_MAX;
-	chip->custom_effect->vmax_mv = chip->config.vmax_mv;
+	chip->custom_effect->vmax_mv = chip->config.fifo_vmax_mv;
 	chip->custom_effect->t_lra_us = chip->config.t_lra_us;
 	chip->custom_effect->src = FIFO;
 	chip->custom_effect->auto_res_disable = true;
@@ -2155,8 +2385,9 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	if (copy_from_user(&custom_data, data, sizeof(custom_data)))
 		return -EFAULT;
 
-	dev_dbg(chip->dev, "custom data length %d with play-rate %d Hz\n",
-			custom_data.length, custom_data.play_rate_hz);
+	dev_err(chip->dev, "custom data %d length %d with play-rate %d Hz,magnitude=0x%x\n",
+			custom_data.idx, custom_data.length, custom_data.play_rate_hz, magnitude);
+
 	rc = haptics_convert_sample_period(chip, custom_data.play_rate_hz);
 	if (rc < 0) {
 		dev_err(chip->dev, "Can't support play rate: %d Hz\n",
@@ -2170,11 +2401,17 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	 * Before allocating samples buffer, free the old sample
 	 * buffer first if it's not been freed.
 	 */
-	kfree(fifo->samples);
+
+
+	kvfree(fifo->samples);
 	fifo->samples = kcalloc(custom_data.length, sizeof(u8), GFP_KERNEL);
+
 	if (!fifo->samples) {
-		rc = -ENOMEM;
-		goto unlock;
+		fifo->samples = vmalloc(custom_data.length);
+		if(!fifo->samples) {
+			rc = -ENOMEM;
+			goto unlock;
+		}
 	}
 
 	if (copy_from_user(fifo->samples,
@@ -2219,7 +2456,7 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	mutex_unlock(&chip->play.lock);
 	return 0;
 cleanup:
-	kfree(fifo->samples);
+	kvfree(fifo->samples);
 	fifo->samples = NULL;
 unlock:
 	mutex_unlock(&chip->play.lock);
@@ -2267,8 +2504,9 @@ static int haptics_load_periodic_effect(struct haptics_chip *chip,
 	}
 
 	mutex_lock(&chip->play.lock);
-	dev_dbg(chip->dev, "upload effect %d, vmax_mv=%d\n",
-			chip->effects[i].id, play->vmax_mv);
+
+	dev_dbg(chip->dev, "upload effect %d,vmax_mv=%d,magnitude=%d,effect.vmax_mv=%d\n",
+			chip->effects[i].id, play->vmax_mv, magnitude, chip->effects[i].vmax_mv);
 
 	if (chip->play.in_calibration) {
 		dev_err(chip->dev, "calibration in progress, ignore playing predefined effect\n");
@@ -2412,7 +2650,7 @@ static int haptics_stop_fifo_play(struct haptics_chip *chip)
 		return rc;
 
 	haptics_fifo_empty_irq_config(chip, false);
-	kfree(chip->custom_effect->fifo->samples);
+	kvfree(chip->custom_effect->fifo->samples);
 	chip->custom_effect->fifo->samples = NULL;
 
 	atomic_set(&chip->play.fifo_status.is_busy, 0);
@@ -2708,6 +2946,7 @@ static irqreturn_t fifo_empty_irq_handler(int irq, void *data)
 	u32 samples_left;
 	u8 *samples, val;
 	int rc, num;
+	int16_t num_rt = 0;
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
 			HAP_CFG_INT_RT_STS_REG, &val, 1);
@@ -2737,12 +2976,76 @@ static irqreturn_t fifo_empty_irq_handler(int irq, void *data)
 		if (rc < 0)
 			goto unlock;
 
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+		if (atomic_read(&chip->richtap_mode))
+			atomic_set(&chip->richtap_mode, false);
+#endif
+
 		dev_dbg(chip->dev, "FIFO playing is done\n");
 	} else {
 		if (atomic_read(&status->cancelled) == 1) {
 			dev_dbg(chip->dev, "FIFO programming got cancelled\n");
 			goto unlock;
 		}
+
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+		if (atomic_read(&chip->richtap_mode)) {
+			if (chip->current_buf == NULL ||
+				chip->current_buf->status == MMAP_BUF_DATA_FINISHED) {
+				dev_dbg(chip->dev, "richtap FIFO programming is done\n");
+				schedule_work(&chip->richtap_erase_work);
+				goto unlock;
+			}
+
+			num_rt = (int16_t)haptics_get_available_fifo_memory(chip);
+			if (num_rt < 0)
+				goto unlock;
+
+			while (num_rt > 0 && atomic_read(&chip->richtap_mode)) {
+				if ((chip->current_buf->status == MMAP_BUF_DATA_VALID)
+					&& (num_rt >= (chip->current_buf->length - chip->pos))) {
+					samples_left = (u32)(chip->current_buf->length - chip->pos);
+					samples_left -=
+							(samples_left % HAP_PTN_V2_FIFO_DIN_NUM);
+					rc = haptics_update_fifo_samples(chip,
+						&chip->current_buf->data[chip->pos], samples_left);
+					if (rc < 0) {
+						dev_err(chip->dev,
+						"richtap Update FIFO fail, rc=%d\n", rc);
+						goto unlock;
+					}
+					num_rt -= (chip->current_buf->length - chip->pos);
+					chip->current_buf->status = MMAP_BUF_DATA_INVALID;
+					chip->current_buf->length = 0;
+					chip->current_buf = chip->current_buf->kernel_next;
+					chip->pos = 0;
+					continue;
+				}
+
+				if (chip->current_buf->status == MMAP_BUF_DATA_VALID) {
+					num_rt -= (num_rt % HAP_PTN_V2_FIFO_DIN_NUM);
+					rc = haptics_update_fifo_samples(chip,
+						&chip->current_buf->data[chip->pos], (u32)num_rt);
+					if (rc < 0) {
+						dev_err(chip->dev,
+							"richtap Update FIFO fail, rc=%d\n", rc);
+						goto unlock;
+					}
+					chip->pos += num_rt;
+					num_rt = 0;
+					continue;
+				}
+
+				if (chip->current_buf->status != MMAP_BUF_DATA_FINISHED)
+					dev_err(chip->dev, "aac richtap invalid data buf\n");
+				schedule_work(&chip->richtap_erase_work);
+				break;
+			}
+
+			mutex_unlock(&chip->play.lock);
+			return IRQ_HANDLED;
+		}
+#endif
 
 		if (!chip->play.effect)
 			goto unlock;
@@ -3949,6 +4252,14 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 		goto free_pbs;
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	chip->cal_data_restore =
+		of_property_read_bool(node, "qcom,cal-data-restore");
+	if (!chip->cal_data_restore) {
+		dev_err(chip->dev, "not support calibration data restore when boot up\n");
+	}
+#endif
+
 	config->vmax_mv = DEFAULT_VMAX_MV;
 	of_property_read_u32(node, "qcom,vmax-mv", &config->vmax_mv);
 	if (config->vmax_mv >= MAX_VMAX_MV) {
@@ -3957,6 +4268,29 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 		rc = -EINVAL;
 		goto free_pbs;
 	}
+
+	rc = of_property_read_u32(node, "qcom,cl-vmax-mv", &config->cl_vmax_mv);
+	if (rc || config->cl_vmax_mv >= MAX_VMAX_MV) {
+		config->cl_vmax_mv = DEFAULT_CL_VMAX_MV;
+	}
+
+	rc = of_property_read_u32(node, "qcom,fifo-vmax-mv", &config->fifo_vmax_mv);
+	if (rc || config->fifo_vmax_mv >= MAX_VMAX_MV) {
+		config->fifo_vmax_mv = DEFAULT_FIFO_VMAX;
+	}
+
+	rc = of_property_read_u32(node, "qcom,old-steady-vmax-mv", &config->old_steady_vmax_mv);
+	if (rc || config->old_steady_vmax_mv >= MAX_VMAX_MV) {
+		config->old_steady_vmax_mv = DEFAULT_OLD_STEADY_VMAX;
+	}
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	rc = of_property_read_u32(node, "qcom,vibrator-type", &config->vibrator_type);
+	if (rc) {
+		config->vibrator_type = 832;
+	}
+	dev_err(chip->dev, "qcom,vibrator-type = %d\n", config->vibrator_type);
+#endif
 
 	config->fifo_empty_thresh = get_fifo_empty_threshold(chip);
 	of_property_read_u32(node, "qcom,fifo-empty-threshold",
@@ -4351,7 +4685,7 @@ static int haptics_detect_lra_frequency(struct haptics_chip *chip)
 	if (is_haptics_external_powered(chip))
 		vmax_mv = chip->hpwr_voltage_mv - LRA_CALIBRATION_VMAX_HDRM_MV;
 
-	rc = haptics_set_vmax_mv(chip, vmax_mv);
+	rc = haptics_set_vmax_mv(chip, chip->config.cl_vmax_mv);
 	if (rc < 0)
 		goto restore;
 
@@ -4369,8 +4703,7 @@ static int haptics_detect_lra_frequency(struct haptics_chip *chip)
 	if (rc < 0)
 		goto restore;
 
-	/* wait for ~150ms to get the LRA calibration result */
-	usleep_range(150000, 155000);
+	usleep_range(chip->config.cali_time * 1000, chip->config.cali_time * 1000 + 5000);
 
 	rc = haptics_get_closeloop_lra_period(chip, false);
 	if (rc < 0)
@@ -4439,6 +4772,32 @@ static int haptics_start_lra_calibrate(struct haptics_chip *chip)
 		goto unlock;
 	}
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (chip->cal_data_restore) {
+		chip->cal_data.cl_t_lra_us = chip->config.cl_t_lra_us;
+		chip->cal_data.rc_clk_cal_count = chip->config.rc_clk_cal_count;
+		dev_err(chip->dev, "calibration data write to reserve partition, cl_t_lra_us: %d, rc_clk_cal_count : %d\n",
+			chip->cal_data.cl_t_lra_us, chip->cal_data.rc_clk_cal_count);
+		rc = haptics_calibration_data_save(chip, &chip->cal_data);
+		if (rc < 0) {
+			chip->cal_data.cl_t_lra_us = 0;
+			chip->cal_data.rc_clk_cal_count = 0;
+			dev_err(chip->dev, "calibration data save failed\n");
+		} else {
+			rc = haptics_calibration_data_read(chip, &chip->cal_data);
+			if (rc < 0) {
+			    dev_err(chip->dev, "calibration data read failed\n");
+			} else if (chip->cal_data.cl_t_lra_us == chip->config.cl_t_lra_us && chip->cal_data.rc_clk_cal_count == chip->config.rc_clk_cal_count) {
+			    dev_err(chip->dev, "calibration data success save to reserve partition\n");
+			} else {
+			    chip->cal_data.cl_t_lra_us = 0;
+			    chip->cal_data.rc_clk_cal_count = 0;
+			    dev_err(chip->dev, "calibration data save to reserve partition is wrong\n");
+			}
+		}
+	}
+#endif
+
 unlock:
 	chip->play.in_calibration = false;
 	mutex_unlock(&chip->play.lock);
@@ -4477,15 +4836,68 @@ static ssize_t lra_frequency_hz_show(struct class *c,
 		return -EINVAL;
 
 	cl_f_lra = USEC_PER_SEC / chip->config.cl_t_lra_us;
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (chip->cal_data_restore) {
+		if (chip->cal_data.cl_t_lra_us != 0) {
+			cl_f_lra = USEC_PER_SEC / chip->cal_data.cl_t_lra_us;
+		} else {
+			cl_f_lra = 0;
+		}
+		dev_err(chip->dev, "lra_frequency_hz read : %d\n", cl_f_lra);
+		return scnprintf(buf, PAGE_SIZE, "%d\n", cl_f_lra);
+	} else {
+		return scnprintf(buf, PAGE_SIZE, "%d\n", cl_f_lra);
+	}
+#else
 	return scnprintf(buf, PAGE_SIZE, "%d Hz\n", cl_f_lra);
+#endif
 }
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static ssize_t lra_frequency_hz_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	bool val;
+	int rc;
+
+	if (kstrtobool(buf, &val))
+		return -EINVAL;
+
+	if (val && chip->cal_data_restore) {
+		dev_err(chip->dev, "calibration data read before: cl_t_lra_us: %d, rc_clk_cal_count : %d\n", chip->cal_data.cl_t_lra_us, chip->cal_data.rc_clk_cal_count);
+		rc = haptics_calibration_data_read(chip, &chip->cal_data);
+		if (rc < 0) {
+			dev_err(chip->dev, "calibration data read failed\n");
+		}
+		dev_err(chip->dev, "calibration data read after: cl_t_lra_us: %d, rc_clk_cal_count : %d\n", chip->cal_data.cl_t_lra_us, chip->cal_data.rc_clk_cal_count);
+		if (chip->cal_data.cl_t_lra_us != 0 && chip->cal_data.rc_clk_cal_count != 0) {
+			chip->config.cl_t_lra_us = chip->cal_data.cl_t_lra_us;
+			chip->config.rc_clk_cal_count = chip->cal_data.rc_clk_cal_count;
+			rc = haptics_config_openloop_lra_period(chip, chip->config.cl_t_lra_us);
+			if (rc < 0) {
+				dev_err(chip->dev, "config openloot lra period failed\n");
+			}
+		} else {
+			dev_err(chip->dev, "no calibration data find, please do the calibration.\n");
+		}
+	}
+
+	return count;
+}
+static CLASS_ATTR_RW(lra_frequency_hz);
+#else
 static CLASS_ATTR_RO(lra_frequency_hz);
+#endif
 
 static ssize_t lra_impedance_show(struct class *c,
 		struct class_attribute *attr, char *buf)
 {
 	struct haptics_chip *chip = container_of(c,
 			struct haptics_chip, hap_class);
+
 
 	if (chip->config.lra_min_mohms == 0 && chip->config.lra_max_mohms == 0)
 		return -EINVAL;
@@ -4494,16 +4906,712 @@ static ssize_t lra_impedance_show(struct class *c,
 	else if (chip->config.lra_max_mohms >= chip->config.lra_open_mohms)
 		return scnprintf(buf, PAGE_SIZE, "%s\n", "Open circuit");
 	else
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		return scnprintf(buf, PAGE_SIZE, "%u ~ %u mohms\n",
 				chip->config.lra_min_mohms,
 				chip->config.lra_max_mohms);
+#else
+		return scnprintf(buf, PAGE_SIZE, "%u\n",
+				(chip->config.lra_min_mohms + chip->config.lra_max_mohms) / 2);
+#endif
 }
 static CLASS_ATTR_RO(lra_impedance);
+
+static ssize_t vmax_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", chip->config.vmax_mv);
+}
+
+static ssize_t vmax_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		chip->config.vmax_mv = val;
+	}
+
+	return count;
+}
+static CLASS_ATTR_RW(vmax);
+
+static ssize_t cl_vmax_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", chip->config.cl_vmax_mv);
+}
+
+static ssize_t cl_vmax_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		chip->config.cl_vmax_mv = val;
+	}
+
+	return count;
+}
+static CLASS_ATTR_RW(cl_vmax);
+
+static ssize_t cali_time_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", chip->config.cali_time);
+}
+
+static ssize_t cali_time_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	u32 val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		chip->config.cali_time = val;
+	}
+
+	return count;
+}
+static CLASS_ATTR_RW(cali_time);
+
+static ssize_t t_lra_us_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", chip->config.t_lra_us);
+}
+
+static ssize_t t_lra_us_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	int val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		chip->config.t_lra_us = val;
+	}
+
+	return count;
+}
+static CLASS_ATTR_RW(t_lra_us);
+
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+static void richtap_clean_buf(struct haptics_chip *chip, int status)
+{
+	struct mmap_buf_format *opbuf = chip->start_buf;
+	int i;
+
+	for (i = 0; i < RICHTAP_MMAP_BUF_SUM; i++) {
+		opbuf->status = status;
+		opbuf = opbuf->kernel_next;
+	}
+}
+
+static int richtap_get_lra_frequency_hz(struct haptics_chip *chip, u32 *val)
+{
+	if (chip->config.cl_t_lra_us == 0)
+		return -EINVAL;
+
+	*val = USEC_PER_SEC / chip->config.cl_t_lra_us;
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (chip->cal_data_restore) {
+		if (chip->cal_data.cl_t_lra_us != 0)
+			*val = USEC_PER_SEC / chip->cal_data.cl_t_lra_us;
+		else
+			*val = 0;
+		dev_err(chip->dev, "lra_frequency_hz read : %d\n", *val);
+	}
+#endif
+
+	return 0;
+}
+
+static int richtap_rc_clk_disable(struct haptics_chip *chip, bool status)
+{
+	int rc;
+	u8 val;
+
+	/*
+	 * All other playing modes would use AUTO mode RC
+	 * calibration except FIFO streaming mode, so restore
+	 * back to AUTO RC calibration after FIFO playing.
+	 */
+	if (status == true)
+		val = CAL_RC_CLK_DISABLED_VAL << CAL_RC_CLK_SHIFT;
+	else
+		val = CAL_RC_CLK_AUTO_VAL << CAL_RC_CLK_SHIFT;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_CAL_EN_REG, CAL_RC_CLK_MASK, val);
+	if (rc < 0)
+		return rc;
+
+	return 0;
+}
+
+static int richtap_set_fifo(struct haptics_chip *chip, struct fifo_cfg *fifo)
+{
+	struct fifo_play_status *status = &chip->play.fifo_status;
+	u32 num, fifo_thresh;
+	int rc, available;
+
+	dev_err(chip->dev, "aac RichTap haptics_set_fifo start\n");
+	if (atomic_read(&status->is_busy) == 1) {
+		dev_err(chip->dev, "FIFO is busy\n");
+		return -EBUSY;
+	}
+
+	if (chip->ptn_revision == HAP_PTN_V1 &&
+			fifo->period_per_s > F_8KHZ &&
+			fifo->num_s > get_max_fifo_samples(chip)) {
+		dev_err(chip->dev, "PM8350B v1 not play long pattern higher than 8 KHz play rate\n");
+		return -EINVAL;
+	}
+
+	/* Configure FIFO play rate */
+	rc = haptics_set_fifo_playrate(chip, fifo->period_per_s);
+	if (rc < 0)
+		return rc;
+
+	atomic_set(&status->written_done, 0);
+	atomic_set(&status->cancelled, 0);
+	status->samples_written = 0;
+
+	/*
+	 * Write the 1st set of the data into FIFO if there are
+	 * more than get_max_fifo_samples samples, the rest will be
+	 * written if any FIFO memory is available after playing.
+	 */
+	num = min_t(u32, fifo->num_s, get_max_fifo_samples(chip));
+	available = haptics_get_available_fifo_memory(chip);
+	if (available < 0)
+		return available;
+
+	num = min_t(u32, available, num);
+	rc = haptics_update_fifo_samples(chip, fifo->samples, num);
+	if (rc < 0) {
+		dev_err(chip->dev, "write FIFO samples failed, rc=%d\n", rc);
+		return rc;
+	}
+
+	dev_err(chip->dev, "aac Richtap set busy to 1\n");
+	atomic_set(&status->is_busy, 1);
+	status->samples_written = num;
+
+	fifo_thresh = 480;
+
+
+	/*
+	 * Set FIFO empty threshold here. FIFO empty IRQ will
+	 * be enabled after playing FIFO samples so that more
+	 * FIFO samples can be written (if available) when
+	 * FIFO empty IRQ is triggered.
+	 */
+
+	return haptics_set_fifo_empty_threshold(chip, fifo_thresh);
+}
+
+static void richtap_erase_work_proc(struct work_struct *work)
+{
+	struct haptics_chip *chip  = container_of(work,
+			struct haptics_chip, richtap_erase_work);
+	struct haptics_play_info *play = &chip->play;
+	int rc;
+	u8 count = 5;
+	u32 fill;
+
+	while (count--) {
+		rc = haptics_get_fifo_fill_status(chip, &fill);
+		if (rc < 0)
+			return;
+		if (fill == 0)
+			break;
+		if (atomic_read(&chip->play.fifo_status.is_busy) == 0)
+			return;
+		fill /= 24;
+		fill *= 1000;
+		usleep_range((fill + 25), (fill + 30));
+		dev_err(chip->dev, "aac fill time %d\n", fill);
+	}
+
+	mutex_lock(&play->lock);
+	richtap_clean_buf(chip, MMAP_BUF_DATA_FINISHED);
+	atomic_set(&chip->play.fifo_status.written_done, 1);
+	haptics_set_fifo_empty_threshold(chip, 0);
+	haptics_stop_fifo_play(chip);
+	atomic_set(&chip->richtap_mode, false);
+	mutex_unlock(&play->lock);
+}
+
+static int richtap_playback(struct haptics_chip *chip, bool on)
+{
+	struct haptics_play_info *play = &chip->play;
+	int rc;
+
+	if (on) {
+		rc = haptics_enable_play(chip, true);
+		if (rc < 0)
+			return rc;
+
+		if (play->pattern_src == FIFO)
+			haptics_fifo_empty_irq_config(chip, true);
+	} else {
+		if (play->pattern_src == FIFO &&
+				atomic_read(&play->fifo_status.is_busy)) {
+			dev_dbg(chip->dev, "FIFO playing is not done yet, defer stopping in erase\n");
+			return 0;
+		}
+
+		rc = haptics_enable_play(chip, false);
+	}
+
+	return rc;
+}
+
+static int richtap_load_prebake(struct haptics_chip *chip, u8 *data, u32 length)
+{
+	struct haptics_play_info *play = &chip->play;
+	struct custom_fifo_data custom_data = {};
+	struct fifo_cfg *fifo;
+	int rc;
+
+	usleep_range(5000, 5500);
+
+	if (!chip->custom_effect || !chip->custom_effect->fifo)
+		return -ENOMEM;
+	fifo = chip->custom_effect->fifo;
+	custom_data.length = length;
+	custom_data.play_rate_hz = 24000;
+	custom_data.data = data;
+
+	dev_dbg(chip->dev, "aac RichTap data %d length\n", length);
+
+	rc = haptics_convert_sample_period(chip, custom_data.play_rate_hz);
+	if (rc < 0) {
+		dev_err(chip->dev, "aac RichTap Can't support play rate: %d Hz\n",
+				custom_data.play_rate_hz);
+		return rc;
+	}
+
+	mutex_lock(&chip->play.lock);
+
+	fifo->period_per_s = rc;
+	fifo->num_s = length;
+	/*
+	 * Before allocating samples buffer, free the old sample
+	 * buffer first if it's not been freed.
+	 */
+	kfree(fifo->samples);
+	fifo->samples = kcalloc(custom_data.length, sizeof(u8), GFP_KERNEL);
+	if (!fifo->samples) {
+		rc = -ENOMEM;
+		goto unlock;
+	}
+
+	memcpy(fifo->samples, custom_data.data, custom_data.length);
+
+	play->effect = chip->custom_effect;
+	play->brake = NULL;
+
+	rc = haptics_toggle_module_enable(chip);
+	if (rc < 0)
+		goto cleanup;
+
+	rc = haptics_set_vmax_mv(chip, play->vmax_mv);
+	if (rc < 0)
+		goto cleanup;
+
+	play->pattern_src = FIFO;
+	rc = richtap_set_fifo(chip, play->effect->fifo);
+	if (rc < 0)
+		goto cleanup;
+	dev_dbg(chip->dev, "aac RichTap haptics_set_fifo success\n");
+
+	mutex_unlock(&chip->play.lock);
+
+	return 0;
+cleanup:
+	kfree(fifo->samples);
+	fifo->samples = NULL;
+unlock:
+	mutex_unlock(&chip->play.lock);
+	return rc;
+}
+
+static void richtap_work_proc(struct work_struct *work)
+{
+	struct haptics_chip *chip  = container_of(work, struct haptics_chip, richtap_stream_work);
+	struct mmap_buf_format *first;
+
+	uint32_t count = 100;
+	int ret;
+
+	while ((count--) && (chip->start_buf->status == MMAP_BUF_DATA_INVALID)) {
+		usleep_range(1000, 1001);
+	}
+
+	chip->pos = 0;
+	first = chip->start_buf;
+	if ((first->length <= 0) || (first->status == MMAP_BUF_DATA_INVALID)) {
+		richtap_rc_clk_disable(chip, false);
+		atomic_set(&chip->richtap_mode, false);
+		dev_err(chip->dev, "first length invalid\n");
+		return;
+	} else if (first->length >= get_max_fifo_samples(chip)) {
+		if ((first->length > get_max_fifo_samples(chip))) {
+			chip->pos = get_max_fifo_samples(chip);
+			chip->current_buf = first;
+		} else {
+			chip->current_buf = first->kernel_next;
+		}
+		goto play_rate;
+	} else {
+		chip->current_buf = first->kernel_next;
+	}
+
+	while ((chip->current_buf->status == MMAP_BUF_DATA_VALID) &&
+			(first->length < get_max_fifo_samples(chip))) {
+		if ((first->length + chip->current_buf->length) <=
+				get_max_fifo_samples(chip)) {
+			memcpy(&first->data[first->length], chip->current_buf->data,
+					chip->current_buf->length);
+			chip->current_buf->status = MMAP_BUF_DATA_INVALID;
+			chip->current_buf->length = 0;
+			first->length += chip->current_buf->length;
+			chip->current_buf = chip->current_buf->kernel_next;
+		} else {
+			memcpy(&first->data[first->length], chip->current_buf->data,
+					(get_max_fifo_samples(chip) - first->length));
+			chip->pos = get_max_fifo_samples(chip) - first->length;
+			first->length = get_max_fifo_samples(chip);
+			dev_err(chip->dev, "+++ first full\n");
+		}
+	}
+
+	dev_dbg(chip->dev, "aacRichTap pos %d,first %d,current %d\n", chip->pos, first->length, chip->current_buf->length);
+play_rate:
+	ret = richtap_load_prebake(chip, first->data, first->length <=
+		get_max_fifo_samples(chip) ? first->length : get_max_fifo_samples(chip));
+	if (ret < 0) {
+		dev_err(chip->dev, "aac RichTap Upload FIFO data fail\n", ret);
+		return;
+	}
+
+	if (first->length <= get_max_fifo_samples(chip)) {
+		first->status = MMAP_BUF_DATA_INVALID;
+		first->length = 0;
+	}
+
+	ret = haptics_enable_hpwr_vreg(chip, true);
+	if (ret < 0) {
+		dev_err(chip->dev, "aac RichTap en hpwr_vreg fail, rc=%d\n", ret);
+		return;
+	}
+
+	ret = richtap_playback(chip, true);
+	if (ret < 0)
+		dev_err(chip->dev, "aac RichTap richtap_playback fail, rc=%d\n", ret);
+}
+
+/*****************************************************
+ *
+ * haptic fops
+ *
+ *****************************************************/
+static int richtap_file_open(struct inode *inode, struct file *file)
+{
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
+	file->private_data = (void *)g_richtap_ptr;
+
+	return 0;
+}
+
+static int richtap_file_release(struct inode *inode, struct file *file)
+{
+	file->private_data = (void *)NULL;
+
+	module_put(THIS_MODULE);
+
+	return 0;
+}
+
+static long richtap_file_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct haptics_chip *chip = (struct haptics_chip *)file->private_data;
+	struct haptics_play_info *play = &chip->play;
+	uint32_t tmp;
+	int ret = 0;
+
+	dev_err(chip->dev, "%s: cmd=0x%x, arg=0x%lx\n",
+			  __func__, cmd, arg);
+
+	switch (cmd) {
+	case RICHTAP_GET_HWINFO:
+		tmp = RICHTAP_AW_8697;
+		if (copy_to_user((void __user *)arg, &tmp, sizeof(uint32_t)))
+			return -EFAULT;
+		break;
+	case RICHTAP_RTP_MODE:
+		if (copy_from_user(chip->rtp_ptr, (void __user *)arg,
+			RICHTAP_MMAP_BUF_SIZE * RICHTAP_MMAP_BUF_SUM)) {
+			ret = -EFAULT;
+			break;
+		}
+		tmp = *((uint32_t *)chip->rtp_ptr);
+		if (tmp > (RICHTAP_MMAP_BUF_SIZE * RICHTAP_MMAP_BUF_SUM - 4)) {
+			dev_err(chip->dev, "aac RichTap rtp mode date len error %d\n", tmp);
+			ret = -EINVAL;
+			break;
+		}
+		mutex_lock(&play->lock);
+		haptics_stop_fifo_play(chip);
+		mutex_unlock(&play->lock);
+		richtap_rc_clk_disable(chip, true);
+		atomic_set(&chip->richtap_mode, false);
+
+		ret = richtap_load_prebake(chip, &chip->rtp_ptr[4], tmp);
+		if (ret < 0) {
+			dev_err(chip->dev, "aac RichTap Upload FIFO data fail\n", ret);
+			break;
+		}
+
+		ret = haptics_enable_hpwr_vreg(chip, true);
+		if (ret < 0) {
+			dev_err(chip->dev, "aac RichTap en hpwr_vreg fail, rc=%d\n", ret);
+			break;
+		}
+
+		ret = richtap_playback(chip, true);
+		if (ret < 0)
+			dev_err(chip->dev, "aac RichTap en hpwr_vreg fail, rc=%d\n", ret);
+		schedule_work(&chip->richtap_erase_work);
+		break;
+	case RICHTAP_OFF_MODE:
+		break;
+	case RICHTAP_GET_F0:
+		ret = richtap_get_lra_frequency_hz(chip, &tmp);
+		if (ret < 0) {
+			dev_err(chip->dev, "aac RichTap get f0 error, ret=%d\n", ret);
+			break;
+		}
+		if (copy_to_user((void __user *)arg, &tmp, sizeof(uint32_t)))
+			ret = -EFAULT;
+		break;
+	case RICHTAP_SETTING_GAIN:
+		if (arg > 0x80)
+			arg = 0x80;
+		chip->play.vmax_mv = (chip->config.fifo_vmax_mv - 200) * arg;
+		chip->play.vmax_mv /= 128;
+		haptics_set_vmax_mv(chip, chip->play.vmax_mv);
+		break;
+	case RICHTAP_STREAM_MODE:
+		richtap_clean_buf(chip, MMAP_BUF_DATA_INVALID);
+		mutex_lock(&play->lock);
+		haptics_stop_fifo_play(chip);
+		mutex_unlock(&play->lock);
+		richtap_rc_clk_disable(chip, true);
+		atomic_set(&chip->richtap_mode, true);
+		schedule_work(&chip->richtap_stream_work);
+		break;
+	case RICHTAP_STOP_MODE:
+		mutex_lock(&play->lock);
+		atomic_set(&chip->play.fifo_status.written_done, 1);
+		haptics_set_fifo_empty_threshold(chip, 0);
+		haptics_stop_fifo_play(chip);
+		atomic_set(&chip->richtap_mode, false);
+		richtap_clean_buf(chip, MMAP_BUF_DATA_FINISHED);
+		mutex_unlock(&play->lock);
+		break;
+	case RICHTAP_F0_UPDATE:
+		break;
+	default:
+		dev_err(chip->dev, "%s, unknown cmd\n", __func__);
+		break;
+	}
+
+	return ret;
+}
+
+static ssize_t richtap_file_read(struct file *filp, char *buff, size_t len, loff_t *offset)
+{
+	return len;
+}
+
+static ssize_t richtap_file_write(struct file *filp, const char *buff, size_t len, loff_t *off)
+{
+	return len;
+}
+
+static int richtap_file_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	struct haptics_chip *chip = (struct haptics_chip *)filp->private_data;
+	unsigned long phys;
+	int ret = 0;
+
+	vm_flags_t vm_flags = calc_vm_prot_bits(PROT_READ|PROT_WRITE, 0) |
+		calc_vm_flag_bits(MAP_SHARED);
+	vm_flags |= current->mm->def_flags | VM_MAYREAD |
+		VM_MAYWRITE | VM_MAYEXEC | VM_SHARED | VM_MAYSHARE;
+	if (vma && (pgprot_val(vma->vm_page_prot) != pgprot_val(vm_get_page_prot(vm_flags))))
+		return -EPERM;
+
+	if (vma && ((vma->vm_end - vma->vm_start) != (PAGE_SIZE << RICHTAP_MMAP_PAGE_ORDER)))
+		return -ENOMEM;
+
+	phys = virt_to_phys(chip->start_buf);
+
+	ret = remap_pfn_range(vma, vma->vm_start, (phys >> PAGE_SHIFT),
+		(vma->vm_end - vma->vm_start), vma->vm_page_prot);
+	if (ret) {
+		dev_err(chip->dev, "Error mmap failed\n");
+		return ret;
+	}
+
+	return ret;
+}
+
+static const struct file_operations fops = {
+	.owner = THIS_MODULE,
+	.read = richtap_file_read,
+	.write = richtap_file_write,
+	.mmap = richtap_file_mmap,
+	.unlocked_ioctl = richtap_file_unlocked_ioctl,
+	.open = richtap_file_open,
+	.release = richtap_file_release,
+};
+
+static struct miscdevice richtap_misc = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = RICHTAP_NAME,
+	.fops = &fops,
+};
+#endif
+
+static ssize_t register_write_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	int rc = -1;
+	u16 reg;
+	u8 val;
+
+	if (2 == sscanf(buf, "%x %x", &reg, &val)) {
+		if(reg >= 0xf000 && reg < 0xf300) {
+			rc = regmap_update_bits(chip->regmap, reg, 0xFF, val);
+			if (rc < 0)
+				dev_err(chip->dev, "update addr %d failed, rc=%d\n", reg, rc);
+		}
+		dev_err(chip->dev, "write address=%x, val=%d\n", reg, val);
+	}
+
+	return count;
+}
+static CLASS_ATTR_WO(register_write);
+
+static ssize_t fifo_vmax_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", chip->config.fifo_vmax_mv);
+}
+
+static ssize_t fifo_vmax_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	int val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		chip->config.fifo_vmax_mv = val;
+		chip->custom_effect->vmax_mv = val;
+	}
+
+	return count;
+}
+static CLASS_ATTR_RW(fifo_vmax);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static ssize_t vibrator_type_show(struct class *c,
+		struct class_attribute *attr, char *buf)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", chip->config.vibrator_type);
+}
+
+static ssize_t vibrator_type_store(struct class *c,
+		struct class_attribute *attr, const char *buf, size_t count)
+{
+	struct haptics_chip *chip = container_of(c,
+			struct haptics_chip, hap_class);
+	int val;
+
+	if (kstrtouint(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		chip->config.vibrator_type = val;
+	}
+
+	return count;
+}
+
+static CLASS_ATTR_RW(vibrator_type);
+#endif
 
 static struct attribute *hap_class_attrs[] = {
 	&class_attr_lra_calibration.attr,
 	&class_attr_lra_frequency_hz.attr,
 	&class_attr_lra_impedance.attr,
+	&class_attr_vmax.attr,
+	&class_attr_cl_vmax.attr,
+	&class_attr_cali_time.attr,
+	&class_attr_t_lra_us.attr,
+	&class_attr_register_write.attr,
+	&class_attr_fifo_vmax.attr,
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	&class_attr_vibrator_type.attr,
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(hap_class);
@@ -4523,6 +5631,7 @@ static int haptics_probe(struct platform_device *pdev)
 	struct input_dev *input_dev;
 	struct ff_device *ff_dev;
 	int rc, count;
+	u8 val = 0;
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -4577,8 +5686,13 @@ static int haptics_probe(struct platform_device *pdev)
 				rc);
 		return rc;
 	}
-
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	mutex_init(&chip->irq_lock);
+#endif
 	mutex_init(&chip->play.lock);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	mutex_init(&chip->fd_lock);
+#endif
 	disable_irq_nosync(chip->fifo_empty_irq);
 	chip->fifo_empty_irq_en = false;
 
@@ -4608,6 +5722,17 @@ static int haptics_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	chip->config.cali_time = 150;
+	val = 0x54;
+	rc = haptics_write(chip, 0xF200, HAP_CFG_TLRA_OL_LOW_REG, &val, 1);
+	/* add qcom patch to solve F0 cali fail issue */
+	val = 0x66;
+	rc = haptics_write(chip, chip->cfg_addr_base,
+				HAP_CFG_DRV_DUTY_CFG_REG, &val, 1);
+	val = 0x32;
+	rc = haptics_write(chip, chip->cfg_addr_base,
+				HAP_CFG_AUTORES_CFG_REG, &val, 1);
+
 	ff_dev = input_dev->ff;
 	ff_dev->upload = haptics_upload_effect;
 	ff_dev->playback = haptics_playback;
@@ -4629,12 +5754,51 @@ static int haptics_probe(struct platform_device *pdev)
 		goto destroy_ff;
 	}
 
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	chip->rtp_ptr = kmalloc(RICHTAP_MMAP_BUF_SIZE * RICHTAP_MMAP_BUF_SUM, GFP_KERNEL);
+	if (chip->rtp_ptr == NULL)
+		goto destroy_ff;
+
+	chip->start_buf = (struct mmap_buf_format *)__get_free_pages(GFP_KERNEL,
+		RICHTAP_MMAP_PAGE_ORDER);
+	if (chip->start_buf == NULL) {
+		dev_err(chip->dev, "Error __get_free_pages failed\n");
+		goto destroy_richtap;
+	}
+	SetPageReserved(virt_to_page(chip->start_buf));
+	{
+		struct mmap_buf_format *temp;
+		uint32_t i = 0;
+
+		temp = chip->start_buf;
+		for (i = 1; i < RICHTAP_MMAP_BUF_SUM; i++) {
+			temp->kernel_next = (chip->start_buf + i);
+			temp = temp->kernel_next;
+		}
+		temp->kernel_next = chip->start_buf;
+	}
+
+	INIT_WORK(&chip->richtap_stream_work, richtap_work_proc);
+	INIT_WORK(&chip->richtap_erase_work, richtap_erase_work_proc);
+
+	misc_register(&richtap_misc);
+
+	atomic_set(&chip->richtap_mode, false);
+	g_richtap_ptr = chip;
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 	rc = haptics_create_debugfs(chip);
 	if (rc < 0)
 		dev_err(chip->dev, "Creating debugfs failed, rc=%d\n", rc);
 #endif
 	return 0;
+
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+destroy_richtap:
+	kfree(chip->rtp_ptr);
+#endif
+
 destroy_ff:
 	input_ff_destroy(chip->input_dev);
 	return rc;
@@ -4650,6 +5814,10 @@ static int haptics_remove(struct platform_device *pdev)
 	class_unregister(&chip->hap_class);
 #ifdef CONFIG_DEBUG_FS
 	debugfs_remove_recursive(chip->debugfs_dir);
+#endif
+#ifdef RICHTAP_FOR_PMIC_ENABLE
+	kfree(chip->rtp_ptr);
+	free_pages((unsigned long)chip->start_buf, RICHTAP_MMAP_PAGE_ORDER);
 #endif
 	input_ff_destroy(chip->input_dev);
 	dev_set_drvdata(chip->dev, NULL);
@@ -4739,5 +5907,9 @@ static struct platform_driver haptics_driver = {
 };
 module_platform_driver(haptics_driver);
 
+
+#if IS_MODULE(CONFIG_INPUT_QCOM_HV_HAPTICS)
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. High-Voltage Haptics driver");
 MODULE_LICENSE("GPL v2");

@@ -183,5 +183,4 @@ static inline bool is_iommu_present(struct msm_cvp_platform_resources *res)
 	return !list_empty(&res->context_banks);
 }
 
-#endif
-
+#endif/*__MSM_CVP_RESOURCES_H__*/

@@ -1,0 +1,228 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+* Copyright (C) 2018-2020 Oplus. All rights reserved.
+*/
+/* Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&mdss_mdp {
+	dsi_oplus_20085_boe_nt37800_1080_2400_cmd: qcom,mdss_dsi_oplus_20085_boe_nt37800_1080_2400_cmd {
+		qcom,mdss-dsi-panel-name =
+		  "boe nt37800 amoled fhd+ panel";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+
+		qcom,dsi-ctrl-num = <0x0>;
+		qcom,dsi-phy-num = <0x0>;
+		qcom,dsi-select-clocks = "mux_byte_clk0", "mux_pixel_clk0";
+
+		qcom,dsi-sec-ctrl-num = <0x0>;
+		qcom,dsi-sec-phy-num = <0x0>;
+		qcom,dsi-select-sec-clocks = "mux_byte_clk1", "mux_pixel_clk1";
+
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <15000 15500 34000
+			16000 13250 34500 7500 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <4300000>;
+		qcom,mdss-dsi-panel-blackness-level = <1023>;
+		qcom,mdss-pan-physical-width-dimension = <68>;
+		qcom,mdss-pan-physical-height-dimension = <152>;
+		//qcom,esd-check-enabled;
+		qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+		qcom,mdss-dsi-panel-status-command = [
+						06 01 00 01 05 00 02 EA 00
+						06 01 00 01 05 00 02 EE 00
+						06 01 00 01 05 00 02 0A 00
+						];
+		qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-panel-status-value = <
+						0x00 0x00 0x9C
+						0x00 0x80 0x9C
+						0x80 0x00 0x9C
+						0x80 0x80 0x9C
+						>;
+		qcom,mdss-dsi-panel-status-read-length = <1 1 1>;
+
+		qcom,mdss-dsi-display-timings {
+			timing@0{
+				qcom,mdss-dsi-panel-clockrate = <825600000>;
+				qcom,mdss-mdp-transfer-time-us = <12000>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <2400>;
+				qcom,mdss-dsi-h-front-porch = <8>;
+				qcom,mdss-dsi-h-back-porch = <8>;
+				qcom,mdss-dsi-h-pulse-width = <24>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-v-back-porch = <6>;
+				qcom,mdss-dsi-v-front-porch = <8>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+				qcom,mdss-dsi-panel-framerate = <60>;
+				//qcom,mdss-dsi-panel-phy-timings = [00 22 05 09 25 23 09 09 06 03 04 00];
+				//qcom,display-topology = <1 1 1>;
+				//qcom,default-topology-index = <0>;
+				oplus,fod-on-vblank = <1>;
+				oplus,fod-off-vblank = <0>;
+				qcom,mdss-dsi-on-command = [
+					/* Display On Setting */
+					39 01 00 00 00 00 05 FF AA 55 A5 81
+					39 01 00 00 00 00 02 6F 0F		/* OSC=101.6Mhz */
+					39 01 00 00 00 00 03 FD 01 46
+					//39 01 00 00 00 00 06 F0 55 AA 52 08 01
+					//39 01 00 00 00 00 09 B7 1E 1E 1E 1E 1E 1E 1E 1E
+					//39 01 00 00 00 00 08 C3 8D 01 9C D0 20 81 00
+					/* slove ELVDD drop*/
+					//39 01 00 00 00 00 02 6F 01
+					//39 01 00 00 00 00 02 D2 01
+					//39 01 00 00 00 00 02 6F 03
+					//39 01 00 00 00 00 02 D2 33
+					//39 01 00 00 00 00 02 6F 06
+					//39 01 00 00 00 00 02 D2 00
+					//39 01 00 00 00 00 02 6F 0F
+					//39 01 00 00 00 00 02 D2 00
+					//39 01 00 00 00 00 02 C7 01
+					39 01 00 00 00 00 01 35
+					39 01 00 00 00 00 02 53 20
+					39 01 00 00 00 00 03 51 03 FF
+					39 01 00 00 00 00 05 2A 00 00 04 37
+					39 01 00 00 00 00 05 2B 00 00 09 5F
+					/*PPS Table1*/
+					39 01 00 00 00 00 02 03 00
+					39 01 00 00 00 00 02 90 02
+					/*VESA 8bit3x slice 20 for BOE*/
+					39 01 00 00 00 00 13 91 89 28 00 14 C2 00 03 1C 02 8C 00 0F 05 0E 02 8B 10 F0
+					39 01 00 00 00 00 01 2C
+					/* ELVSS swire offset */
+					39 01 00 00 00 00 02 82 AE
+					39 01 00 00 00 00 02 2F 01
+					39 01 00 00 42 00 01 11
+				];
+				qcom,mdss-dsi-post-on-backlight = [
+					/* Display On */
+					05 01 00 00 00 00 01 29
+				];
+				qcom,mdss-dsi-timing-switch-command = [
+					/* 60hz Transition */
+					39 01 00 00 00 00 03 F0 5A 5A
+					15 01 00 00 00 00 02 60 00
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 14 00 01 29
+					05 01 00 00 16 00 02 28 00
+					05 01 00 00 78 00 02 10 00
+				];
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-lp1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-nolp-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-post-on-backlight-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-dcip3-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-srgb-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-normal-hbm-on-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aod-high-mode-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aod-low-mode-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-timing-switch-command-state = "dsi_hs_mode";
+				//qcom,panel-roi-alignment=<540 30 540 30 540 30>;
+				//qcom,compression-mode = "dsc";
+				//qcom,lm-split = <540 540>;
+				//qcom,mdss-dsc-encoders = <2>;
+				//qcom,mdss-dsc-slice-height = <48>;
+				//qcom,mdss-dsc-slice-width = <540>;
+				//qcom,mdss-dsc-slice-per-pkt = <2>;
+				//qcom,mdss-dsc-bit-per-component = <8>;
+				//qcom,mdss-dsc-bit-per-pixel = <8>;
+				//qcom,mdss-dsc-block-prediction-enable;
+			};
+		};
+	};
+};
+
+&dsi_oplus_20085_boe_nt37800_1080_2400_cmd {
+
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,panel-sec-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-sec-bl-pmic-control-type = "bl_ctrl_dcs";
+
+	//qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-panel-controller = <&mdss_dsi1>;
+	//qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-dc-backlight-level = <520>;
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-normal-max-level = <2047>;
+	qcom,mdss-dsi-bl-max-level = <4095>;
+	qcom,mdss-brightness-normal-max-level = <2047>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-brightness-default-level = <400>;
+	qcom,platform-te-gpio = <&tlmm 83 0>;
+	//qcom,platform-reset-gpio = <&tlmm 15 0>;
+	qcom,platform-sec-reset-gpio = <&tlmm 15 0>;
+	qcom,platform-panel-vout-gpio = <&tlmm 127 0>;
+	qcom,platform-panel-vddr-aod-en-gpio = <&tlmm 44 0>;
+	oplus,mdss-dsi-vendor-name = "AMB655XL08";
+	oplus,mdss-dsi-manufacture = "samsung1024";
+	oplus,bl_interpolate_nosub;
+	qcom,mdss-panel-serial-number-index = <11>;
+	qcom,dsi-display-active;
+
+	qcom,ulps-enabled;
+	qcom,mdss-dsi-t-clk-post = <0x0E>;
+	qcom,mdss-dsi-t-clk-pre = <0x35>;
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings = [00 1C 07 07 17 22 07
+				07 08 02 04 00 16 16];
+
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_oplus_20085_boe_nt37800_1080_2400_cmd {
+	qcom,panel_voltage_vddi_name = "vddio";
+	qcom,panel_voltage_vddi = <0 1800000 1800000 1800000>;
+	qcom,panel_voltage_vddr_name = "vout";
+	qcom,panel_voltage_vddr = <1 1120000 1120000 1120000>;
+};
+
+&dsi_oplus_20085_boe_nt37800_1080_2400_cmd {
+	//oplus,apollo_backlight_enable;
+	oplus,color_vivid_status;
+	//oplus,color_srgb_status;
+	oplus,color_softiris_status;
+};
+

@@ -31,6 +31,16 @@
 #include <linux/tick.h>
 #include <linux/sched/sysctl.h>
 #include <trace/events/power.h>
+#ifdef CONFIG_OPLUS_FEATURE_CPUFREQ_BOUNCING
+#include <linux/cpufreq_bouncing.h>
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_TPD
+#include <linux/tpd/tpd.h>
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include <linux/task_sched_info.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 static LIST_HEAD(cpufreq_policy_list);
 
@@ -394,6 +404,9 @@ static void cpufreq_notify_transition(struct cpufreq_policy *policy,
 		cpufreq_stats_record_transition(policy, freqs->new);
 		cpufreq_times_record_transition(policy, freqs->new);
 		policy->cur = freqs->new;
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		update_freq_info(policy);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	}
 }
 
@@ -540,6 +553,9 @@ EXPORT_SYMBOL_GPL(cpufreq_disable_fast_switch);
 unsigned int cpufreq_driver_resolve_freq(struct cpufreq_policy *policy,
 					 unsigned int target_freq)
 {
+#ifdef CONFIG_OPLUS_FEATURE_CPUFREQ_BOUNCING
+	target_freq = cb_cap(policy, target_freq);
+#endif
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
 	policy->cached_target_freq = target_freq;
 
@@ -1417,7 +1433,9 @@ static int cpufreq_online(unsigned int cpu)
 			per_cpu(cpufreq_cpu_data, j) = policy;
 			add_cpu_dev_symlink(policy, j);
 		}
-
+#ifdef CONFIG_OPLUS_FEATURE_TPD
+		tpd_init_policy(policy);
+#endif
 		policy->min_freq_req = kzalloc(2 * sizeof(*policy->min_freq_req),
 					       GFP_KERNEL);
 		if (!policy->min_freq_req)
@@ -2072,6 +2090,9 @@ unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 {
 	int ret;
 
+#ifdef CONFIG_OPLUS_FEATURE_CPUFREQ_BOUNCING
+	target_freq = cb_cap(policy, target_freq);
+#endif
 	target_freq = clamp_val(target_freq, policy->min, policy->max);
 
 	ret = cpufreq_driver->fast_switch(policy, target_freq);
@@ -2448,7 +2469,9 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	policy->min = new_data.min;
 	policy->max = new_data.max;
 	trace_cpu_frequency_limits(policy);
-
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_freq_limit_info(policy);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	arch_set_max_freq_scale(policy->cpus, policy->max);
 
 	policy->cached_target_freq = UINT_MAX;

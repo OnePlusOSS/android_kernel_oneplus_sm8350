@@ -5,6 +5,8 @@
 
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM ufs
+#undef TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH trace/events
 
 #if !defined(_TRACE_UFS_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_UFS_H

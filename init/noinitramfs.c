@@ -3,7 +3,7 @@
  * init/noinitramfs.c
  *
  * Copyright (C) 2006, NXP Semiconductors, All Rights Reserved
- * Author: Jean-Paul Saman <jean-paul.saman@nxp.com>
+ * Author: Jean-Paul Saman 
  */
 #include <linux/init.h>
 #include <linux/stat.h>

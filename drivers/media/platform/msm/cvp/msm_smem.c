@@ -18,9 +18,9 @@
 
 
 static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
-	dma_addr_t *iova, u32 flags, unsigned long ion_flags,
-	struct msm_cvp_platform_resources *res,
-	struct cvp_dma_mapping_info *mapping_info)
+				      dma_addr_t *iova, u32 flags, unsigned long ion_flags,
+				      struct msm_cvp_platform_resources *res,
+				      struct cvp_dma_mapping_info *mapping_info)
 {
 	int rc = 0;
 	struct dma_buf_attachment *attach;
@@ -35,19 +35,21 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
 
 	if (is_iommu_present(res)) {
 		cb = msm_cvp_smem_get_context_bank((flags & SMEM_SECURE),
-				res, ion_flags);
+						   res, ion_flags);
+
 		if (!cb) {
 			dprintk(CVP_ERR,
 				"%s: Failed to get context bank device\n",
-				 __func__);
+				__func__);
 			rc = -EIO;
 			goto mem_map_failed;
 		}
 
 		/* Prepare a dma buf for dma on the given device */
 		attach = dma_buf_attach(dbuf, cb->dev);
+
 		if (IS_ERR_OR_NULL(attach)) {
-			rc = PTR_ERR(attach) ?: -ENOMEM;
+			rc = PTR_ERR(attach) ? : -ENOMEM;
 			dprintk(CVP_ERR, "Failed to attach dmabuf\n");
 			goto mem_buf_attach_failed;
 		}
@@ -64,23 +66,26 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
 		 * required buffer size
 		 */
 		attach->dma_map_attrs |= DMA_ATTR_SKIP_CPU_SYNC;
+
 		if (res->sys_cache_present)
 			attach->dma_map_attrs |=
 				DMA_ATTR_IOMMU_USE_UPSTREAM_HINT;
 
 		table = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
+
 		if (IS_ERR_OR_NULL(table)) {
-			rc = PTR_ERR(table) ?: -ENOMEM;
+			rc = PTR_ERR(table) ? : -ENOMEM;
 			dprintk(CVP_ERR, "Failed to map table\n");
 			goto mem_map_table_failed;
 		}
 
 		if (table->sgl) {
-			if (ion_flags & ION_FLAG_CP_CAMERA) {
+			if (ion_flags & ION_FLAG_CP_CAMERA)
 				*iova = sg_phys(table->sgl);
-			} else {
+
+			else
 				*iova = table->sgl->dma_address;
-			}
+
 		} else {
 			dprintk(CVP_ERR, "sgl is NULL\n");
 			rc = -ENOMEM;
@@ -93,9 +98,8 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, u32 align,
 		mapping_info->attach = attach;
 		mapping_info->buf = dbuf;
 		mapping_info->cb_info = (void *)cb;
-	} else {
+	} else
 		dprintk(CVP_MEM, "iommu not present, use phys mem addr\n");
-	}
 
 	return 0;
 mem_map_sg_failed:
@@ -108,7 +112,7 @@ mem_map_failed:
 }
 
 static int msm_dma_put_device_address(u32 flags,
-	struct cvp_dma_mapping_info *mapping_info)
+				      struct cvp_dma_mapping_info *mapping_info)
 {
 	int rc = 0;
 
@@ -118,14 +122,14 @@ static int msm_dma_put_device_address(u32 flags,
 	}
 
 	if (!mapping_info->dev || !mapping_info->table ||
-		!mapping_info->buf || !mapping_info->attach ||
-		!mapping_info->cb_info) {
+			!mapping_info->buf || !mapping_info->attach ||
+			!mapping_info->cb_info) {
 		dprintk(CVP_WARN, "Invalid params\n");
 		return -EINVAL;
 	}
 
 	dma_buf_unmap_attachment(mapping_info->attach,
-		mapping_info->table, DMA_BIDIRECTIONAL);
+				 mapping_info->table, DMA_BIDIRECTIONAL);
 	dma_buf_detach(mapping_info->buf, mapping_info->attach);
 
 	mapping_info->dev = NULL;
@@ -144,9 +148,10 @@ struct dma_buf *msm_cvp_smem_get_dma_buf(int fd)
 	struct dma_buf *dma_buf;
 
 	dma_buf = dma_buf_get(fd);
+
 	if (IS_ERR_OR_NULL(dma_buf)) {
 		dprintk(CVP_ERR, "Failed to get dma_buf for %d, error %ld\n",
-				fd, PTR_ERR(dma_buf));
+			fd, PTR_ERR(dma_buf));
 		dma_buf = NULL;
 	}
 
@@ -164,8 +169,8 @@ void msm_cvp_smem_put_dma_buf(void *dma_buf)
 }
 
 int msm_cvp_map_smem(struct msm_cvp_inst *inst,
-			struct msm_cvp_smem *smem,
-			const char *str)
+		     struct msm_cvp_smem *smem,
+		     const char *str)
 {
 	int rc = 0;
 
@@ -177,16 +182,18 @@ int msm_cvp_map_smem(struct msm_cvp_inst *inst,
 
 	if (!inst || !smem) {
 		dprintk(CVP_ERR, "%s: Invalid params: %pK %pK\n",
-				__func__, inst, smem);
+			__func__, inst, smem);
 		return -EINVAL;
 	}
 
 	dma_buf = smem->dma_buf;
 	rc = dma_buf_get_flags(dma_buf, &ion_flags);
+
 	if (rc) {
 		dprintk(CVP_ERR, "Failed to get dma buf flags: %d\n", rc);
 		goto exit;
 	}
+
 	if (ion_flags & ION_FLAG_CACHED)
 		smem->flags |= SMEM_CACHED;
 
@@ -194,13 +201,16 @@ int msm_cvp_map_smem(struct msm_cvp_inst *inst,
 		smem->flags |= SMEM_SECURE;
 
 	rc = msm_dma_get_device_address(dma_buf, align, &iova, smem->flags,
-			ion_flags, &(inst->core->resources),
-			&smem->mapping_info);
+					ion_flags, &(inst->core->resources),
+					&smem->mapping_info);
+
 	if (rc) {
 		dprintk(CVP_ERR, "Failed to get device address: %d\n", rc);
 		goto exit;
 	}
+
 	temp = (u32)iova;
+
 	if ((dma_addr_t)temp != iova) {
 		dprintk(CVP_ERR, "iova(%pa) truncated to %#x", &iova, temp);
 		rc = -EINVAL;
@@ -218,8 +228,8 @@ exit:
 }
 
 int msm_cvp_unmap_smem(struct msm_cvp_inst *inst,
-		struct msm_cvp_smem *smem,
-		const char *str)
+		       struct msm_cvp_smem *smem,
+		       const char *str)
 {
 	int rc = 0;
 
@@ -231,6 +241,7 @@ int msm_cvp_unmap_smem(struct msm_cvp_inst *inst,
 
 	print_smem(CVP_MEM, str, inst, smem);
 	rc = msm_dma_put_device_address(smem->flags, &smem->mapping_info);
+
 	if (rc) {
 		dprintk(CVP_ERR, "Failed to put device address: %d\n", rc);
 		goto exit;
@@ -243,7 +254,7 @@ exit:
 }
 
 static int alloc_dma_mem(size_t size, u32 align, u32 flags, int map_kernel,
-	struct msm_cvp_platform_resources *res, struct msm_cvp_smem *mem)
+			 struct msm_cvp_platform_resources *res, struct msm_cvp_smem *mem)
 {
 	dma_addr_t iova = 0;
 	unsigned long heap_mask = 0;
@@ -263,13 +274,13 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags, int map_kernel,
 		if (flags & SMEM_ADSP) {
 			dprintk(CVP_MEM, "Allocating from ADSP heap\n");
 			heap_mask = ION_HEAP(ION_ADSP_HEAP_ID);
-		} else {
+		} else
 			heap_mask = ION_HEAP(ION_SYSTEM_HEAP_ID);
-		}
+
 	} else {
 		dprintk(CVP_MEM,
-		"allocate shared memory from adsp heap size %zx align %d\n",
-		size, align);
+			"allocate shared memory from adsp heap size %zx align %d\n",
+			size, align);
 		heap_mask = ION_HEAP(ION_ADSP_HEAP_ID);
 	}
 
@@ -285,10 +296,11 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags, int map_kernel,
 	}
 
 	dbuf = ion_alloc(size, heap_mask, ion_flags);
+
 	if (IS_ERR_OR_NULL(dbuf)) {
 		dprintk(CVP_ERR,
-		"Failed to allocate shared memory = %x bytes, %llx, %x\n",
-		size, heap_mask, ion_flags);
+			"Failed to allocate shared memory = %x bytes, %llx, %x\n",
+			size, heap_mask, ion_flags);
 		rc = -ENOMEM;
 		goto fail_shared_mem_alloc;
 	}
@@ -300,13 +312,16 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags, int map_kernel,
 	mem->kvaddr = NULL;
 
 	rc = msm_dma_get_device_address(dbuf, align, &iova, flags,
-			ion_flags, res, &mem->mapping_info);
+					ion_flags, res, &mem->mapping_info);
+
 	if (rc) {
 		dprintk(CVP_ERR, "Failed to get device address: %d\n",
 			rc);
 		goto fail_device_address;
 	}
+
 	mem->device_addr = (u32)iova;
+
 	if ((dma_addr_t)mem->device_addr != iova) {
 		dprintk(CVP_ERR, "iova(%pa) truncated to %#x",
 			&iova, mem->device_addr);
@@ -316,6 +331,7 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags, int map_kernel,
 	if (map_kernel) {
 		dma_buf_begin_cpu_access(dbuf, DMA_BIDIRECTIONAL);
 		mem->kvaddr = dma_buf_vmap(dbuf);
+
 		if (!mem->kvaddr) {
 			dprintk(CVP_ERR,
 				"Failed to map shared mem in kernel\n");
@@ -331,8 +347,10 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags, int map_kernel,
 	return rc;
 
 fail_map:
+
 	if (map_kernel)
 		dma_buf_end_cpu_access(dbuf, DMA_BIDIRECTIONAL);
+
 fail_device_address:
 	dma_buf_put(dbuf);
 fail_shared_mem_alloc:
@@ -366,7 +384,7 @@ static int free_dma_mem(struct msm_cvp_smem *mem)
 }
 
 int msm_cvp_smem_alloc(size_t size, u32 align, u32 flags, int map_kernel,
-		void *res, struct msm_cvp_smem *smem)
+		       void *res, struct msm_cvp_smem *smem)
 {
 	int rc = 0;
 
@@ -377,8 +395,8 @@ int msm_cvp_smem_alloc(size_t size, u32 align, u32 flags, int map_kernel,
 	}
 
 	rc = alloc_dma_mem(size, align, flags, map_kernel,
-				(struct msm_cvp_platform_resources *)res,
-				smem);
+			   (struct msm_cvp_platform_resources *)res,
+			   smem);
 
 	return rc;
 }
@@ -391,6 +409,7 @@ int msm_cvp_smem_free(struct msm_cvp_smem *smem)
 		dprintk(CVP_ERR, "NULL smem passed\n");
 		return -EINVAL;
 	}
+
 	rc = free_dma_mem(smem);
 
 	return rc;
@@ -409,32 +428,39 @@ int msm_cvp_smem_cache_operations(struct dma_buf *dbuf,
 
 	/* Return if buffer doesn't support caching */
 	rc = dma_buf_get_flags(dbuf, &flags);
+
 	if (rc) {
 		dprintk(CVP_ERR, "%s: dma_buf_get_flags failed, err %d\n",
 			__func__, rc);
 		return rc;
-	} else if (!(flags & ION_FLAG_CACHED)) {
+
+	} else if (!(flags & ION_FLAG_CACHED))
 		return rc;
-	}
 
 	switch (cache_op) {
 	case SMEM_CACHE_CLEAN:
 	case SMEM_CACHE_CLEAN_INVALIDATE:
 		rc = dma_buf_begin_cpu_access_partial(dbuf, DMA_BIDIRECTIONAL,
-				offset, size);
+						      offset, size);
+
 		if (rc)
 			break;
+
 		rc = dma_buf_end_cpu_access_partial(dbuf, DMA_BIDIRECTIONAL,
-				offset, size);
+						    offset, size);
 		break;
+
 	case SMEM_CACHE_INVALIDATE:
 		rc = dma_buf_begin_cpu_access_partial(dbuf, DMA_TO_DEVICE,
-				offset, size);
+						      offset, size);
+
 		if (rc)
 			break;
+
 		rc = dma_buf_end_cpu_access_partial(dbuf, DMA_FROM_DEVICE,
-				offset, size);
+						    offset, size);
 		break;
+
 	default:
 		dprintk(CVP_ERR, "%s: cache (%d) operation not supported\n",
 			__func__, cache_op);
@@ -446,7 +472,7 @@ int msm_cvp_smem_cache_operations(struct dma_buf *dbuf,
 }
 
 struct context_bank_info *msm_cvp_smem_get_context_bank(bool is_secure,
-	struct msm_cvp_platform_resources *res, unsigned long ion_flags)
+		struct msm_cvp_platform_resources *res, unsigned long ion_flags)
 {
 	struct context_bank_info *cb = NULL, *match = NULL;
 	char *search_str;
@@ -456,16 +482,19 @@ struct context_bank_info *msm_cvp_smem_get_context_bank(bool is_secure,
 
 	if (ion_flags & ION_FLAG_CP_PIXEL)
 		search_str = secure_pixel_cb;
+
 	else if (ion_flags & ION_FLAG_CP_NON_PIXEL)
 		search_str = secure_nonpixel_cb;
+
 	else if (ion_flags & ION_FLAG_CP_CAMERA)
 		search_str = secure_pixel_cb;
+
 	else
 		search_str = non_secure_cb;
 
 	list_for_each_entry(cb, &res->context_banks, list) {
 		if (cb->is_secure == is_secure &&
-			!strcmp(search_str, cb->name)) {
+				!strcmp(search_str, cb->name)) {
 			match = cb;
 			break;
 		}
@@ -489,8 +518,10 @@ int msm_cvp_map_ipcc_regs(u32 *iova)
 	u32 size;
 
 	core = list_first_entry(&cvp_driver->cores, struct msm_cvp_core, list);
+
 	if (core) {
 		hfi_ops = core->device;
+
 		if (hfi_ops)
 			dev = hfi_ops->hfi_device_data;
 	}
@@ -505,14 +536,18 @@ int msm_cvp_map_ipcc_regs(u32 *iova)
 		return -EINVAL;
 
 	cb = msm_cvp_smem_get_context_bank(false, dev->res, 0);
+
 	if (!cb) {
 		dprintk(CVP_ERR, "%s: fail to get context bank\n", __func__);
 		return -EINVAL;
 	}
+
 	*iova = dma_map_resource(cb->dev, paddr, size, DMA_BIDIRECTIONAL, 0);
+
 	if (*iova == DMA_MAPPING_ERROR) {
 		dprintk(CVP_WARN, "%s: fail to map IPCC regs\n", __func__);
 		return -EFAULT;
 	}
+
 	return 0;
 }

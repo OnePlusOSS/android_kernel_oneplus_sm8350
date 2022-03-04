@@ -29,10 +29,10 @@ struct cvp_hfi_packetization_ops {
 		struct cvp_resource_hdr *resource_hdr,
 		void *resource_value);
 	int (*sys_debug_config)(struct cvp_hfi_cmd_sys_set_property_packet *pkt,
-			u32 mode);
+				u32 mode);
 	int (*sys_coverage_config)(
-			struct cvp_hfi_cmd_sys_set_property_packet *pkt,
-			u32 mode);
+		struct cvp_hfi_cmd_sys_set_property_packet *pkt,
+		u32 mode);
 	int (*sys_set_idle_indicator)(
 		struct cvp_hfi_cmd_sys_set_property_packet *pkt,
 		u32 mode);
@@ -40,16 +40,16 @@ struct cvp_hfi_packetization_ops {
 		struct cvp_hfi_cmd_sys_release_resource_packet *pkt,
 		struct cvp_resource_hdr *resource_hdr);
 	int (*sys_image_version)(
-			struct cvp_hfi_cmd_sys_get_property_packet *pkt);
+		struct cvp_hfi_cmd_sys_get_property_packet *pkt);
 	int (*sys_ubwc_config)(struct cvp_hfi_cmd_sys_set_property_packet *pkt,
-		struct msm_cvp_ubwc_config_data *ubwc_config);
+			       struct msm_cvp_ubwc_config_data *ubwc_config);
 	int (*ssr_cmd)(enum hal_ssr_trigger_type type,
-		struct cvp_hfi_cmd_sys_test_ssr_packet *pkt);
+		       struct cvp_hfi_cmd_sys_test_ssr_packet *pkt);
 	int (*session_init)(
 		struct cvp_hfi_cmd_sys_session_init_packet *pkt,
 		struct cvp_hal_session *session);
 	int (*session_cmd)(struct cvp_hal_session_cmd_pkt *pkt,
-		int pkt_type, struct cvp_hal_session *session);
+			   int pkt_type, struct cvp_hal_session *session);
 	int (*session_set_buffers)(
 		void *pkt,
 		struct cvp_hal_session *session,
@@ -65,11 +65,11 @@ struct cvp_hfi_packetization_ops {
 		struct cvp_hfi_cmd_session_sync_process_packet *pkt,
 		struct cvp_hal_session *session);
 	int (*session_send)(
-			struct cvp_kmd_hfi_packet *out_pkt,
-			struct cvp_hal_session *session,
-			struct cvp_kmd_hfi_packet *in_pkt);
+		struct cvp_kmd_hfi_packet *out_pkt,
+		struct cvp_hal_session *session,
+		struct cvp_kmd_hfi_packet *in_pkt);
 };
 
 struct cvp_hfi_packetization_ops *cvp_hfi_get_pkt_ops_handle(
-		enum hfi_packetization_type);
-#endif
+	enum hfi_packetization_type);
+#endif /*__HFI_PACKETIZATION__*/

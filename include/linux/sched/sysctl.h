@@ -46,6 +46,9 @@ extern unsigned int sysctl_sched_walt_rotate_big_tasks;
 extern unsigned int sysctl_sched_min_task_util_for_boost;
 extern unsigned int sysctl_sched_min_task_util_for_colocation;
 extern unsigned int sysctl_sched_asym_cap_sibling_freq_match_pct;
+#ifdef CONFIG_SCHED_WALT_COBUCK
+extern unsigned int __weak sysctl_sched_asym_cap_sibling_freq_match_en;
+#endif
 extern unsigned int sysctl_sched_coloc_downmigrate_ns;
 extern unsigned int sysctl_sched_task_unfilter_period;
 extern unsigned int sysctl_sched_busy_hyst_enable_cpus;
@@ -164,6 +167,13 @@ extern int sched_energy_aware_handler(struct ctl_table *table, int write,
 				 void __user *buffer, size_t *lenp,
 				 loff_t *ppos);
 #endif
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern int sysctl_sched_assist_scene_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *lenp, loff_t *ppos);
+extern int sysctl_sched_assist_input_boost_ctrl_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *lenp, loff_t *ppos);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 #define LIB_PATH_LENGTH 512
 extern char sched_lib_name[LIB_PATH_LENGTH];

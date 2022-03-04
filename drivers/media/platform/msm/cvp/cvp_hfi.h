@@ -217,7 +217,7 @@ struct msm_cvp_fw {
 };
 
 int cvp_hfi_process_msg_packet(u32 device_id,
-	void *msg_hdr, struct msm_cvp_cb_info *info);
+			       void *msg_hdr, struct msm_cvp_cb_info *info);
 
 enum cvp_status cvp_hfi_process_sys_init_done_prop_read(
 	struct cvp_hfi_msg_sys_init_done_packet *pkt,
@@ -227,4 +227,4 @@ enum cvp_status hfi_process_session_init_done_prop_read(
 	struct cvp_hfi_msg_sys_session_init_done_packet *pkt,
 	struct cvp_hal_session_init_done *session_init_done);
 
-#endif
+#endif/*__H_CVP_HFI_H__*/

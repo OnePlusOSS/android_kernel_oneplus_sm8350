@@ -20,6 +20,8 @@
 enum z_erofs_cache_alloctype {
 	DONTALLOC,	/* don't allocate any cached pages */
 	DELAYEDALLOC,	/* delayed allocation (at the time of submitting io) */
+	TRYALLOC,	/* try to allocate or do in-place approach otherwise */
+			/* to prevent causing direct reclaim */
 };
 
 /*
@@ -33,7 +35,7 @@ typedef tagptr1_t compressed_page_t;
 
 static struct workqueue_struct *z_erofs_workqueue __read_mostly;
 static struct kmem_cache *pcluster_cachep __read_mostly;
-
+static void z_erofs_vle_unzip_wq(struct work_struct *work);
 void z_erofs_exit_zip_subsystem(void)
 {
 	destroy_workqueue(z_erofs_workqueue);
@@ -171,6 +173,7 @@ static void preload_compressed_pages(struct z_erofs_collector *clt,
 	struct page **pages = clt->compressedpages;
 	pgoff_t index = pcl->obj.index + (pages - pcl->compressed_pages);
 	bool standalone = true;
+	gfp_t gfp = mapping_gfp_constraint(mc, GFP_KERNEL) & ~__GFP_DIRECT_RECLAIM;
 
 	if (clt->mode < COLLECT_PRIMARY_FOLLOWED)
 		return;
@@ -178,6 +181,7 @@ static void preload_compressed_pages(struct z_erofs_collector *clt,
 	for (; pages < pcl->compressed_pages + clusterpages; ++pages) {
 		struct page *page;
 		compressed_page_t t;
+		struct page *newpage = NULL;
 
 		/* the compressed page was loaded before */
 		if (READ_ONCE(*pages))
@@ -189,7 +193,21 @@ static void preload_compressed_pages(struct z_erofs_collector *clt,
 			t = tag_compressed_page_justfound(page);
 		} else if (type == DELAYEDALLOC) {
 			t = tagptr_init(compressed_page_t, PAGE_UNALLOCATED);
+		} else if (type == TRYALLOC) {
+			gfp |= __GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN;
+
+			if (!list_empty(pagepool)) {
+				newpage = lru_to_page(pagepool);
+				list_del(&newpage->lru);
+			} else {
+				newpage = alloc_page(gfp);
+			}
+			if (!newpage)
+				goto fallback_dontalloc;
+			newpage->mapping = Z_EROFS_MAPPING_PREALLOCATED;
+			t = tag_compressed_page_justfound(newpage);
 		} else {	/* DONTALLOC */
+fallback_dontalloc:
 			if (standalone)
 				clt->compressedpages = pages;
 			standalone = false;
@@ -199,8 +217,12 @@ static void preload_compressed_pages(struct z_erofs_collector *clt,
 		if (!cmpxchg_relaxed(pages, NULL, tagptr_cast_ptr(t)))
 			continue;
 
-		if (page)
+		if (page) {
 			put_page(page);
+		} else if (newpage) {
+			newpage->mapping = NULL;
+			list_add(&newpage->lru, pagepool);
+		}
 	}
 
 	if (standalone)		/* downgrade to PRIMARY_FOLLOWED_NOINPLACE */
@@ -621,7 +643,11 @@ restart_now:
 
 	/* preload all compressed pages (maybe downgrade role if necessary) */
 	if (should_alloc_managed_pages(fe, sbi->cache_strategy, map->m_la))
+#if defined(CONFIG_OPLUS_FEATURE_EROFS)
+		cache_strategy = TRYALLOC;
+#else
 		cache_strategy = DELAYEDALLOC;
+#endif
 	else
 		cache_strategy = DONTALLOC;
 
@@ -714,8 +740,16 @@ static void z_erofs_vle_unzip_kickoff(void *ptr, int bios)
 		return;
 	}
 
-	if (!atomic_add_return(bios, &io->pending_bios))
+	if (!atomic_add_return(bios, &io->pending_bios)){
+#if defined(CONFIG_OPLUS_FEATURE_EROFS) && defined(CONFIG_PREEMPT_COUNT)
+		if (in_atomic() || irqs_disabled())
+			queue_work(z_erofs_workqueue, &io->u.work);
+		else
+			z_erofs_vle_unzip_wq(&io->u.work);
+#else
 		queue_work(z_erofs_workqueue, &io->u.work);
+#endif
+	}
 }
 
 static inline void z_erofs_vle_read_endio(struct bio *bio)
@@ -1043,6 +1077,11 @@ repeat:
 		goto out;
 	}
 
+	if (mapping == Z_EROFS_MAPPING_PREALLOCATED) {
+		WRITE_ONCE(pcl->compressed_pages[nr], page);
+		goto out_to_managed_cache;
+	}
+
 	/*
 	 * unmanaged (file) pages are all locked solidly,
 	 * therefore it is impossible for `mapping' to be NULL.
@@ -1101,6 +1140,7 @@ out_allocpage:
 	}
 	if (nocache || !tocache)
 		goto out;
+out_to_managed_cache:
 	if (add_to_page_cache_lru(page, mc, index + nr, gfp)) {
 		page->mapping = Z_EROFS_MAPPING_STAGING;
 		goto out;
@@ -1322,8 +1362,8 @@ static void z_erofs_submit_and_unzip(struct super_block *sb,
 		return;
 
 	/* wait until all bios are completed */
-	wait_event(io[JQ_SUBMIT].u.wait,
-		   !atomic_read(&io[JQ_SUBMIT].pending_bios));
+	io_wait_event(io[JQ_SUBMIT].u.wait,
+		      !atomic_read(&io[JQ_SUBMIT].pending_bios));
 
 	/* let's synchronous decompression */
 	z_erofs_vle_unzip_all(sb, &io[JQ_SUBMIT], pagepool);
@@ -1345,7 +1385,7 @@ static int z_erofs_vle_normalaccess_readpage(struct file *file,
 	(void)z_erofs_collector_end(&f.clt);
 
 	/* if some compressed cluster ready, need submit them anyway */
-	z_erofs_submit_and_unzip(inode->i_sb, &f.clt, &pagepool, true);
+	z_erofs_submit_and_unzip(inode->i_sb, &f.clt, &pagepool, false);
 
 	if (err)
 		erofs_err(inode->i_sb, "failed to read, err [%d]", err);
@@ -1422,7 +1462,7 @@ static int z_erofs_vle_normalaccess_readpages(struct file *filp,
 
 	(void)z_erofs_collector_end(&f.clt);
 
-	z_erofs_submit_and_unzip(inode->i_sb, &f.clt, &pagepool, sync);
+	z_erofs_submit_and_unzip(inode->i_sb, &f.clt, &pagepool, false);
 
 	if (f.map.mpage)
 		put_page(f.map.mpage);

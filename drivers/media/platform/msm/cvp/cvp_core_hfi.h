@@ -13,7 +13,6 @@
 #include <linux/spinlock.h>
 #include "cvp_hfi_api.h"
 #include "cvp_hfi_helper.h"
-#include "cvp_hfi_api.h"
 #include "cvp_hfi.h"
 #include "msm_cvp_resources.h"
 #include "hfi_packetization.h"
@@ -265,9 +264,9 @@ struct iris_hfi_device {
 void cvp_iris_hfi_delete_device(void *device);
 
 int cvp_iris_hfi_initialize(struct cvp_hfi_device *hdev, u32 device_id,
-		struct msm_cvp_platform_resources *res,
-		hfi_cmd_response_callback callback);
+			    struct msm_cvp_platform_resources *res,
+			    hfi_cmd_response_callback callback);
 
 int load_cvp_fw_impl(struct iris_hfi_device *device);
 int unload_cvp_fw_impl(struct iris_hfi_device *device);
-#endif
+#endif /*__H_CVP_CORE_HFI_H__*/

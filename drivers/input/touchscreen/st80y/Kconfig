@@ -1,0 +1,5 @@
+config TOUCHPANEL_ST80Y
+	default y
+	bool "TP ST80Y enable or not for OPLUS"
+	---help---
+	say Y to enable driver for Touchpanel using ST80Y

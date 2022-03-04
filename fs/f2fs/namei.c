@@ -270,6 +270,13 @@ int f2fs_update_extension_list(struct f2fs_sb_info *sbi, const char *name,
 	return 0;
 }
 
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+static bool is_log_file(const char *filename)
+{
+	return is_extension_exist(filename, "log");
+}
+#endif
+
 static void set_compress_inode(struct f2fs_sb_info *sbi, struct inode *inode,
 						const unsigned char *name)
 {
@@ -333,6 +340,10 @@ static int f2fs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	if (!test_opt(sbi, DISABLE_EXT_IDENTIFY))
 		set_file_temperature(sbi, inode, dentry->d_name.name);
 
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+	if (is_log_file(dentry->d_name.name))
+		set_inode_flag(inode, FI_LOG_FILE);
+#endif
 	set_compress_inode(sbi, inode, dentry->d_name.name);
 
 	inode->i_op = &f2fs_file_inode_operations;
@@ -352,6 +363,13 @@ static int f2fs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 
 	if (IS_DIRSYNC(dir))
 		f2fs_sync_fs(sbi->sb, 1);
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	if (__is_hpb_file(dentry->d_name.name, inode))
+		set_inode_flag(inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 
 	f2fs_balance_fs(sbi, true);
 	return 0;
@@ -483,7 +501,9 @@ static struct dentry *f2fs_lookup(struct inode *dir, struct dentry *dentry,
 	int err = 0;
 	unsigned int root_ino = F2FS_ROOT_INO(F2FS_I_SB(dir));
 	struct f2fs_filename fname;
-
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
+#endif
 	trace_f2fs_lookup_start(dir, dentry, flags);
 
 	if (dentry->d_name.len > F2FS_NAME_LEN) {
@@ -537,6 +557,19 @@ static struct dentry *f2fs_lookup(struct inode *dir, struct dentry *dentry,
 		err = -EPERM;
 		goto out_iput;
 	}
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	if (__is_hpb_file(dentry->d_name.name, inode))
+		set_inode_flag(inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+#ifdef CONFIG_OPLUS_FEATURE_OF2FS
+  	if (is_log_file(dentry->d_name.name))
+		set_inode_flag(inode, FI_LOG_FILE);
+	if (!test_opt(sbi, DISABLE_EXT_IDENTIFY) && !file_is_cold(inode))
+		set_file_temperature(sbi, inode, dentry->d_name.name);
+#endif
 out_splice:
 #ifdef CONFIG_UNICODE
 	if (!inode && IS_CASEFOLDED(dir)) {
@@ -901,6 +934,11 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct f2fs_dir_entry *old_entry;
 	struct f2fs_dir_entry *new_entry;
 	int err;
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	struct inode *hpb_inode;
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 
 	if (unlikely(f2fs_cp_error(sbi)))
 		return -EIO;
@@ -1052,6 +1090,16 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 			f2fs_add_ino_entry(sbi, old_inode->i_ino,
 							TRANS_DIR_INO);
 	}
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	hpb_inode = (new_inode)? : old_inode;
+	if (__is_hpb_file(new_dentry->d_name.name, hpb_inode))
+		set_inode_flag(hpb_inode, FI_HPB_INODE);
+	else
+		clear_inode_flag(hpb_inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 
 	f2fs_unlock_op(sbi);
 

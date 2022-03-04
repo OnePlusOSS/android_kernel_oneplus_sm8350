@@ -38,7 +38,7 @@ enum cvp_msg_prio {
 	CVP_SESS = 0x002000,
 	CVP_HFI  = 0x004000,
 	CVP_DBG  = CVP_MEM | CVP_SYNX | CVP_CORE | CVP_REG |
-		CVP_PWR | CVP_DSP | CVP_SESS | CVP_HFI,
+		   CVP_PWR | CVP_DSP | CVP_SESS | CVP_HFI,
 };
 
 enum cvp_msg_out {
@@ -94,34 +94,49 @@ static inline char *get_debug_level_str(int level)
 	switch (level) {
 	case CVP_ERR:
 		return "err";
+
 	case CVP_WARN:
 		return "warn";
+
 	case CVP_INFO:
 		return "info";
+
 	case CVP_DBG:
 		return "dbg";
+
 	case CVP_PROF:
 		return "prof";
+
 	case CVP_PKT:
 		return "pkt";
+
 	case CVP_MEM:
 		return "mem";
+
 	case CVP_SYNX:
 		return "synx";
+
 	case CVP_CORE:
 		return "core";
+
 	case CVP_REG:
 		return "reg";
+
 	case CVP_PWR:
 		return "pwr";
+
 	case CVP_DSP:
 		return "dsp";
+
 	case CVP_FW:
 		return "fw";
+
 	case CVP_SESS:
 		return "sess";
+
 	case CVP_HFI:
 		return "hfi";
+
 	default:
 		return "???";
 	}
@@ -136,14 +151,14 @@ static inline void show_stats(struct msm_cvp_inst *i)
 				(msm_cvp_debug & CVP_PROF)) {
 			if (i->debug.samples) {
 				dprintk(CVP_PROF, "%s averaged %d ms/sample\n",
-						i->debug.pdata[x].name,
-						i->debug.pdata[x].cumulative /
-						i->debug.samples);
+					i->debug.pdata[x].name,
+					i->debug.pdata[x].cumulative /
+					i->debug.samples);
 			}
 
 			dprintk(CVP_PROF, "%s Samples: %d\n",
-					i->debug.pdata[x].name,
-					i->debug.samples);
+				i->debug.pdata[x].name,
+				i->debug.samples);
 		}
 	}
 }
@@ -178,4 +193,4 @@ static inline void msm_cvp_handle_hw_error(struct msm_cvp_core *core)
 	msm_cvp_res_handle_fatal_hw_error(&core->resources, enable_fatal);
 }
 
-#endif
+#endif /*__MSM_CVP_DEBUG__*/

@@ -27,7 +27,7 @@
 #define CYCLES_MARGIN_IN_POWEROF2 3
 
 int msm_cvp_est_cycles(struct cvp_kmd_usecase_desc *cvp_desc,
-		struct cvp_kmd_request_power *cvp_voting)
+		       struct cvp_kmd_request_power *cvp_voting)
 {
 	dprintk(CVP_ERR, "Deprecated cvp func %s\n", __func__);
 	return 0;
@@ -35,14 +35,14 @@ int msm_cvp_est_cycles(struct cvp_kmd_usecase_desc *cvp_desc,
 EXPORT_SYMBOL(msm_cvp_est_cycles);
 
 int msm_cvp_poll(void *instance, struct file *filp,
-		struct poll_table_struct *wait)
+		 struct poll_table_struct *wait)
 {
 	return 0;
 }
 EXPORT_SYMBOL(msm_cvp_poll);
 
 int msm_cvp_private(void *cvp_inst, unsigned int cmd,
-		struct cvp_kmd_arg *arg)
+		    struct cvp_kmd_arg *arg)
 {
 	int rc = 0;
 	struct msm_cvp_inst *inst = (struct msm_cvp_inst *)cvp_inst;
@@ -68,6 +68,7 @@ static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
 	mutex_lock(&core->lock);
 	list_for_each_entry(inst, &core->instances, list) {
 		instance_count++;
+
 		/* This flag is not updated yet for the current instance */
 		if (inst->flags & CVP_SECURE)
 			secure_instance_count++;
@@ -77,9 +78,10 @@ static bool msm_cvp_check_for_inst_overload(struct msm_cvp_core *core)
 	/* Instance count includes current instance as well. */
 
 	if ((instance_count >= core->resources.max_inst_count) ||
-		(secure_instance_count >=
-			core->resources.max_secure_inst_count))
+			(secure_instance_count >=
+			 core->resources.max_secure_inst_count))
 		overload = true;
+
 	return overload;
 }
 
@@ -146,7 +148,9 @@ void *msm_cvp_open(int core_id, int session_type)
 			core_id, session_type);
 		goto err_invalid_core;
 	}
+
 	core = get_cvp_core(core_id);
+
 	if (!core) {
 		dprintk(CVP_ERR,
 			"Failed to find core for core_id = %d\n", core_id);
@@ -159,6 +163,7 @@ void *msm_cvp_open(int core_id, int session_type)
 	}
 
 	core->resources.max_inst_count = MAX_SUPPORTED_INSTANCES;
+
 	if (msm_cvp_check_for_inst_overload(core)) {
 		dprintk(CVP_ERR, "Instance num reached Max, rejecting session");
 		mutex_lock(&core->lock);
@@ -172,6 +177,7 @@ void *msm_cvp_open(int core_id, int session_type)
 	}
 
 	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
+
 	if (!inst) {
 		dprintk(CVP_ERR, "Failed to allocate memory\n");
 		rc = -ENOMEM;
@@ -203,9 +209,8 @@ void *msm_cvp_open(int core_id, int session_type)
 	inst->clk_data.core_id = 0;
 
 	for (i = SESSION_MSG_INDEX(SESSION_MSG_START);
-		i <= SESSION_MSG_INDEX(SESSION_MSG_END); i++) {
+			i <= SESSION_MSG_INDEX(SESSION_MSG_END); i++)
 		init_completion(&inst->completions[i]);
-	}
 
 	msm_cvp_session_init(inst);
 
@@ -217,10 +222,12 @@ void *msm_cvp_open(int core_id, int session_type)
 	__init_fence_queue(inst);
 
 	rc = __init_session_queue(inst);
+
 	if (rc)
 		goto fail_init;
 
 	rc = msm_cvp_comm_try_state(inst, MSM_CVP_CORE_INIT_DONE);
+
 	if (rc) {
 		dprintk(CVP_ERR,
 			"Failed to move cvp instance to init state\n");
@@ -252,15 +259,17 @@ err_invalid_core:
 EXPORT_SYMBOL(msm_cvp_open);
 
 static void msm_cvp_clean_sess_queue(struct msm_cvp_inst *inst,
-		struct cvp_session_queue *sq)
+				     struct cvp_session_queue *sq)
 {
 	struct cvp_session_msg *mptr, *dummy;
 	u64 ktid;
 
 	spin_lock(&sq->lock);
+
 	if (sq->msg_count && sq->state != QUEUE_ACTIVE) {
 		list_for_each_entry_safe(mptr, dummy, &sq->msgs, node) {
 			ktid = mptr->pkt.client_data.kdata;
+
 			if (ktid) {
 				list_del_init(&mptr->node);
 				sq->msg_count--;
@@ -269,6 +278,7 @@ static void msm_cvp_clean_sess_queue(struct msm_cvp_inst *inst,
 			}
 		}
 	}
+
 	spin_unlock(&sq->lock);
 }
 
@@ -294,16 +304,19 @@ static void msm_cvp_cleanup_instance(struct msm_cvp_inst *inst)
 wait_dsp:
 	mutex_lock(&inst->cvpdspbufs.lock);
 	empty_dsp = list_empty(&inst->cvpdspbufs.list);
+
 	if (!empty_dsp && max_retries_dsp > 0) {
 		mutex_unlock(&inst->cvpdspbufs.lock);
 		usleep_range(1000, 2000);
 		max_retries_dsp--;
 		goto wait_dsp;
 	}
+
 	mutex_unlock(&inst->cvpdspbufs.lock);
 
 	dprintk(CVP_DBG, "empty_dsp %d, retry %d\n", (int)empty_dsp,
-	(inst->core->resources.msm_cvp_hw_rsp_timeout >> 1) - max_retries_dsp);
+		(inst->core->resources.msm_cvp_hw_rsp_timeout >> 1) - max_retries_dsp);
+
 	if (!empty_dsp) {
 		dprintk(CVP_WARN,
 			"Failed to process DSP frames before session close\n");
@@ -312,6 +325,7 @@ wait_dsp:
 wait:
 	mutex_lock(&inst->frames.lock);
 	empty = list_empty(&inst->frames.list);
+
 	if (!empty && max_retries > 0) {
 		mutex_unlock(&inst->frames.lock);
 		usleep_range(1000, 2000);
@@ -320,6 +334,7 @@ wait:
 		max_retries--;
 		goto wait;
 	}
+
 	mutex_unlock(&inst->frames.lock);
 
 	if (!empty) {
@@ -370,9 +385,11 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 
 	pr_info(CVP_DBG_TAG "Closed cvp instance: %pK session_id = %d\n",
 		"sess", inst, hash32_ptr(inst->session));
+
 	if (inst->cur_cmd_type)
 		dprintk(CVP_ERR, "deleted instance has pending cmd %d\n",
-				inst->cur_cmd_type);
+			inst->cur_cmd_type);
+
 	inst->session = (void *)0xdeadbeef;
 	kfree(inst);
 	return 0;
@@ -381,7 +398,7 @@ int msm_cvp_destroy(struct msm_cvp_inst *inst)
 static void close_helper(struct kref *kref)
 {
 	struct msm_cvp_inst *inst = container_of(kref,
-			struct msm_cvp_inst, kref);
+				    struct msm_cvp_inst, kref);
 
 	msm_cvp_destroy(inst);
 }
@@ -402,6 +419,7 @@ int msm_cvp_close(void *instance)
 	}
 
 	rc = msm_cvp_comm_try_state(inst, MSM_CVP_CORE_UNINIT);
+
 	if (rc) {
 		dprintk(CVP_ERR,
 			"Failed to move inst %pK to uninit state\n", inst);

@@ -1122,6 +1122,13 @@ struct dst_entry *inet_csk_update_pmtu(struct sock *sk, u32 mtu)
 	}
 	dst->ops->update_pmtu(dst, sk, NULL, mtu, true);
 
+//	#ifdef OPLUS_FEATURE_WIFI_MTUDETECT
+	pr_err("%s: current_mtu = %d , frag_mtu = %d mtu = %d\n", __func__, dst->dev->mtu, dst_mtu(dst),mtu);
+	//do not use dst_mtu here, because dst_mtu should be changed by update_pmtu after inet_csk_rebuild_route
+	if (dst->dev->mtu > mtu && mtu > IPV6_MIN_MTU) {
+		dst->dev->mtu = mtu;
+	}
+//	#endif /* OPLUS_FEATURE_WIFI_MTUDETECT */
 	dst = __sk_dst_check(sk, 0);
 	if (!dst)
 		dst = inet_csk_rebuild_route(sk, &inet->cork.fl);

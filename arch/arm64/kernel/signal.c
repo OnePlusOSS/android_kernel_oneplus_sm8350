@@ -907,7 +907,9 @@ asmlinkage void do_notify_resume(struct pt_regs *regs,
 			/* Unmask Debug and SError for the next task */
 			local_daif_restore(DAIF_PROCCTX_NOIRQ);
 
+			current->android_kabi_reserved1 = 1;
 			schedule();
+			current->android_kabi_reserved1 = 2;
 		} else {
 			local_daif_restore(DAIF_PROCCTX);
 

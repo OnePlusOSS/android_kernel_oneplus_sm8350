@@ -127,6 +127,10 @@ struct adc5_channel_prop {
 	unsigned int		avg_samples;
 	enum vadc_scale_fn_type	scale_fn_type;
 	const char		*datasheet_name;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int			cust_type;
+	int			cust_scale_fn_type;
+#endif
 };
 
 /**
@@ -737,14 +741,26 @@ static const struct adc5_channels adc7_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_AMUX_THM4_100K_PU]	= ADC5_CHAN_TEMP("amux_thm4_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	[ADC7_AMUX_THM5_100K_PU]	= ADC5_CHAN_TEMP("amux_thm5_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#else
+	[ADC7_AMUX_THM5_100K_PU]	= ADC5_CHAN_VOLT("amux_thm5_pu2", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
 	[ADC7_AMUX_THM6_100K_PU]	= ADC5_CHAN_TEMP("amux_thm6_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
-	[ADC7_GPIO1_100K_PU]	= ADC5_CHAN_TEMP("gpio1_pu2", 0,
+	[ADC7_GPIO1_100K_PU]    = ADC5_CHAN_TEMP("gpio1_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+	[ADC7_GPIO1]	= ADC5_CHAN_VOLT("pm8350_board_id", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	[ADC7_GPIO2_100K_PU]	= ADC5_CHAN_TEMP("gpio2_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#else
+	[ADC7_GPIO2_100K_PU]	= ADC5_CHAN_VOLT("gpio2_pu2", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
 	[ADC7_GPIO3_100K_PU]	= ADC5_CHAN_TEMP("gpio3_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_GPIO4_100K_PU]	= ADC5_CHAN_TEMP("gpio4_pu2", 0,
@@ -907,6 +923,17 @@ static int adc5_get_dt_channel_data(struct adc5_chip *adc,
 	else
 		prop->cal_method = ADC5_ABSOLUTE_CAL;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!of_property_read_u32(node, "oplus,cust_type", &value))
+		prop->cust_type = value;
+	else
+		prop->cust_type = -1;
+
+	if (!of_property_read_u32(node, "oplus,cust_scale_fn_type", &value))
+		prop->cust_scale_fn_type = value;
+	else
+		prop->cust_scale_fn_type = -1;
+#endif
 	/*
 	 * Default to using timer calibration. Using a fresh calibration value
 	 * for every conversion will increase the overall time for a request.
@@ -1046,6 +1073,14 @@ static int adc5_get_dt_data(struct adc5_chip *adc, struct device_node *node)
 		iio_chan->info_mask_separate = adc_chan->info_mask;
 		iio_chan->type = adc_chan->type;
 		iio_chan->address = index;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if(prop.cust_type != -1 && prop.cust_scale_fn_type != -1) {
+			pr_err("%s: force to cust_type %d, cust_scale_fn_type %d\n", prop.datasheet_name, prop.cust_type, prop.cust_scale_fn_type);
+			iio_chan->type = prop.cust_type;
+			iio_chan->info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED);
+			adc->chan_props[index].scale_fn_type = prop.cust_scale_fn_type;
+		}
+#endif
 		iio_chan++;
 		chan_props++;
 		index++;

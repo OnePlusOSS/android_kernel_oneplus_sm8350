@@ -160,7 +160,7 @@ static int bcl_write_register(struct bcl_device *bcl_perph,
 				base + reg_offset, data, ret);
 		return ret;
 	}
-	pr_debug("wrote 0x%02x to 0x%04x\n", data, base + reg_offset);
+	pr_err("wrote 0x%02x to 0x%04x\n", data, base + reg_offset);
 
 	return ret;
 }
@@ -671,7 +671,7 @@ static void bcl_probe_lvls(struct platform_device *pdev,
 
 static void bcl_configure_bcl_peripheral(struct bcl_device *bcl_perph)
 {
-	bcl_write_register(bcl_perph, BCL_MONITOR_EN, BIT(7));
+	bcl_write_register(bcl_perph, BCL_MONITOR_EN, 0x0);
 }
 
 static int bcl_remove(struct platform_device *pdev)

@@ -3761,8 +3761,12 @@ void icnss_add_fw_prefix_name(struct icnss_priv *priv, char *prefix_name,
 		return;
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_BDF)
+	scnprintf(prefix_name, ICNSS_MAX_FILE_NAME, "%s", name);
+#else
 	scnprintf(prefix_name, ICNSS_MAX_FILE_NAME,
 		  QCA6750_PATH_PREFIX "%s", name);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_BDF */
 
 	icnss_pr_dbg("File added with prefix: %s\n", prefix_name);
 }

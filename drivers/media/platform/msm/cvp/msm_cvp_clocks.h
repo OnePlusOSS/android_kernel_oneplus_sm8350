@@ -9,4 +9,4 @@
 #include "msm_cvp_internal.h"
 
 int msm_cvp_set_clocks(struct msm_cvp_core *core);
-#endif
+#endif /*_MSM_CVP_CLOCKS_H_*/

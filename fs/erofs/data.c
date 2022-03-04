@@ -6,6 +6,8 @@
  */
 #include "internal.h"
 #include <linux/prefetch.h>
+#include <linux/uio.h>
+#include <linux/blkdev.h>
 
 #include <trace/events/erofs.h>
 
@@ -323,12 +325,63 @@ static int erofs_raw_access_readpages(struct file *filp,
 	return 0;
 }
 
+static int erofs_get_block(struct inode *inode, sector_t iblock,
+			   struct buffer_head *bh, int create)
+{
+	struct erofs_map_blocks map = {
+		.m_la = blknr_to_addr(iblock),
+	};
+	int err;
+
+	err = erofs_map_blocks(inode, &map, EROFS_GET_BLOCKS_RAW);
+	if (err)
+		return err;
+
+	if (map.m_flags & EROFS_MAP_MAPPED)
+		map_bh(bh, inode->i_sb, erofs_blknr(map.m_pa));
+
+	return err;
+}
+
+static int check_direct_IO(struct inode *inode, struct iov_iter *iter,
+			   loff_t offset)
+{
+	unsigned i_blkbits = READ_ONCE(inode->i_blkbits);
+	unsigned blkbits = i_blkbits;
+	unsigned blocksize_mask = (1 << blkbits) - 1;
+	unsigned long align = offset | iov_iter_alignment(iter);
+	struct block_device *bdev = inode->i_sb->s_bdev;
+
+	if (align & blocksize_mask) {
+		if (bdev)
+			blkbits = blksize_bits(bdev_logical_block_size(bdev));
+		blocksize_mask = (1 << blkbits) - 1;
+		if (align & blocksize_mask)
+			return -EINVAL;
+		return 1;
+	}
+	return 0;
+}
+
+static ssize_t erofs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
+{
+	struct address_space *mapping = iocb->ki_filp->f_mapping;
+	struct inode *inode = mapping->host;
+	loff_t offset = iocb->ki_pos;
+	int err;
+
+	err = check_direct_IO(inode, iter, offset);
+	if (err)
+		return err < 0 ? err : 0;
+
+	return __blockdev_direct_IO(iocb, inode, inode->i_sb->s_bdev, iter,
+				    erofs_get_block, NULL, NULL,
+				    DIO_LOCKING | DIO_SKIP_HOLES);
+}
+
 static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
 {
 	struct inode *inode = mapping->host;
-	struct erofs_map_blocks map = {
-		.m_la = blknr_to_addr(block),
-	};
 
 	if (EROFS_I(inode)->datalayout == EROFS_INODE_FLAT_INLINE) {
 		erofs_blk_t blks = i_size_read(inode) >> LOG_BLOCK_SIZE;
@@ -337,16 +390,14 @@ static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
 			return 0;
 	}
 
-	if (!erofs_map_blocks(inode, &map, EROFS_GET_BLOCKS_RAW))
-		return erofs_blknr(map.m_pa);
-
-	return 0;
+	return generic_block_bmap(mapping, block, erofs_get_block);
 }
 
 /* for uncompressed (aligned) files and raw access for other files */
 const struct address_space_operations erofs_raw_access_aops = {
 	.readpage = erofs_raw_access_readpage,
 	.readpages = erofs_raw_access_readpages,
+	.direct_IO = erofs_direct_IO,
 	.bmap = erofs_bmap,
 };
 

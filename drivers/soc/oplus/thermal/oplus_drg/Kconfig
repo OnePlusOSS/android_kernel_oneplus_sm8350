@@ -1,0 +1,6 @@
+config OPLUS_DRG
+  tristate "dual rail governor"
+  default n
+  help
+    manager frequency dependency caused by dual rail between
+    different cpufreq device and devfreq device

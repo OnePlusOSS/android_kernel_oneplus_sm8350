@@ -357,16 +357,16 @@ struct cvp_hfi_device {
 	int (*validate_session)(void *sess, const char *func);
 };
 
-typedef void (*hfi_cmd_response_callback) (enum hal_command_response cmd,
-			void *data);
-typedef void (*msm_cvp_callback) (enum hal_command_response response,
-			void *callback);
+typedef void (*hfi_cmd_response_callback)(enum hal_command_response cmd,
+		void *data);
+typedef void (*msm_cvp_callback)(enum hal_command_response response,
+				 void *callback);
 
 struct cvp_hfi_device *cvp_hfi_initialize(enum msm_cvp_hfi_type hfi_type,
 		u32 device_id, struct msm_cvp_platform_resources *res,
 		hfi_cmd_response_callback callback);
 void cvp_hfi_deinitialize(enum msm_cvp_hfi_type hfi_type,
-			struct cvp_hfi_device *hdev);
+			  struct cvp_hfi_device *hdev);
 
 int get_pkt_index(struct cvp_hal_session_cmd_pkt *hdr);
 int get_signal_from_pkt_type(unsigned int type);
@@ -375,7 +375,7 @@ unsigned int get_msg_size(struct cvp_hfi_msg_session_hdr *hdr);
 unsigned int get_msg_session_id(void *msg);
 unsigned int get_msg_errorcode(void *msg);
 int get_msg_opconfigs(void *msg, unsigned int *session_id,
-		unsigned int *error_type, unsigned int *config_id);
+		      unsigned int *error_type, unsigned int *config_id);
 extern const struct msm_cvp_hfi_defs cvp_hfi_defs[];
 
 #endif /*__CVP_HFI_API_H__ */

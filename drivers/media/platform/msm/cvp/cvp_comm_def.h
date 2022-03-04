@@ -21,4 +21,4 @@ enum queue_state {
 	QUEUE_STOP = 2,
 	QUEUE_INVALID,
 };
-#endif
+#endif /*_MSM_COMM_DEF_H_*/

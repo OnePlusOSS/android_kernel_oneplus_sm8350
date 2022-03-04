@@ -17,7 +17,7 @@ static inline bool is_buf_param_valid(u32 buf_num, u32 offset)
 	int max_buf_num;
 
 	max_buf_num = sizeof(struct cvp_kmd_hfi_packet) /
-			sizeof(struct cvp_buf_type);
+		      sizeof(struct cvp_buf_type);
 
 	if (buf_num > max_buf_num)
 		return false;
@@ -34,4 +34,4 @@ int msm_cvp_session_init(struct msm_cvp_inst *inst);
 int msm_cvp_session_deinit(struct msm_cvp_inst *inst);
 int msm_cvp_session_queue_stop(struct msm_cvp_inst *inst);
 int cvp_stop_clean_fence_queue(struct msm_cvp_inst *inst);
-#endif
+#endif /*_MSM_CVP_H_*/

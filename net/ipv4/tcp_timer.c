@@ -23,6 +23,10 @@
 #include <linux/gfp.h>
 #include <net/tcp.h>
 
+#ifdef OPLUS_FEATURE_IPV6_OPTIMIZE
+extern int ipv6_rto_encounter(kuid_t uid, struct in6_addr v6_saddr);
+extern int ipv4_rto_encounter(kuid_t uid, unsigned int v4_saddr);
+#endif /* OPLUS_FEATURE_IPV6_OPTIMIZE */
 static u32 tcp_clamp_rto_to_user_timeout(const struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -173,8 +177,14 @@ static int tcp_orphan_retries(struct sock *sk, bool alive)
 
 static void tcp_mtu_probing(struct inet_connection_sock *icsk, struct sock *sk)
 {
-	const struct net *net = sock_net(sk);
+	#ifdef OPLUS_FEATURE_WIFI_MTUDETECT
+	//Modify for [804055] enabling mtu probing when an ICMP black hole detected,
+	//const struct net *net = sock_net(sk);
+	//int mss;
+	struct net *net = sock_net(sk);
 	int mss;
+	net->ipv4.sysctl_tcp_mtu_probing = 1;
+	#endif /* OPLUS_FEATURE_WIFI_MTUDETECT */
 
 	/* Black hole detection */
 	if (!net->ipv4.sysctl_tcp_mtu_probing)
@@ -291,6 +301,18 @@ static int tcp_write_timeout(struct sock *sk)
 				  icsk->icsk_rto, (int)expired);
 
 	if (expired) {
+		#ifdef OPLUS_FEATURE_IPV6_OPTIMIZE
+			if (((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_ESTABLISHED))
+				&& !((1 << sk->sk_state) & (TCPF_SYN_RECV | TCPF_FIN_WAIT1 | TCPF_FIN_WAIT2 | TCPF_TIME_WAIT))) {
+				if(sk->sk_family == AF_INET6) {
+#if IS_ENABLED(CONFIG_IPV6)
+					ipv6_rto_encounter(sk->sk_uid, sk->__sk_common.skc_v6_rcv_saddr);
+#endif /* IS_ENABLED(CONFIG_IPV6) */
+				} else if (sk->sk_family == AF_INET) {
+					ipv4_rto_encounter(sk->sk_uid, sk->__sk_common.skc_rcv_saddr);
+				}
+			}
+		#endif /* OPLUS_FEATURE_IPV6_OPTIMIZE */
 		/* Has it gone just too far? */
 		tcp_write_err(sk);
 		return 1;

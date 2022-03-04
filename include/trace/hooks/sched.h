@@ -65,6 +65,19 @@ DECLARE_RESTRICTED_HOOK(android_rvh_setscheduler,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p), 1);
 
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_wakeup,
+	TP_PROTO(struct task_struct *p, int *ignore),
+	TP_ARGS(p, ignore), 1);
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_tick,
+	TP_PROTO(struct task_struct *p, unsigned long *ideal_runtime),
+	TP_ARGS(p, ideal_runtime), 1);
+DECLARE_RESTRICTED_HOOK(android_rvh_find_best_target,
+	TP_PROTO(struct task_struct *p, int cpu, int *ignore),
+	TP_ARGS(p, cpu, ignore), 1);
+struct cpumask;
+DECLARE_RESTRICTED_HOOK(android_rvh_cpupri_find_fitness,
+	TP_PROTO(struct task_struct *p, struct cpumask *lowest_mask),
+	TP_ARGS(p, lowest_mask), 1);
 struct sched_group;
 DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 	TP_PROTO(struct sched_group *busiest, struct rq *dst_rq, int *out_balance),

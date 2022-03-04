@@ -85,6 +85,9 @@ extern int sysctl_protected_symlinks;
 extern int sysctl_protected_hardlinks;
 extern int sysctl_protected_fifos;
 extern int sysctl_protected_regular;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+extern char *inode_name(struct inode *ino);
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 typedef __kernel_rwf_t rwf_t;
 
@@ -3234,6 +3237,14 @@ enum {
 
 	/* filesystem does not support filling holes */
 	DIO_SKIP_HOLES	= 0x02,
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+//tianwen@BSP.Storage.UFS 2020/10/27, Add for UFS plus(kernel 5.4)
+#ifdef CONFIG_FS_HPB
+	/* HPB FLAG */
+	DIO_HPB_IO      = 0x10,
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 };
 
 void dio_end_io(struct bio *bio);

@@ -14,7 +14,13 @@
 #define NF_QUEUE 3
 #define NF_REPEAT 4
 #define NF_STOP 5	/* Deprecated, for userspace nf_queue compatibility. */
+
+#ifdef OPLUS_FEATURE_WIFI_LIMMITBGSPEED
+#define NF_IMQ_QUEUE 6
+#define NF_MAX_VERDICT NF_IMQ_QUEUE
+#else /* OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 #define NF_MAX_VERDICT NF_STOP
+#endif /* OPLUS_FEATURE_WIFI_LIMMITBGSPEED */
 
 /* we overload the higher bits for encoding auxiliary data such as the queue
  * number or errno values. Not nice, but better than additional function

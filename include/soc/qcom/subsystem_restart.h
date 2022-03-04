@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (C) 2020 Oplus. All rights reserved.
  * Copyright (c) 2014-2019 2021, The Linux Foundation. All rights reserved.
  */
 
@@ -123,6 +124,9 @@ struct subsys_desc {
  * @pdev: subsystem platform device pointer
  */
 struct notif_data {
+#if defined(CONFIG_QGKI) && defined(OPLUS_BUG_STABILITY)
+	int debug;
+#endif
 	enum crash_status crashed;
 	int enable_ramdump;
 	int enable_mini_ramdumps;
@@ -132,8 +136,35 @@ struct notif_data {
 
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
 
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+#define MAX_REASON_LEN 300
+struct dev_crash_report_work {
+	struct work_struct  work;
+	struct subsys_device *crash_dev;
+	char   crash_reason[MAX_REASON_LEN];
+};
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
+
+#ifdef OPLUS_FEATURE_SWITCH_CHECK
+
+/*Add for: check fw status for switch issue */
+extern void __wlan_subsystem_send_uevent(struct device *dev, char *reason, const char *name);
+extern void wlan_subsystem_send_uevent(struct subsys_device *dev, char *reason, const char *name);
+#endif /*OPLUS_FEATURE_SWITCH_CHECK*/
+
+#ifdef OPLUS_FEATURE_ADSP_RECOVERY
+
+extern void oplus_adsp_set_ssr_state(bool state);
+extern bool oplus_adsp_get_ssr_state(void);
+extern int oplus_adsp_get_restart_level(const char *name);
+#endif /* OPLUS_FEATURE_ADSP_RECOVERY */
+
 extern int subsys_get_restart_level(struct subsys_device *dev);
 extern int subsystem_restart_dev(struct subsys_device *dev);
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+
+extern void subsystem_schedule_crash_uevent_work(struct subsys_device *dev, char *reason);
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
 
@@ -158,6 +189,21 @@ static inline void complete_shutdown_ack(struct subsys_desc *desc)
 struct subsys_device *find_subsys_device(const char *str);
 #else
 
+#ifdef OPLUS_FEATURE_ADSP_RECOVERY
+
+static inline void oplus_adsp_set_ssr_state(bool ssr_state) { }
+
+static inline bool oplus_adsp_get_ssr_state(void)
+{
+	return false;
+}
+
+static inline int oplus_adsp_get_restart_level(const char *name)
+{
+	return 0;
+}
+#endif /* OPLUS_FEATURE_ADSP_RECOVERY */
+
 static inline int subsys_get_restart_level(struct subsys_device *dev)
 {
 	return 0;
@@ -167,6 +213,14 @@ static inline int subsystem_restart_dev(struct subsys_device *dev)
 {
 	return 0;
 }
+
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+
+static inline void subsystem_schedule_crash_uevent_work(struct subsys_device *dev, char *reason)
+{
+	return;
+}
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 
 static inline int subsystem_restart(const char *name)
 {

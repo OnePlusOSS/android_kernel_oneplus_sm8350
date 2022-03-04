@@ -1,0 +1,73 @@
+/* *****************
+lahaina-qupv3.dtsi ,
+"ipcc-test.dtsi"
+"lahaina-regulators.dtsi"
+"lahaina-pinctrl.dtsi"
+"lahaina-smp2p.dtsi"
+"lahaina-ion.dtsi"
+"msm-arm-smmu-lahaina.dtsi"
+"lahaina-usb.dtsi"
+"lahaina-coresight.dtsi"
+"lahaina-pm.dtsi"
+"lahaina-qupv3.dtsi"
+"lahaina-audio.dtsi"
+"lahaina-vidc.dtsi"
+"lahaina-cvp.dtsi"
+"lahaina-pcie.dtsi"
+"msm-qvr-external.dtsi"
+"lahaina-gpu.dtsi"
+"display/lahaina-sde.dtsi"
+"lahaina-thermal.dtsi"
+"camera/lahaina-camera.dtsi"
+"msm-rdbg.dtsi"
+"lahaina.dtsi "
+the up part file change like:
+delete note  and status = "disabled" to "ok"  add here also, other will meet can't boot issue or compile error issue
+**************************/
+
+
+
+//lahaina-regulators.dtsi
+&pm8350c_l6 {
+	/delete-property/ qcom,proxy-consumer-enable;
+	/delete-property/ qcom,proxy-consumer-current;
+};
+
+/ {
+	aliases {
+		/* #ifdef OPLUS_ARCH_EXTENDS */
+		i2c4 = &qupv3_se19_i2c;
+		/* #endif OPLUS_ARCH_EXTENDS  */
+	};
+	chosen {
+		//#ifdef OPLUS_BSP_BOOTFLOW
+		bootargs = "log_buf_len=1M earlycon=msm_geni_serial,0x98c000 rcupdate.rcu_expedited=1 rcu_nocbs=0-7";
+		//#endif
+		//bootargs = "log_buf_len=256K earlycon=msm_geni_serial,0x98c000 rcupdate.rcu_expedited=1 rcu_nocbs=0-7";
+	};
+
+//lahaina-thermal-overlay.dtsi
+        shell_front {
+                compatible = "oplus,shell-temp";
+        };
+
+        shell_frame {
+                compatible = "oplus,shell-temp";
+        };
+
+        shell_back {
+                compatible = "oplus,shell-temp";
+        };
+
+};
+
+
+&qupv3_se4_i2c {
+	status = "okay";
+};
+
+
+&usb1 {
+	/delete-property/ extcon;
+};
+

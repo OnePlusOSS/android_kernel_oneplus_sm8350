@@ -23,6 +23,11 @@
 #include <linux/memblock.h>
 
 #define MAX_RESERVED_REGIONS	64
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+static unsigned long reserved_mem_size;
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
+
 static struct reserved_mem reserved_mem[MAX_RESERVED_REGIONS];
 static int reserved_mem_count;
 
@@ -278,6 +283,9 @@ void __init fdt_init_reserved_mem(void)
 					memblock_add(rmem->base, rmem->size);
 			}
 		}
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+		reserved_mem_size += rmem->size;
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 	}
 }
 
@@ -365,6 +373,13 @@ int of_reserved_mem_device_init_by_idx(struct device *dev,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(of_reserved_mem_device_init_by_idx);
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+unsigned long dt_memory_reserved_pages(void)
+{
+	return reserved_mem_size >> PAGE_SHIFT;
+}
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 
 /**
  * of_reserved_mem_device_release() - release reserved memory device structures

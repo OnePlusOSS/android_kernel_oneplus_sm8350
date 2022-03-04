@@ -252,7 +252,7 @@ static inline void purge_tlb_entries(struct mm_struct *mm, unsigned long addr)
 #define PAGE_SHARED	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_READ | _PAGE_WRITE)
 /* Others seem to make this executable, I don't know if that's correct
    or not.  The stack is mapped this way though so this is necessary
-   in the short term - dhd@linuxcare.com, 2000-08-08 */
+   in the short term  */
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_READ)
 #define PAGE_WRITEONLY  __pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_WRITE)
 #define PAGE_EXECREAD   __pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_READ | _PAGE_EXEC)

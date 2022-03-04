@@ -38,3 +38,7 @@ config VIRTIO_FS
 
 	  If you want to share files between guests or with the host, answer Y
           or M.
+
+config OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	tristate "Support shortcircuit"
+	depends on FUSE_FS
