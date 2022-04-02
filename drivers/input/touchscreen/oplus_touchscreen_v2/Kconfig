@@ -1,0 +1,75 @@
+config TOUCHPANEL_MTK_PLATFORM
+    bool "OPLUS platform tp module used"
+    help
+      Say Y here if you have mtk-platform.
+
+config TOUCHPANEL_LATE_INIT
+    bool "mk6360 pmic init"
+    help
+      Say Y here if you have mk6360 pmic.
+
+config TOUCHIRQ_UPDATE_QOS
+    bool "OPLUS touchpanel driver update qos"
+    help
+      Say Y here if you want to update qos value in irq handler.
+
+config TOUCHPANEL_NEW_SET_IRQ_WAKE
+    bool "OPLUS platform tp module used"
+    help
+      Say Y here if call enable_irq_wake, can not call disable_irq_nosync
+
+config TOUCHPANEL_OPLUS
+    tristate "OPLUS tp module"
+    help
+      Say Y here if you have touchscreen build into driver.
+      Say M here if you have touchscreen as module.
+
+config OPLUS_MTK_DRM_GKI_NOTIFY
+       default n
+       tristate "tp mtk gki notify"
+
+config OPLUS_TP_APK
+    bool "OPLUS apk node create"
+    help
+      Say Y here if you use apk for TP.
+
+
+config REMOVE_OPLUS_FUNCTION
+    bool "REMOVE_OPLUS_FUNCTION"
+    help
+      Say Y here if you want to remove all oplus function when bring up.
+
+config TOUCHPANEL_MULTI_NOFLASH
+    bool "Multiple noflash TPs using"
+    help
+      Say Y here if you have multiple noflash touchscreen.
+
+config TOUCHPANEL_NOTIFY
+    tristate "touch notify"
+    help
+      Say Y here if you have touchscreen notify build into driver.
+      Say M here if you have touchscreen notify as module.
+
+config TOUCHPANEL_SYNAPTICS
+    tristate "TP Synaptics_IC enable or not for OPLUS"
+    help
+    Say Y to enable driver for Touchpanel using Synaptics_IC
+    Say M to enable driver for Touchpanel using Synaptics_IC as module.
+
+config TOUCHPANEL_SAMSUNG
+    tristate "TP samsung IC enable or not for OPLUS"
+    ---help---
+    say Y to enable driver for Touchpanel using samsung IC
+    Say M to enable driver for Touchpanel using samsung IC as module.
+config TOUCHPANEL_ST
+	tristate "TP st IC enable or not for OPLUS"
+	help
+	Say Y to enable driver for Touchpanel using st IC
+	Say M to enable driver for Touchpanel using st IC as module.
+
+if TOUCHPANEL_SYNAPTICS
+source "drivers/input/touchscreen/oplus_touchscreen_v2/Synaptics/Kconfig"
+endif
+if TOUCHPANEL_SAMSUNG
+source "drivers/input/touchscreen/oplus_touchscreen_v2/Samsung/Kconfig"
+endif

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note
+
+header-y += msm_drm_pp.h
+header-y += sde_drm.h
+#ifdef OPLUS_FEATURE_PXLW_IRIS5
+header-y += msm_drm_iris.h
+#endif /*OPLUS_FEATURE_PXLW_IRIS5*/

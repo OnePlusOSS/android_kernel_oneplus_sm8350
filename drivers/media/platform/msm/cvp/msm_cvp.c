@@ -501,8 +501,10 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 			current->comm, __func__);
 		synx_state = SYNX_STATE_SIGNALED_CANCEL;
 	} else if (hfi_err == HFI_ERR_SESSION_STREAM_CORRUPT) {
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 		dprintk(CVP_WARN, "%s %s: cvp_wait_process_msg non-fatal %d\n",
 		current->comm, __func__, hfi_err);
+#endif
 		synx_state = SYNX_STATE_SIGNALED_SUCCESS;
 	} else if (hfi_err != HFI_ERR_NONE) {
 		dprintk(CVP_ERR, "%s %s: cvp_wait_process_message hfi err %d\n",
@@ -898,7 +900,7 @@ static int adjust_bw_freqs(void)
 	cvp_max_rate = tbl[tbl_size - 1].clock_rate;
 	bus = &core->resources.bus_set.bus_tbl[1];
 	max_bw = bus->range[1];
-	min_bw = max_bw/100;
+	min_bw = max_bw/10;
 
 	aggregate_power_update(core, &nrt_pwr, &rt_pwr, cvp_max_rate);
 	dprintk(CVP_PROF, "PwrUpdate nrt %u %u %lld rt %u %u %lld\n",

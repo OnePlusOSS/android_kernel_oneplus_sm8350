@@ -13,10 +13,26 @@
 #include <linux/soc/qcom/fsa4480-i2c.h>
 #include <linux/iio/consumer.h>
 
+#ifdef OPLUS_BUG_STABILITY
+#include <linux/uaccess.h>
+#endif /* OPLUS_BUG_STABILITY */
+
+#ifdef OPLUS_ARCH_EXTENDS
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#endif /* OPLUS_ARCH_EXTENDS */
+
+#ifdef OPLUS_FEATURE_AUDIO_FTM
+#include <linux/proc_fs.h>
+#endif /* OPLUS_FEATURE_AUDIO_FTM */
+
 #define FSA4480_I2C_NAME	"fsa4480-driver"
 
 #define FSA4480_SWITCH_SETTINGS 0x04
 #define FSA4480_SWITCH_CONTROL  0x05
+#ifdef OPLUS_ARCH_EXTENDS
+#define FSA4480_SWITCH_STATUS0  0x06
+#endif /* OPLUS_ARCH_EXTENDS */
 #define FSA4480_SWITCH_STATUS1  0x07
 #define FSA4480_SLOW_L          0x08
 #define FSA4480_SLOW_R          0x09
@@ -27,7 +43,21 @@
 #define FSA4480_DELAY_L_MIC     0x0E
 #define FSA4480_DELAY_L_SENSE   0x0F
 #define FSA4480_DELAY_L_AGND    0x10
+#ifdef OPLUS_ARCH_EXTENDS
+#define FSA4480_FUN_EN          0x12
+#define FSA4480_JACK_STATUS     0x17
+#endif /* OPLUS_ARCH_EXTENDS */
 #define FSA4480_RESET           0x1E
+
+#ifdef OPLUS_BUG_STABILITY
+#define DEFAULT_SWITCH_DELAY		0x12
+static u32 mic_switch_delay = DEFAULT_SWITCH_DELAY;
+#endif /* OPLUS_BUG_STABILITY */
+
+#ifdef OPLUS_ARCH_EXTENDS
+#undef dev_dbg
+#define dev_dbg dev_info
+#endif /* OPLUS_ARCH_EXTENDS */
 
 struct fsa4480_priv {
 	struct regmap *regmap;
@@ -40,7 +70,13 @@ struct fsa4480_priv {
 	struct blocking_notifier_head fsa4480_notifier;
 	struct mutex notification_lock;
 	u32 use_powersupply;
+	#ifdef OPLUS_ARCH_EXTENDS
+	unsigned int hs_det_pin;
+	#endif /* OPLUS_ARCH_EXTENDS */
 	int switch_control;
+#ifdef OPLUS_BUG_STABILITY
+	struct proc_dir_entry *dbg_dir;
+#endif /* OPLUS_BUG_STABILITY */
 };
 
 struct fsa4480_reg_val {
@@ -55,13 +91,20 @@ static const struct regmap_config fsa4480_regmap_config = {
 };
 
 static const struct fsa4480_reg_val fsa_reg_i2c_defaults[] = {
+	#ifdef OPLUS_BUG_STABILITY
+	{FSA4480_SWITCH_CONTROL, 0x18},
+	#endif /* OPLUS_BUG_STABILITY */
 	{FSA4480_SLOW_L, 0x00},
 	{FSA4480_SLOW_R, 0x00},
 	{FSA4480_SLOW_MIC, 0x00},
 	{FSA4480_SLOW_SENSE, 0x00},
 	{FSA4480_SLOW_GND, 0x00},
 	{FSA4480_DELAY_L_R, 0x00},
+#ifdef OPLUS_BUG_STABILITY
+	{FSA4480_DELAY_L_MIC, DEFAULT_SWITCH_DELAY},
+#else
 	{FSA4480_DELAY_L_MIC, 0x00},
+#endif /* OPLUS_BUG_STABILITY */
 	{FSA4480_DELAY_L_SENSE, 0x00},
 	{FSA4480_DELAY_L_AGND, 0x09},
 	{FSA4480_SWITCH_SETTINGS, 0x98},
@@ -90,6 +133,9 @@ static void fsa4480_usbc_update_settings(struct fsa4480_priv *fsa_priv,
 	/* FSA4480 chip hardware requirement */
 	usleep_range(50, 55);
 	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, switch_enable);
+#ifdef OPLUS_BUG_STABILITY
+	usleep_range(mic_switch_delay*100, mic_switch_delay*100+50);
+#endif /* OPLUS_BUG_STABILITY */
 }
 
 static int fsa4480_usbc_event_changed_psupply(struct fsa4480_priv *fsa_priv,
@@ -228,6 +274,10 @@ static int fsa4480_usbc_analog_setup_switches_ucsi(
 	int rc = 0;
 	int mode;
 	struct device *dev;
+	#ifdef OPLUS_ARCH_EXTENDS
+	unsigned int switch_status = 0;
+	unsigned int jack_status = 0;
+	#endif /* OPLUS_ARCH_EXTENDS */
 
 	if (!fsa_priv)
 		return -EINVAL;
@@ -242,17 +292,53 @@ static int fsa4480_usbc_analog_setup_switches_ucsi(
 	dev_dbg(dev, "%s: setting GPIOs active = %d\n",
 		__func__, mode != TYPEC_ACCESSORY_NONE);
 
+	#ifdef OPLUS_ARCH_EXTENDS
+	dev_info(dev, "%s: USB mode %d\n", __func__, mode);
+	#endif /* OPLUS_ARCH_EXTENDS */
+
 	switch (mode) {
 	/* add all modes FSA should notify for in here */
 	case TYPEC_ACCESSORY_AUDIO:
 		/* activate switches */
 		fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
+		#ifdef OPLUS_ARCH_EXTENDS
+		usleep_range(1000, 1005);
+		regmap_write(fsa_priv->regmap, FSA4480_FUN_EN, 0x45);
+		usleep_range(4000, 4005);
+		dev_info(dev, "%s: set reg[0x%x] done.\n", __func__, FSA4480_FUN_EN);
+
+		regmap_read(fsa_priv->regmap, FSA4480_JACK_STATUS, &jack_status);
+		dev_info(dev, "%s: reg[0x%x]=0x%x.\n", __func__, FSA4480_JACK_STATUS, jack_status);
+		if (jack_status & 0x2) {
+			//for 3 pole, mic switch to SBU2
+			dev_info(dev, "%s: set mic to sbu2 for 3 pole.\n", __func__);
+			fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
+			usleep_range(4000, 4005);
+		}
+
+		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS0, &switch_status);
+		dev_info(dev, "%s: reg[0x%x]=0x%x.\n", __func__, FSA4480_SWITCH_STATUS0, switch_status);
+		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS1, &switch_status);
+		dev_info(dev, "%s: reg[0x%x]=0x%x.\n", __func__, FSA4480_SWITCH_STATUS1, switch_status);
+		#endif /* OPLUS_ARCH_EXTENDS */
 
 		/* notify call chain on event */
 		blocking_notifier_call_chain(&fsa_priv->fsa4480_notifier,
 					     mode, NULL);
+		#ifdef OPLUS_ARCH_EXTENDS
+		if (gpio_is_valid(fsa_priv->hs_det_pin)) {
+			dev_info(dev, "%s: set hs_det_pin to low.\n", __func__);
+			gpio_direction_output(fsa_priv->hs_det_pin, 0);
+		}
+		#endif /* OPLUS_ARCH_EXTENDS */
 		break;
 	case TYPEC_ACCESSORY_NONE:
+		#ifdef OPLUS_ARCH_EXTENDS
+		if (gpio_is_valid(fsa_priv->hs_det_pin)) {
+			dev_info(dev, "%s: set hs_det_pin to high.\n", __func__);
+			gpio_direction_output(fsa_priv->hs_det_pin, 1);
+		}
+		#endif /* OPLUS_ARCH_EXTENDS */
 		/* notify call chain on event */
 		blocking_notifier_call_chain(&fsa_priv->fsa4480_notifier,
 				TYPEC_ACCESSORY_NONE, NULL);
@@ -303,7 +389,6 @@ int fsa4480_reg_notifier(struct notifier_block *nb,
 				(&fsa_priv->fsa4480_notifier, nb);
 	if (rc)
 		return rc;
-
 	/*
 	 * as part of the init sequence check if there is a connected
 	 * USB C analog adapter
@@ -387,6 +472,10 @@ int fsa4480_switch_event(struct device_node *node,
 	if (!fsa_priv->regmap)
 		return -EINVAL;
 
+	#ifdef OPLUS_ARCH_EXTENDS
+	pr_info("%s - switch event: %d\n", __func__, event);
+	#endif /* OPLUS_ARCH_EXTENDS */
+
 	switch (event) {
 	case FSA_MIC_GND_SWAP:
 		regmap_read(fsa_priv->regmap, FSA4480_SWITCH_CONTROL,
@@ -397,6 +486,10 @@ int fsa4480_switch_event(struct device_node *node,
 			fsa_priv->switch_control = 0x7;
 		fsa4480_usbc_update_settings(fsa_priv, fsa_priv->switch_control,
 					     0x9F);
+		#ifdef OPLUS_ARCH_EXTENDS
+		pr_err("fsa4480 fsa_mic_gnd_swap.\n");
+		#endif /* OPLUS_ARCH_EXTENDS */
+
 		break;
 	case FSA_USBC_ORIENTATION_CC1:
 		fsa4480_usbc_update_settings(fsa_priv, 0x18, 0xF8);
@@ -414,6 +507,39 @@ int fsa4480_switch_event(struct device_node *node,
 	return 0;
 }
 EXPORT_SYMBOL(fsa4480_switch_event);
+
+#ifdef OPLUS_ARCH_EXTENDS
+static int fsa4480_parse_dt(struct fsa4480_priv *fsa_priv,
+	struct device *dev)
+{
+    struct device_node *dNode = dev->of_node;
+    int ret = 0;
+
+    if (dNode == NULL)
+        return -ENODEV;
+
+	if (!fsa_priv) {
+		pr_err("%s: fsa_priv is NULL\n", __func__);
+		return -ENOMEM;
+	}
+
+	fsa_priv->hs_det_pin = of_get_named_gpio(dNode,
+	        "fsa4480,hs-det-gpio", 0);
+	if (!gpio_is_valid(fsa_priv->hs_det_pin)) {
+	    pr_warning("%s: hs-det-gpio in dt node is missing\n", __func__);
+	    return -ENODEV;
+	}
+	ret = gpio_request(fsa_priv->hs_det_pin, "fsa4480_hs_det");
+	if (ret) {
+		pr_warning("%s: hs-det-gpio request fail\n", __func__);
+		return ret;
+	}
+
+	gpio_direction_output(fsa_priv->hs_det_pin, 1);
+
+	return ret;
+}
+#endif /* OPLUS_ARCH_EXTENDS */
 
 static void fsa4480_usbc_analog_work_fn(struct work_struct *work)
 {
@@ -437,13 +563,116 @@ static void fsa4480_update_reg_defaults(struct regmap *regmap)
 				   fsa_reg_i2c_defaults[i].val);
 }
 
+#ifdef OPLUS_FEATURE_AUDIO_FTM
+static ssize_t fsa4480_exist_read(struct file *p_file,
+			 char __user *puser_buf, size_t count, loff_t *p_offset)
+{
+	return 0;
+}
+
+static ssize_t fsa4480_exist_write(struct file *p_file,
+			 const char __user *puser_buf,
+			 size_t count, loff_t *p_offset)
+{
+	return 0;
+}
+
+static const struct file_operations fsa4480_exist_operations = {
+	.read = fsa4480_exist_read,
+	.write = fsa4480_exist_write,
+};
+#endif /* OPLUS_FEATURE_AUDIO_FTM */
+
+#ifdef OPLUS_BUG_STABILITY
+static ssize_t fsa4480_dbgfs_reg_get(struct file *file,
+					 char __user *user_buf, size_t count,
+					 loff_t *ppos)
+{
+	struct i2c_client *i2c = PDE_DATA(file_inode(file));
+
+	struct fsa4480_priv *fsa_priv = i2c_get_clientdata(i2c);
+	int i, value;
+	char buf[320];
+	char *temp = buf;
+
+	for (i = 0; i < ARRAY_SIZE(fsa_reg_i2c_defaults); i++) {
+		regmap_read(fsa_priv->regmap, fsa_reg_i2c_defaults[i].reg,
+				   &value);
+		snprintf(temp, 16, "%#x: %#x\n", fsa_reg_i2c_defaults[i].reg, value);
+		temp = buf + strlen(buf);
+	}
+
+	return simple_read_from_buffer(user_buf, count, ppos, buf, strlen(buf));
+}
+
+static ssize_t fsa4480_dbgfs_reg_set(struct file *file,
+					 const char __user *user_buf,
+					 size_t count, loff_t *ppos)
+{
+	struct i2c_client *i2c = PDE_DATA(file_inode(file));
+
+	struct fsa4480_priv *fsa_priv = i2c_get_clientdata(i2c);
+	char buf[32];
+	int buf_size, addr, value;
+
+	buf_size = min(count, (size_t)(sizeof(buf)-1));
+	if (copy_from_user(buf, user_buf, buf_size))
+		return -EFAULT;
+	buf[buf_size] = 0;
+
+	sscanf(buf, "%i,%i", &addr, &value);
+
+	pr_info("%s: addr %#x, set value %#x\n", __func__, addr, value);
+
+	if (addr == FSA4480_DELAY_L_MIC)
+		mic_switch_delay = value;
+
+	if (addr > 0x03 && addr < 0x1f) {
+		regmap_write(fsa_priv->regmap, addr, value);
+		pr_info("%s: set success\n", __func__);
+	}
+
+	return count;
+}
+
+
+static const struct file_operations fsa4480_dbgfs_reg_fops = {
+	.open = simple_open,
+	.read = fsa4480_dbgfs_reg_get,
+	.write = fsa4480_dbgfs_reg_set,
+	.llseek = default_llseek,
+};
+
+#define MAX_CONTROL_NAME 48
+static void fsa4480_debug_init(struct fsa4480_priv *fsa_priv, struct i2c_client *i2c)
+{
+	char name[50];
+
+	scnprintf(name, MAX_CONTROL_NAME, "%s-%x", i2c->name, i2c->addr);
+	fsa_priv->dbg_dir = proc_mkdir(name, NULL);
+	proc_create_data("reg", S_IRUGO|S_IWUGO, fsa_priv->dbg_dir,
+					&fsa4480_dbgfs_reg_fops, i2c);
+}
+
+static void fsa4480_debug_remove(struct fsa4480_priv *fsa_priv)
+{
+	if (fsa_priv->dbg_dir)
+		proc_remove(fsa_priv->dbg_dir);
+}
+#endif /* OPLUS_BUG_STABILITY */
+
 static int fsa4480_probe(struct i2c_client *i2c,
 			 const struct i2c_device_id *id)
 {
 	struct fsa4480_priv *fsa_priv;
 	u32 use_powersupply = 0;
 	int rc = 0;
-
+	#ifdef OPLUS_FEATURE_AUDIO_FTM
+	u32 switch_status = 0;
+	#endif /* OPLUS_FEATURE_AUDIO_FTM */
+	#ifdef OPLUS_ARCH_EXTENDS
+	pr_err("%s enter fsa4480_probe\n", __func__);
+	#endif /* OPLUS_ARCH_EXTENDS */
 	fsa_priv = devm_kzalloc(&i2c->dev, sizeof(*fsa_priv),
 				GFP_KERNEL);
 	if (!fsa_priv)
@@ -451,6 +680,10 @@ static int fsa4480_probe(struct i2c_client *i2c,
 
 	memset(fsa_priv, 0, sizeof(struct fsa4480_priv));
 	fsa_priv->dev = &i2c->dev;
+
+	#ifdef OPLUS_ARCH_EXTENDS
+	fsa4480_parse_dt(fsa_priv, &i2c->dev);
+	#endif /* OPLUS_ARCH_EXTENDS */
 
 	fsa_priv->regmap = devm_regmap_init_i2c(i2c, &fsa4480_regmap_config);
 	if (IS_ERR_OR_NULL(fsa_priv->regmap)) {
@@ -521,11 +754,31 @@ static int fsa4480_probe(struct i2c_client *i2c,
 		((fsa_priv->fsa4480_notifier).rwsem);
 	fsa_priv->fsa4480_notifier.head = NULL;
 
+#ifdef OPLUS_BUG_STABILITY
+	fsa4480_debug_init(fsa_priv, i2c);
+#endif /* OPLUS_BUG_STABILITY */
+
+	#ifdef OPLUS_FEATURE_AUDIO_FTM
+	if ((regmap_read(fsa_priv->regmap, FSA4480_SWITCH_STATUS1,
+				&switch_status)) == 0) {
+		if (!proc_create("audio_switch_exist", 0644, NULL,
+				&fsa4480_exist_operations)) {
+			pr_err("%s : Failed to register proc interface\n",
+				__func__);
+		}
+	}
+	#endif /* OPLUS_FEATURE_AUDIO_FTM */
+
 	return 0;
 
 err_supply:
 	power_supply_put(fsa_priv->usb_psy);
 err_data:
+	#ifdef OPLUS_ARCH_EXTENDS
+	if (gpio_is_valid(fsa_priv->hs_det_pin)) {
+		gpio_free(fsa_priv->hs_det_pin);
+	}
+	#endif /* OPLUS_ARCH_EXTENDS */
 	devm_kfree(&i2c->dev, fsa_priv);
 	return rc;
 }
@@ -545,6 +798,11 @@ static int fsa4480_remove(struct i2c_client *i2c)
 	} else {
 		unregister_ucsi_glink_notifier(&fsa_priv->nb);
 	}
+
+#ifdef OPLUS_BUG_STABILITY
+	fsa4480_debug_remove(fsa_priv);
+#endif /* OPLUS_BUG_STABILITY */
+
 	fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x98);
 	cancel_work_sync(&fsa_priv->usbc_analog_work);
 	pm_relax(fsa_priv->dev);
@@ -552,6 +810,21 @@ static int fsa4480_remove(struct i2c_client *i2c)
 	dev_set_drvdata(&i2c->dev, NULL);
 
 	return 0;
+}
+
+static void fsa4480_shutdown(struct i2c_client *i2c) {
+	struct fsa4480_priv *fsa_priv =
+		(struct fsa4480_priv *)i2c_get_clientdata(i2c);
+
+	if (!fsa_priv) {
+		return;
+	}
+
+	pr_info("%s: recover all register while shutdown\n", __func__);
+
+	fsa4480_update_reg_defaults(fsa_priv->regmap);
+
+	return;
 }
 
 static const struct of_device_id fsa4480_i2c_dt_match[] = {
@@ -568,6 +841,7 @@ static struct i2c_driver fsa4480_i2c_driver = {
 	},
 	.probe = fsa4480_probe,
 	.remove = fsa4480_remove,
+	.shutdown = fsa4480_shutdown,
 };
 
 static int __init fsa4480_init(void)

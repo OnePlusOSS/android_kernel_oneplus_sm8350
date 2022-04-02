@@ -110,6 +110,15 @@ config MANDATORY_FILE_LOCKING
 
 	  To the best of my knowledge this is dead code that no one cares about.
 
+# Add for SF placement boost
+config OPLUS_SF_BOOST
+	bool "config SF Boost"
+	help
+	  Define this config for sf placement boost.
+	  When the util of SF is greater than 90, prefer to use big core.
+	  The purpose of this is to make sure SF compose time within a VSYNC,
+	  even in heavy loading scene.
+
 source "fs/crypto/Kconfig"
 
 source "fs/verity/Kconfig"
@@ -265,7 +274,8 @@ source "fs/romfs/Kconfig"
 source "fs/pstore/Kconfig"
 source "fs/sysv/Kconfig"
 source "fs/ufs/Kconfig"
-source "fs/erofs/Kconfig"
+#source "fs/erofs/Kconfig"
+source "fs/oplus_erofs/Kconfig"
 
 endif # MISC_FILESYSTEMS
 
@@ -324,4 +334,7 @@ source "fs/nls/Kconfig"
 source "fs/dlm/Kconfig"
 source "fs/unicode/Kconfig"
 
+config FS_HPB
+	bool "Support HPB on Filesystem"
+	default n
 endmenu

@@ -21,6 +21,11 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/usb/composite.h>
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if IS_ENABLED(CONFIG_OPLUS_CHG)
+#include <linux/usb/dwc3-msm.h>
+#endif
+#endif
 
 #include "core.h"
 #include "debug.h"
@@ -541,6 +546,11 @@ static int dwc3_ep0_handle_endpoint(struct dwc3 *dwc,
 		ret = __dwc3_gadget_ep_set_halt(dep, set, true);
 		if (ret)
 			return -EINVAL;
+
+		/* ClearFeature(Halt) may need delayed status */
+		if (!set && (!dep->gsi && (dep->flags & DWC3_EP_END_TRANSFER_PENDING)))
+			return USB_GADGET_DELAYED_STATUS;
+
 		break;
 	default:
 		return -EINVAL;
@@ -600,6 +610,12 @@ static int dwc3_ep0_set_address(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 		usb_gadget_set_state(&dwc->gadget, USB_STATE_ADDRESS);
 	else
 		usb_gadget_set_state(&dwc->gadget, USB_STATE_DEFAULT);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if IS_ENABLED(CONFIG_OPLUS_CHG)
+	oplus_dwc3_notify_event(DWC3_ENUM_DONE);
+#endif
+#endif
 
 	return 0;
 }
@@ -836,6 +852,30 @@ static int dwc3_ep0_std_request(struct dwc3 *dwc, struct usb_ctrlrequest *ctrl)
 	return ret;
 }
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if IS_ENABLED(CONFIG_OPLUS_CHG)
+static void (*oplus_notify_event)(enum oplus_dwc3_notify_event);
+void oplus_dwc3_set_notifier(void (*notify)(enum oplus_dwc3_notify_event))
+{
+	oplus_notify_event = notify;
+}
+EXPORT_SYMBOL(oplus_dwc3_set_notifier);
+
+int oplus_dwc3_notify_event(enum oplus_dwc3_notify_event event)
+{
+	int ret = 0;
+
+	if (oplus_notify_event)
+		oplus_notify_event(event);
+	else
+		ret = -ENODEV;
+
+	return ret;
+}
+EXPORT_SYMBOL(oplus_dwc3_notify_event);
+#endif
+#endif
+
 static void dwc3_ep0_inspect_setup(struct dwc3 *dwc,
 		const struct dwc3_event_depevt *event)
 {
@@ -1009,12 +1049,16 @@ static void dwc3_ep0_xfer_complete(struct dwc3 *dwc,
 static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 		struct dwc3_ep *dep, struct dwc3_request *req)
 {
+	unsigned int		trb_length = 0;
 	int			ret;
 
 	req->direction = !!dep->number;
 
 	if (req->request.length == 0) {
-		dwc3_ep0_prepare_one_trb(dep, dwc->ep0_trb_addr, 0,
+		if (!req->direction)
+			trb_length = dep->endpoint.maxpacket;
+
+		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr, trb_length,
 				DWC3_TRBCTL_CONTROL_DATA, false);
 		ret = dwc3_ep0_start_trans(dep);
 	} else if (!IS_ALIGNED(req->request.length, dep->endpoint.maxpacket)
@@ -1063,9 +1107,12 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 		req->trb = &dwc->ep0_trb[dep->trb_enqueue - 1];
 		dbg_ep_map(dep->number, req);
 
+		if (!req->direction)
+			trb_length = dep->endpoint.maxpacket;
+
 		/* Now prepare one extra TRB to align transfer size */
 		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr,
-					 0, DWC3_TRBCTL_CONTROL_DATA,
+					 trb_length, DWC3_TRBCTL_CONTROL_DATA,
 					 false);
 		ret = dwc3_ep0_start_trans(dep);
 	} else {
@@ -1115,6 +1162,18 @@ static void dwc3_ep0_do_control_status(struct dwc3 *dwc,
 	struct dwc3_ep		*dep = dwc->eps[event->endpoint_number];
 
 	__dwc3_ep0_do_control_status(dwc, dep);
+}
+
+void dwc3_ep0_send_delayed_status(struct dwc3 *dwc)
+{
+	unsigned int direction = !dwc->ep0_expect_in;
+
+	dwc->delayed_status = false;
+
+	if (dwc->ep0state != EP0_STATUS_PHASE)
+		return;
+
+	__dwc3_ep0_do_control_status(dwc, dwc->eps[direction]);
 }
 
 void dwc3_ep0_end_control_data(struct dwc3 *dwc, struct dwc3_ep *dep)

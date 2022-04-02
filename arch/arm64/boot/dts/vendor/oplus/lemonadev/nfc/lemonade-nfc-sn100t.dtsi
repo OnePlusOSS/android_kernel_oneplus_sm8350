@@ -1,0 +1,49 @@
+/**********************************************************************************
+* Copyright (c)  2008-2020  Guangdong oplus Mobile Comm Corp., Ltd
+* Description: oplus sn100t nfc dtsi
+*
+* Version: 1.0
+* Date: 2020-10-16
+* Author: HuangYiting
+*
+* ------------------------------ Revision History: --------------------------------
+* <version>           <date>                <author>                            <desc>
+* Revision 1.0       2020-10-16            HuangYiting           Created for fussi_EVT sn100t nfc dtsi
+***********************************************************************************/
+&soc {
+	//add for nfc_chipset
+	nfc_chipset {
+		compatible = "oplus-nfc-chipset";
+		chipset-19815 = "SN100T";
+		chipset-19825 = "SN100T";
+                chipset-20854 = "SN100T";
+                chipset-2085A = "SN100T";
+	};
+};
+
+&i3c3 {
+	status = "disabled";
+};
+
+&qupv3_se15_i2c {
+	status = "ok";
+
+	sn-nci@28 {
+		compatible = "qcom,nq-nci";
+		reg = <0x28>;
+		qcom,nq-irq = <&tlmm 87 0x00>;
+		qcom,nq-ven = <&tlmm 62 0x00>;
+		qcom,nq-firm = <&tlmm 86 0x00>;
+		qcom,nq-clkreq = <&tlmm 63 0x00>;
+		qcom,clk-src = "BBCLK2";
+		interrupt-parent = <&tlmm>;
+		interrupts = <87 0>;
+		interrupt-names = "nfc_irq";
+		pinctrl-names = "default","sleep";
+		pinctrl-0 = <&nfc_enable_active &nfc_fwdl_active
+				&nfc_clk_req_active &nfc_int_active>;
+		pinctrl-1 = <&nfc_enable_suspend &nfc_fwdl_suspend
+				&nfc_clk_req_suspend &nfc_int_suspend>;
+	};
+};
+

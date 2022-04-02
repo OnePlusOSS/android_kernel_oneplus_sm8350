@@ -380,16 +380,15 @@ struct f2fs_dir_entry *__f2fs_find_entry(struct inode *dir,
 	unsigned int max_depth;
 	unsigned int level;
 
+	*res_page = NULL;
+
 	if (f2fs_has_inline_dentry(dir)) {
-		*res_page = NULL;
 		de = f2fs_find_in_inline_dir(dir, fname, res_page);
 		goto out;
 	}
 
-	if (npages == 0) {
-		*res_page = NULL;
+	if (npages == 0)
 		goto out;
-	}
 
 	max_depth = F2FS_I(dir)->i_current_depth;
 	if (unlikely(max_depth > MAX_DIR_HASH_DEPTH)) {
@@ -400,7 +399,6 @@ struct f2fs_dir_entry *__f2fs_find_entry(struct inode *dir,
 	}
 
 	for (level = 0; level < max_depth; level++) {
-		*res_page = NULL;
 		de = find_in_level(dir, level, fname, res_page);
 		if (de || IS_ERR(*res_page))
 			break;
@@ -1096,9 +1094,8 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 		if (npages - n > 1 && !ra_has_index(ra, n))
 			page_cache_sync_readahead(inode->i_mapping, ra, file, n,
 				min(npages - n, (pgoff_t)MAX_DIR_RA_PAGES));
-
 		dentry_page = f2fs_find_data_page(inode, n);
-		if (IS_ERR(dentry_page)) {
+          	if (IS_ERR(dentry_page)) {
 			err = PTR_ERR(dentry_page);
 			if (err == -ENOENT) {
 				err = 0;
@@ -1118,8 +1115,7 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 			f2fs_put_page(dentry_page, 0);
 			break;
 		}
-
-		f2fs_put_page(dentry_page, 0);
+                f2fs_put_page(dentry_page, 0);
 	}
 out_free:
 	fscrypt_fname_free_buffer(&fstr);

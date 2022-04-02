@@ -44,8 +44,22 @@
 #ifdef CONFIG_SLUB_DEBUG
 #include <linux/debugfs.h>
 #endif
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_KMALLOC_DEBUG)
+#include <linux/jhash.h>
+#endif
 
 #include "internal.h"
+/* Enalbe slabtrace:
+ * CONFIG_SLABTRACE_DEBUG=y
+ * Get more info disable Randomize_base
+ * CONFIG_RANDOMIZE_BASE=n
+ * after add the config, cat /proc/slabtrace to get slab userinfo
+ */
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG) && defined(CONFIG_SLABTRACE_DEBUG)
+#ifndef CONFIG_RANDOMIZE_BASE
+#define COMPACT_SLUB_TRACK
+#endif
+#endif
 
 /*
  * Lock order:
@@ -208,11 +222,28 @@ static inline bool kmem_cache_has_cpu_partial(struct kmem_cache *s)
 /*
  * Tracking user of a slab.
  */
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_KMALLOC_DEBUG)
+/* set kmalloc_debug tack stack depth */
+#define TRACK_ADDRS_COUNT 9
+#else
 #define TRACK_ADDRS_COUNT 16
+#endif
 struct track {
 	unsigned long addr;	/* Called from address */
 #ifdef CONFIG_STACKTRACE
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG) && defined(COMPACT_SLUB_TRACK)
+/* Store the offset after MODULES_VADDR for
+ * kernel module and kernel text address
+ */
+	u32 addrs[TRACK_ADDRS_COUNT];
+#else
 	unsigned long addrs[TRACK_ADDRS_COUNT];	/* Called from address */
+#endif
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_KMALLOC_DEBUG)
+	/* save the stack depth and hash */
+	u32 depth;
+	u32 hash;
+#endif
 #endif
 	int cpu;		/* Was running on cpu */
 	int pid;		/* Pid context */
@@ -455,7 +486,10 @@ static inline bool cmpxchg_double_slab(struct kmem_cache *s, struct page *page,
  * Node listlock must be held to guarantee that the page does
  * not vanish from under us.
  */
-static void get_map(struct kmem_cache *s, struct page *page, unsigned long *map)
+#if !defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+static 
+#endif
+void get_map(struct kmem_cache *s, struct page *page, unsigned long *map)
 {
 	void *p;
 	void *addr = page_address(page);
@@ -541,15 +575,32 @@ static void print_section(char *level, char *text, u8 *addr,
 	metadata_access_disable();
 }
 
+/*
+ * See comment in calculate_sizes().
+ */
+static inline bool freeptr_outside_object(struct kmem_cache *s)
+{
+	return s->offset >= s->inuse;
+}
+
+/*
+ * Return offset of the end of info block which is inuse + free pointer if
+ * not overlapping with object.
+ */
+static inline unsigned int get_info_end(struct kmem_cache *s)
+{
+	if (freeptr_outside_object(s))
+		return s->inuse + sizeof(void *);
+	else
+		return s->inuse;
+}
+
 static struct track *get_track(struct kmem_cache *s, void *object,
 	enum track_item alloc)
 {
 	struct track *p;
 
-	if (s->offset)
-		p = object + s->offset + sizeof(void *);
-	else
-		p = object + s->inuse;
+	p = object + get_info_end(s);
 
 	return p + alloc;
 }
@@ -561,6 +612,22 @@ static void set_track(struct kmem_cache *s, void *object,
 
 	if (addr) {
 #ifdef CONFIG_STACKTRACE
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG) && defined(COMPACT_SLUB_TRACK)
+	unsigned int nr_entries;
+	unsigned long addrs[TRACK_ADDRS_COUNT];
+	memset(addrs, 0, sizeof(addrs));
+	metadata_access_enable();
+	nr_entries = stack_trace_save(addrs, TRACK_ADDRS_COUNT, 3);
+	metadata_access_disable();
+	if (nr_entries < TRACK_ADDRS_COUNT)
+		addrs[nr_entries] = 0;
+	for (i = 0; i < TRACK_ADDRS_COUNT; i++) {
+		if (addrs[i])
+			p->addrs[i] = addrs[i] - MODULES_VADDR;
+		else
+			p->addrs[i] = 0;
+}
+#else
 		unsigned int nr_entries;
 
 		metadata_access_enable();
@@ -569,6 +636,13 @@ static void set_track(struct kmem_cache *s, void *object,
 
 		if (nr_entries < TRACK_ADDRS_COUNT)
 			p->addrs[nr_entries] = 0;
+#endif
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_KMALLOC_DEBUG)
+		p->depth = nr_entries;
+		p->hash = jhash2((u32 *)p->addrs,
+			sizeof(p->addrs[0])/sizeof(u32)*nr_entries,
+			0xabcd);
+#endif
 #endif
 		p->addr = addr;
 		p->cpu = smp_processor_id();
@@ -584,7 +658,10 @@ static void init_tracking(struct kmem_cache *s, void *object)
 	if (!(s->flags & SLAB_STORE_USER))
 		return;
 
+#if !defined(OPLUS_FEATURE_MEMLEAK_DETECT) || !defined(CONFIG_KMALLOC_DEBUG) || defined(CONFIG_SLUB_DEBUG_ON)
+	/* only record alloc stack */
 	set_track(s, object, TRACK_FREE, 0UL);
+#endif
 	set_track(s, object, TRACK_ALLOC, 0UL);
 }
 
@@ -596,6 +673,28 @@ static void print_track(const char *s, struct track *t, unsigned long pr_time)
 	pr_err("INFO: %s in %pS age=%lu cpu=%u pid=%d\n",
 	       s, (void *)t->addr, pr_time - t->when, t->cpu, t->pid);
 #ifdef CONFIG_STACKTRACE
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG) && defined(COMPACT_SLUB_TRACK)
+	{
+		int i;
+		unsigned long addrs[TRACK_ADDRS_COUNT];
+
+		/* we store the offset after MODULES_VADDR for
+		 * kernel module and kernel text address
+		 */
+		for (i = 0; i < TRACK_ADDRS_COUNT; i++) {
+			if (t->addrs[i])
+				addrs[i] =  MODULES_VADDR + t->addrs[i];
+			else
+				addrs[i] = 0;
+		}
+		for (i = 0; i < TRACK_ADDRS_COUNT; i++) {
+			if (addrs[i])
+				pr_err("\t%pS\n", (void *)addrs[i]);
+			else
+				break;
+		}
+	}
+#else
 	{
 		int i;
 		for (i = 0; i < TRACK_ADDRS_COUNT; i++)
@@ -604,6 +703,7 @@ static void print_track(const char *s, struct track *t, unsigned long pr_time)
 			else
 				break;
 	}
+#endif
 #endif
 }
 
@@ -614,7 +714,10 @@ static void print_tracking(struct kmem_cache *s, void *object)
 		return;
 
 	print_track("Allocated", get_track(s, object, TRACK_ALLOC), pr_time);
+#if !defined(OPLUS_FEATURE_MEMLEAK_DETECT) || !defined(CONFIG_KMALLOC_DEBUG) || defined(CONFIG_SLUB_DEBUG_ON)
+	/* only record alloc stack */
 	print_track("Freed", get_track(s, object, TRACK_FREE), pr_time);
+#endif
 }
 
 static void print_page_info(struct page *page)
@@ -653,12 +756,12 @@ static void slab_fix(struct kmem_cache *s, char *fmt, ...)
 }
 
 static bool freelist_corrupted(struct kmem_cache *s, struct page *page,
-			       void *freelist, void *nextfree)
+			       void **freelist, void *nextfree)
 {
 	if ((s->flags & SLAB_CONSISTENCY_CHECKS) &&
-	    !check_valid_pointer(s, page, nextfree)) {
-		object_err(s, page, freelist, "Freechain corrupt");
-		freelist = NULL;
+	    !check_valid_pointer(s, page, nextfree) && freelist) {
+		object_err(s, page, *freelist, "Freechain corrupt");
+		*freelist = NULL;
 		slab_fix(s, "Isolate corrupted freechain");
 		return true;
 	}
@@ -690,13 +793,16 @@ static void print_trailer(struct kmem_cache *s, struct page *page, u8 *p)
 		print_section(KERN_ERR, "Redzone ", p + s->object_size,
 			s->inuse - s->object_size);
 
-	if (s->offset)
-		off = s->offset + sizeof(void *);
-	else
-		off = s->inuse;
+	off = get_info_end(s);
 
+#if !defined(OPLUS_FEATURE_MEMLEAK_DETECT) || !defined(CONFIG_KMALLOC_DEBUG) || defined(CONFIG_SLUB_DEBUG_ON)
 	if (s->flags & SLAB_STORE_USER)
 		off += 2 * sizeof(struct track);
+#else
+	/* only save call stack to save memory */
+	if (s->flags & SLAB_STORE_USER)
+		off += sizeof(struct track);
+#endif
 
 	off += kasan_metadata_size(s);
 
@@ -793,7 +899,7 @@ static int check_bytes_and_report(struct kmem_cache *s, struct page *page,
  * object address
  * 	Bytes of the object to be managed.
  * 	If the freepointer may overlay the object then the free
- * 	pointer is the first word of the object.
+ *	pointer is at the middle of the object.
  *
  * 	Poisoning uses 0x6b (POISON_FREE) and the last byte is
  * 	0xa5 (POISON_END)
@@ -827,15 +933,18 @@ static int check_bytes_and_report(struct kmem_cache *s, struct page *page,
 
 static int check_pad_bytes(struct kmem_cache *s, struct page *page, u8 *p)
 {
-	unsigned long off = s->inuse;	/* The end of info */
+	unsigned long off = get_info_end(s);	/* The end of info */
 
-	if (s->offset)
-		/* Freepointer is placed after the object. */
-		off += sizeof(void *);
-
+#if !defined(OPLUS_FEATURE_MEMLEAK_DETECT) || !defined(CONFIG_KMALLOC_DEBUG) || defined(CONFIG_SLUB_DEBUG_ON)
 	if (s->flags & SLAB_STORE_USER)
 		/* We also have user information there */
 		off += 2 * sizeof(struct track);
+#else
+	/* only save call stack to save memory */
+	if (s->flags & SLAB_STORE_USER)
+		/* We also have user information there */
+		off += sizeof(struct track);
+#endif
 
 	off += kasan_metadata_size(s);
 
@@ -917,7 +1026,7 @@ static int check_object(struct kmem_cache *s, struct page *page,
 		check_pad_bytes(s, page, p);
 	}
 
-	if (!s->offset && val == SLUB_RED_ACTIVE)
+	if (!freeptr_outside_object(s) && val == SLUB_RED_ACTIVE)
 		/*
 		 * Object and freepointer overlap. Cannot check
 		 * freepointer while object is allocated.
@@ -1223,8 +1332,11 @@ next_object:
 			goto out;
 	}
 
+#if !defined(OPLUS_FEATURE_MEMLEAK_DETECT) || !defined(CONFIG_KMALLOC_DEBUG) || defined(CONFIG_SLUB_DEBUG_ON)
+	/* only record alloc stack */
 	if (s->flags & SLAB_STORE_USER)
 		set_track(s, object, TRACK_FREE, addr);
+#endif
 	trace(s, page, object, 0);
 	/* Freepointer not overwritten by init_object(), SLAB_POISON moved it */
 	init_object(s, object, SLUB_RED_INACTIVE);
@@ -1411,7 +1523,7 @@ static inline void dec_slabs_node(struct kmem_cache *s, int node,
 							int objects) {}
 
 static bool freelist_corrupted(struct kmem_cache *s, struct page *page,
-			       void *freelist, void *nextfree)
+			       void **freelist, void *nextfree)
 {
 	return false;
 }
@@ -2126,7 +2238,7 @@ static void deactivate_slab(struct kmem_cache *s, struct page *page,
 		 * 'freelist' is already corrupted.  So isolate all objects
 		 * starting at 'freelist'.
 		 */
-		if (freelist_corrupted(s, page, freelist, nextfree))
+		if (freelist_corrupted(s, page, &freelist, nextfree))
 			break;
 
 		do {
@@ -2403,10 +2515,14 @@ static bool has_cpu_slab(int cpu, void *info)
 	return c->page || slub_percpu_partial(c);
 }
 
-static void flush_all(struct kmem_cache *s)
+#if !defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+static 
+#endif
+void flush_all(struct kmem_cache *s)
 {
 	on_each_cpu_cond(has_cpu_slab, flush_cpu_slab, s, 1, GFP_ATOMIC);
 }
+
 
 /*
  * Use the cpu notifier to insure that the cpu slabs are flushed when
@@ -2793,7 +2909,7 @@ redo:
 
 	object = c->freelist;
 	page = c->page;
-	if (unlikely(!object || !node_match(page, node))) {
+	if (unlikely(!object || !page || !node_match(page, node))) {
 		object = __slab_alloc(s, gfpflags, node, addr, c);
 		stat(s, ALLOC_SLOWPATH);
 	} else {
@@ -3625,18 +3741,28 @@ static int calculate_sizes(struct kmem_cache *s, int forced_order)
 		 *
 		 * This is the case if we do RCU, have a constructor or
 		 * destructor or are poisoning the objects.
+		 *
+		 * The assumption that s->offset >= s->inuse means free
+		 * pointer is outside of the object is used in the
+		 * freeptr_outside_object() function. If that is no
+		 * longer true, the function needs to be modified.
 		 */
 		s->offset = size;
 		size += sizeof(void *);
 	}
 
 #ifdef CONFIG_SLUB_DEBUG
+#if defined(OPLUS_FEATURE_MEMLEAK_DETECT) && defined(CONFIG_KMALLOC_DEBUG) && !defined(CONFIG_SLUB_DEBUG_ON)
+	if (flags & SLAB_STORE_USER)
+		size += sizeof(struct track);
+#else
 	if (flags & SLAB_STORE_USER)
 		/*
 		 * Need to store information about allocs and frees after
 		 * the object.
 		 */
 		size += 2 * sizeof(struct track);
+#endif
 #endif
 
 	kasan_cache_create(s, &size, &s->flags);
@@ -4559,10 +4685,20 @@ static long validate_slab_cache(struct kmem_cache *s)
  * Generate lists of code addresses where slabcache objects are allocated
  * and freed.
  */
-
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG) && defined(CONFIG_SLABTRACE_DEBUG)
+#define OPLUS_MEMCFG_SLABTRACE_CNT 4
+#if (OPLUS_MEMCFG_SLABTRACE_CNT > TRACK_ADDRS_COUNT)
+#error (OPLUS_MEMCFG_SLABTRACE_CNT > TRACK_ADDRS_COUNT)
+#endif
+#endif
 struct location {
 	unsigned long count;
 	unsigned long addr;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG) && defined(CONFIG_SLABTRACE_DEBUG)
+#ifdef CONFIG_STACKTRACE
+	unsigned long addrs[OPLUS_MEMCFG_SLABTRACE_CNT]; /* caller address */
+#endif
+#endif
 	long long sum_time;
 	long min_time;
 	long max_time;
@@ -4588,7 +4724,10 @@ static void free_loc_track(struct loc_track *t)
 			get_order(sizeof(struct location) * t->max));
 }
 
-static int alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
+#if !defined(CONFIG_OPLUS_FEATURE_SLABTRACE_DEBUG)
+static 
+#endif
+int alloc_loc_track(struct loc_track *t, unsigned long max, gfp_t flags)
 {
 	struct location *l;
 	int order;
@@ -5547,7 +5686,13 @@ static ssize_t free_calls_show(struct kmem_cache *s, char *buf)
 {
 	if (!(s->flags & SLAB_STORE_USER))
 		return -ENOSYS;
+
+#if !defined(OPLUS_FEATURE_MEMLEAK_DETECT) || !defined(CONFIG_KMALLOC_DEBUG) || defined(CONFIG_SLUB_DEBUG_ON)
+	/* only record alloc stack */
 	return list_locations(s, buf, TRACK_FREE);
+#else
+	return -ENOSYS;
+#endif
 }
 SLAB_ATTR_RO(free_calls);
 #endif /* CONFIG_SLUB_DEBUG */
@@ -6399,3 +6544,17 @@ ssize_t slabinfo_write(struct file *file, const char __user *buffer,
 	return -EIO;
 }
 #endif /* CONFIG_SLUB_DEBUG */
+
+#ifdef CONFIG_KMALLOC_DEBUG
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+/* calc the stack hash */
+#include "malloc_track/slub_track.c"
+#else
+int __init __weak create_kmalloc_debug(struct proc_dir_entry *parent)
+{
+	pr_warn("OPLUS_FEATURE_MEMLEAK_DETECT is off.\n");
+	return 0;
+}
+EXPORT_SYMBOL(create_kmalloc_debug);
+#endif
+#endif

@@ -24,6 +24,7 @@ obj-y +=	no-block.o
 endif
 
 obj-$(CONFIG_PROC_FS) += proc_namespace.o
+obj-$(CONFIG_FS_HPB) += hpb_supp.o
 
 obj-y				+= notify/
 obj-$(CONFIG_EPOLL)		+= eventpoll.o
@@ -135,4 +136,8 @@ obj-$(CONFIG_F2FS_FS)		+= f2fs/
 obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
+ifeq ($(CONFIG_OPLUS_FEATURE_EROFS),y)
+obj-$(CONFIG_EROFS_FS)		+= oplus_erofs/
+else
 obj-$(CONFIG_EROFS_FS)		+= erofs/
+endif

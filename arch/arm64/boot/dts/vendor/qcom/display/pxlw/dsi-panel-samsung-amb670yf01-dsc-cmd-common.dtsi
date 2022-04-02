@@ -1,0 +1,158 @@
+/*******************************************************************
+** Copyright (C) 2020, OPLUS. All rights reserved.
+** some config is general, add them into every timing is too boring
+** so add this common file and include it to every timing instead
+********************************************************************/
+
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+				qcom,mdss-dsi-panel-jitter = <0x4 0x1>;
+
+				qcom,mdss-dsi-adfr-pre-switch-command = [
+					39 00 00 00 00 00 03 F0 5A 5A					/* Level2 key Access Enable */
+					15 00 00 00 00 00 02 BD 23						/* 21 : Manual On  23 Auto On */
+					39 00 00 00 00 00 04 B0 00 14 BD
+					15 00 00 00 00 00 02 BD 00						/* SDC auto mode min == max */
+					15 00 00 00 00 00 02 F7 0F
+					39 01 00 00 00 00 03 F0 A5 A5					/* Level2 key Access Disable */
+				];
+
+				qcom,mdss-dsi-post-on-backlight = [
+					/* Display On */
+					05 01 00 00 00 00 01 29
+				];
+				qcom,mdss-dsi-off-command = [
+					/* Display Off */
+					05 01 00 00 15 00 02 28 00
+					/* Sleep In */
+					05 01 00 00 65 00 02 10 00
+				];
+
+				qcom,mdss-dsi-hbm-enter-switch-command = [
+					15 01 00 00 00 00 02 53 E0
+				];
+				qcom,mdss-dsi-hbm-exit-switch-command = [
+					39 01 00 00 00 00 02 53 20
+					//39 01 00 00 00 00 03 51 07 FF
+				];
+
+				qcom,mdss-dsi-seed-off-command = [
+				];
+				qcom,mdss-dsi-seed-0-command = [
+				];
+				qcom,mdss-dsi-seed-1-command = [
+				];
+				qcom,mdss-dsi-seed-2-command = [
+				];
+				qcom,mdss-dsi-loading-effect-1-command = [
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 04 B0 02 B6 1D
+					15 00 00 00 00 00 02 1D 25
+					39 00 00 00 00 00 04 B0 02 BE 1D
+					15 00 00 00 00 00 02 1D 2B
+					39 00 00 00 00 00 04 B0 02 C7 1D
+					39 00 00 00 00 00 08 1D 0A 2D 2D 28 3C 3C 35
+					39 00 00 00 00 00 04 B0 02 D0 1D
+					39 00 00 00 00 00 05 1D 3F 4B 4B 43
+					39 00 00 00 00 00 04 B0 01 A5 1F
+					39 00 00 00 00 00 09 1F E2 00 00 00 92 2C 6A 80
+					39 00 00 00 00 00 04 B0 01 AD 1F
+					39 00 00 00 00 00 07 1F 00 00 00 00 FF 90
+					39 00 00 00 00 00 04 B0 01 B5 1F
+					39 00 00 00 00 00 04 1F 49 00 10
+					39 00 00 00 00 00 04 B0 01 BA 1F
+					39 00 00 00 00 00 06 1F 05 FF 10 00 00
+					39 00 00 00 00 00 04 B0 01 C1 1F
+					39 00 00 00 00 00 05 1F 00 00 00 00
+					39 00 00 00 00 00 04 B0 01 C5 1F
+					39 00 00 00 00 00 05 1F 03 FF 21 3C
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				qcom,mdss-dsi-loading-effect-2-command = [
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 04 B0 02 B6 1D
+					15 00 00 00 00 00 02 1D 25
+					39 00 00 00 00 00 04 B0 02 BE 1D
+					15 00 00 00 00 00 02 1D 2B
+					39 00 00 00 00 00 04 B0 02 C7 1D
+					39 00 00 00 00 00 08 1D 0A 2D 2D 28 3C 3C 35
+					39 00 00 00 00 00 04 B0 02 D0 1D
+					39 00 00 00 00 00 05 1D 3F 4B 4B 43
+					39 00 00 00 00 00 04 B0 01 A5 1F
+					39 00 00 00 00 00 09 1F E2 00 00 00 92 2C 6A 80
+					39 00 00 00 00 00 04 B0 01 AD 1F
+					39 00 00 00 00 00 07 1F 81 67 8F 72 FF 90
+					39 00 00 00 00 00 04 B0 01 B5 1F
+					39 00 00 00 00 00 04 1F 49 00 10
+					39 00 00 00 00 00 04 B0 01 BA 1F
+					39 00 00 00 00 00 06 1F 05 FF 10 00 00
+					39 00 00 00 00 00 04 B0 01 C1 1F
+					39 00 00 00 00 00 05 1F 00 00 00 00
+					39 00 00 00 00 00 04 B0 01 C5 1F
+					39 00 00 00 00 00 05 1F 03 FF 21 3C
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+				qcom,mdss-dsi-loading-effect-off-command = [
+					39 00 00 00 00 00 03 F0 5A 5A
+					39 00 00 00 00 00 04 B0 02 B6 1D
+					15 00 00 00 00 00 02 1D 05
+					39 00 00 00 00 00 04 B0 02 BE 1D
+					15 00 00 00 00 00 02 1D 40
+					39 00 00 00 00 00 04 B0 02 C7 1D
+					39 00 00 00 00 00 08 1D 0B 2D 2D 2D 3C 3C 3C
+					39 00 00 00 00 00 04 B0 02 D0 1D
+					39 00 00 00 00 00 05 1D 47 4B 4B 4B
+					39 00 00 00 00 00 04 B0 01 A5 1F
+					39 00 00 00 00 00 09 1F E2 00 00 00 92 2C 6A 80
+					39 00 00 00 00 00 04 B0 01 AD 1F
+					39 00 00 00 00 00 07 1F 71 27 4E 0B FF 9F
+					39 00 00 00 00 00 04 B0 01 B5 1F
+					39 00 00 00 00 00 04 1F 49 00 10
+					39 00 00 00 00 00 04 B0 01 BA 1F
+					39 00 00 00 00 00 06 1F 05 FF 10 00 00
+					39 00 00 00 00 00 04 B0 01 C1 1F
+					39 00 00 00 00 00 05 1F 00 00 00 00
+					39 00 00 00 00 00 04 B0 01 C5 1F
+					39 00 00 00 00 00 05 1F 03 FF 21 3C
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+
+				qcom,mdss-dsi-panel-read-register-open-command = [
+					39 01 00 00 00 00 03 F0 5A 5A
+				];
+				qcom,mdss-dsi-panel-id1-command = [
+					06 01 00 00 00 00 01 E9
+				];
+				qcom,mdss-dsi-panel-read-register-close-command = [
+					39 01 00 00 00 00 03 F0 A5 A5
+				];
+
+				qcom,mdss-dsi-adfr-pre-switch-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-timing-switch-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aod-hbm-on-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aod-hbm-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aod-hbm-on-pvt-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aod-hbm-off-pvt-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-normal-hbm-on-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-aor-restore-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-enter-switch-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-exit-switch-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-0-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-seed-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-off-command-state = "dsi_hs_mode";
+
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-encoders = <2>;
+				qcom,mdss-dsc-slice-per-pkt = <2>;
+				qcom,mdss-dsc-bit-per-component = <10>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-scr-version = <1>;
+				qcom,mdss-dsc-block-prediction-enable;

@@ -40,6 +40,12 @@
 #include <linux/compat.h>
 #endif
 
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+#include <linux/fs_hpb.h>
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+
 #define FSCRYPT_NEED_OPS
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
@@ -1596,6 +1602,12 @@ enum {
 	EXT4_STATE_EXT_PRECACHED,	/* extents have been precached */
 	EXT4_STATE_LUSTRE_EA_INODE,	/* Lustre-style ea_inode */
 	EXT4_STATE_VERITY_IN_PROGRESS,	/* building fs-verity Merkle tree */
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	EXT4_STATE_HPB,                 /* HPB I/O */
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\
@@ -2534,7 +2546,8 @@ void ext4_insert_dentry(struct inode *dir, struct inode *inode,
 			struct ext4_filename *fname);
 static inline void ext4_update_dx_flag(struct inode *inode)
 {
-	if (!ext4_has_feature_dir_index(inode->i_sb)) {
+	if (!ext4_has_feature_dir_index(inode->i_sb) &&
+	    ext4_test_inode_flag(inode, EXT4_INODE_INDEX)) {
 		/* ext4_iget() should have caught this... */
 		WARN_ON_ONCE(ext4_has_feature_metadata_csum(inode->i_sb));
 		ext4_clear_inode_flag(inode, EXT4_INODE_INDEX);

@@ -27,6 +27,9 @@
 #include <linux/uaccess.h>
 
 #include "internal.h"
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+#include "arch_mmap.h"
+#endif
 
 /**
  * kfree_const - conditionally free memory
@@ -516,6 +519,10 @@ unsigned long vm_mmap(struct file *file, unsigned long addr,
 }
 EXPORT_SYMBOL(vm_mmap);
 
+#ifdef CONFIG_KVMALLOC_OPTIMIZATION
+#define KMALLOC_MAX_PAGES 8
+#endif
+
 /**
  * kvmalloc_node - attempt to allocate physically contiguous memory, but upon
  * failure, fall back to non-contiguous (vmalloc) allocation.
@@ -547,6 +554,12 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	if ((flags & GFP_KERNEL) != GFP_KERNEL)
 		return kmalloc_node(size, flags, node);
 
+#ifdef CONFIG_KVMALLOC_OPTIMIZATION
+	/*do not attempt kmalloc if we need more than KMALLOC_MAX_PAGES pages at once*/
+	if (size >= KMALLOC_MAX_PAGES * PAGE_SIZE)
+		goto use_vmalloc;
+#endif
+
 	/*
 	 * We want to attempt a large physically contiguous block first because
 	 * it is less likely to fragment multiple larger blocks and therefore
@@ -570,6 +583,9 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	if (ret || size <= PAGE_SIZE)
 		return ret;
 
+#ifdef CONFIG_KVMALLOC_OPTIMIZATION
+use_vmalloc:
+#endif
 	return __vmalloc_node_flags_caller(size, node, flags,
 			__builtin_return_address(0));
 }

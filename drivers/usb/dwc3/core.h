@@ -138,6 +138,7 @@
 #define DWC3_GEVNTCOUNT(n)	(0xc40c + ((n) * 0x10))
 
 #define DWC3_GHWPARAMS8		0xc600
+#define DWC3_GUCTL3		0xc60c
 #define DWC3_GFLADJ		0xc630
 
 /* Device Registers */
@@ -408,6 +409,9 @@
 
 /* Global User Control Register 2 */
 #define DWC3_GUCTL2_RST_ACTBITLATER		BIT(14)
+
+/* Global User Control Register 3 */
+#define DWC3_GUCTL3_SPLITDISABLE		BIT(14)
 
 /* Device Configuration Register */
 #define DWC3_DCFG_DEVADDR(addr)	((addr) << 3)
@@ -772,6 +776,7 @@ struct dwc3_ep {
 #define DWC3_EP_END_TRANSFER_PENDING BIT(4)
 #define DWC3_EP_PENDING_REQUEST	BIT(5)
 #define DWC3_EP_DELAY_START	BIT(6)
+#define DWC3_EP_PENDING_CLEAR_STALL	BIT(11)
 
 	/* This last one is specific to EP0 */
 #define DWC3_EP0_DIR_IN		BIT(31)
@@ -1136,15 +1141,7 @@ struct dwc3_scratchpad_array {
  * 	2	- No de-emphasis
  * 	3	- Reserved
  * @dis_metastability_quirk: set to disable metastability quirk.
- * @ssp_u3_u0_quirk: set to enable ss specific u3 to u0 quirk.
- * @err_evt_seen: previous event in queue was erratic error
- * @in_lpm: indicates if controller is in low power mode (no clocks)
- * @irq: irq number
- * @irq_cnt: total irq count
- * @bh_completion_time: time taken for IRQ bottom-half completion
- * @bh_handled_evt_cnt: no. of events handled per IRQ bottom-half
- * @irq_dbg_index: index for capturing IRQ stats
- * @vbus_draw: current to be drawn from USB
+ * @dis_split_quirk: set to disable split boundary.
  * @imod_interval: set the interrupt moderation interval in 250ns
  *                 increments or 0 to disable.
  * @xhci_imod_value: imod value to use with xhci
@@ -1360,6 +1357,8 @@ struct dwc3 {
 
 	unsigned		dis_metastability_quirk:1;
 	unsigned		ssp_u3_u0_quirk:1;
+
+	unsigned		dis_split_quirk:1;
 
 	u16			imod_interval;
 	u32			xhci_imod_value;

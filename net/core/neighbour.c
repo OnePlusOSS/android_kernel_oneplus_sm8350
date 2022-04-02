@@ -1260,6 +1260,10 @@ static int __neigh_update(struct neighbour *neigh, const u8 *lladdr,
 	    (old & (NUD_NOARP | NUD_PERMANENT)))
 		goto out;
 
+	if (!(flags & NEIGH_UPDATE_F_ADMIN) &&
+	    (old & (NUD_NOARP | NUD_PERMANENT)))
+		goto out;
+
 	ext_learn_change = neigh_update_ext_learned(neigh, flags, &notify);
 
 	if (!(new & NUD_VALID)) {
@@ -3312,6 +3316,7 @@ static void *neigh_stat_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 		*pos = cpu+1;
 		return per_cpu_ptr(tbl->stats, cpu);
 	}
+	(*pos)++;
 	return NULL;
 }
 

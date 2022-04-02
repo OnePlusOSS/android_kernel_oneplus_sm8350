@@ -1,0 +1,2 @@
+
+source "drivers/input/touchscreen/oplus_touchscreen_v2/Samsung/S6SY792/Kconfig"

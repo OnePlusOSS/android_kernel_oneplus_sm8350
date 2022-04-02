@@ -493,7 +493,23 @@ struct cnss_plat_data {
 	struct cnss_dms_data dms;
 	int power_up_error;
 	u32 hw_trc_override;
+    #ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	unsigned long loadBdfState;
+	unsigned long loadRegdbState;
+    #endif
 };
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+enum cnss_load_state {
+	CNSS_LOAD_BDF_FAIL = 1,
+	CNSS_LOAD_BDF_SUCCESS,
+	CNSS_LOAD_REGDB_FAIL,
+	CNSS_LOAD_REGDB_SUCCESS,
+	CNSS_PROBE_FAIL,
+	CNSS_PROBE_SUCCESS,
+};
+
+#endif
 
 #ifdef CONFIG_ARCH_QCOM
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)

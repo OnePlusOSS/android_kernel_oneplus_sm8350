@@ -1,0 +1,5 @@
+config OPLUS_CTP
+	tristate "task_cpustats"
+	default n
+	help
+	  record cpu status

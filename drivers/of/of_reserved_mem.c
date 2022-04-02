@@ -23,6 +23,11 @@
 #include <linux/memblock.h>
 
 #define MAX_RESERVED_REGIONS	64
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+static unsigned long reserved_mem_size;
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
+
 static struct reserved_mem reserved_mem[MAX_RESERVED_REGIONS];
 static int reserved_mem_count;
 
@@ -200,6 +205,16 @@ static int __init __rmem_cmp(const void *a, const void *b)
 	if (ra->base > rb->base)
 		return 1;
 
+	/*
+	 * Put the dynamic allocations (address == 0, size == 0) before static
+	 * allocations at address 0x0 so that overlap detection works
+	 * correctly.
+	 */
+	if (ra->size < rb->size)
+		return -1;
+	if (ra->size > rb->size)
+		return 1;
+
 	return 0;
 }
 
@@ -217,8 +232,7 @@ static void __init __rmem_check_for_overlap(void)
 
 		this = &reserved_mem[i];
 		next = &reserved_mem[i + 1];
-		if (!(this->base && next->base))
-			continue;
+
 		if (this->base + this->size > next->base) {
 			phys_addr_t this_end, next_end;
 
@@ -269,6 +283,9 @@ void __init fdt_init_reserved_mem(void)
 					memblock_add(rmem->base, rmem->size);
 			}
 		}
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+		reserved_mem_size += rmem->size;
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 	}
 }
 
@@ -356,6 +373,13 @@ int of_reserved_mem_device_init_by_idx(struct device *dev,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(of_reserved_mem_device_init_by_idx);
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+unsigned long dt_memory_reserved_pages(void)
+{
+	return reserved_mem_size >> PAGE_SHIFT;
+}
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 
 /**
  * of_reserved_mem_device_release() - release reserved memory device structures

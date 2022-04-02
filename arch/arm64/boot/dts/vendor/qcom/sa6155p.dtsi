@@ -1,0 +1,81 @@
+#include "sm6150.dtsi"
+#include "sa6155-pmic.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. SA6155P";
+	qcom,msm-name = "SA6155P";
+	qcom,msm-id = <377 0>, <380 0>;
+
+	aliases {
+		pci-domain0 = &pcie0; /* PCIe0 domain */
+	};
+};
+
+/* Delete second instance of pm6155 definitions for APQ version */
+&spmi_bus {
+	/delete-node/ qcom,pm6155@4;
+	/delete-node/ qcom,pm6155@5;
+};
+
+&apps_rsc {
+	/delete-node/ rpmh-regulator-modemlvl;
+	/delete-node/ rpmh-regulator-ldoc2;
+	/delete-node/ rpmh-regulator-ldoc3;
+	/delete-node/ rpmh-regulator-ldoc4;
+	/delete-node/ rpmh-regulator-ldoc13;
+	/delete-node/ rpmh-regulator-ldoc14;
+	/delete-node/ rpmh-regulator-ldoc16;
+	/delete-node/ rpmh-regulator-ldoc17;
+	/delete-node/ rpmh-regulator-ldoc18;
+	/delete-node/ bt_wcn3990;
+};
+
+&qusb_phy0 {
+	vdd-supply = <&L5A>;
+	vdda18-supply = <&L12A>;
+	vdda33-supply = <&L13A>;
+};
+
+&usb_qmp_phy {
+	vdd-supply = <&L5A>;
+	core-supply = <&L12A>;
+};
+
+&qusb_phy1 {
+	vdd-supply = <&L5A>;
+	vdda18-supply = <&L12A>;
+	vdda33-supply = <&L13A>;
+};
+
+&gcc {
+	compatible = "qcom,sa6155-gcc", "syscon";
+	/delete-property/ protected-clocks;
+};
+
+&camcc {
+	compatible = "qcom,sa6155-camcc", "syscon";
+	vdd_mx-supply = <&VDD_CX_LEVEL>;
+};
+
+&dispcc {
+	compatible = "qcom,sa6155-dispcc", "syscon";
+};
+
+&gpucc {
+	compatible = "qcom,sa6155-gpucc", "syscon";
+	vdd_mx-supply = <&VDD_CX_LEVEL>;
+};
+
+&scc {
+	vdd_cx-supply = <&VDD_CX_LEVEL>;
+	status = "ok";
+};
+
+&videocc {
+	compatible = "qcom,sa6155-videocc", "syscon";
+};
+
+#include "sa6155-pcie.dtsi"
+&slpi_tlmm {
+	status = "ok";
+};

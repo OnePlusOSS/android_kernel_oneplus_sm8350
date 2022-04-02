@@ -1,6 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+/*
+* Copyright (C) 2007-2008 Google. All rights reserved
+* Copyright (C) 2020 Oplus. All rights reserved.
+*/
+
 #ifndef _UAPI__LINUX_NETLINK_H
 #define _UAPI__LINUX_NETLINK_H
+#define OPLUS_FEATURE_WIFI_LUCKYMONEY
 
 #include <linux/kernel.h>
 #include <linux/socket.h> /* for __kernel_sa_family_t */
@@ -32,7 +38,20 @@
 
 #define NETLINK_INET_DIAG	NETLINK_SOCK_DIAG
 
-#define MAX_LINKS 32		
+#define NETLINK_OPLUS_HANS       29
+
+#define NETLINK_OPLUS_SLA  33
+
+#define NETLINK_OPLUS_APPS_MONITOR  35
+
+#define NETLINK_OPLUS_KERNEL2USER  37
+
+#define NETLINK_OPLUS_WIFI_CAP_CENTER_SYNC 39
+#define NETLINK_OPLUS_WIFI_CAP_CENTER_ASYNC 40
+
+#define OPLUS_NETLINK_THEIA_KEVENT 43
+
+#define MAX_LINKS 45
 
 struct sockaddr_nl {
 	__kernel_sa_family_t	nl_family;	/* AF_NETLINK	*/

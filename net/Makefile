@@ -88,3 +88,28 @@ obj-$(CONFIG_QRTR)		+= qrtr/
 obj-$(CONFIG_NET_NCSI)		+= ncsi/
 obj-$(CONFIG_XDP_SOCKETS)	+= xdp/
 obj-$(CONFIG_NEURON)		+= neuron/
+
+#ifdef CONFIG_OPLUS_FEATURE_NWPOWER
+obj-$(CONFIG_OPLUS_FEATURE_NWPOWER) += oplus_nwpower/
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
+#ifdef OPLUS_FEATURE_WIFI_SLA
+obj-$(CONFIG_OPLUS_FEATURE_WIFI_SLA)                  	+= oplus_connectivity_sla/
+#endif /* OPLUS_FEATURE_WIFI_SLA */
+
+#ifdef OPLUS_FEATURE_DATA_EVAL
+obj-$(CONFIG_OPLUS_FEATURE_DATA_EVAL) += oplus_score/
+#endif /* OPLUS_FEATURE_DATA_EVAL */
+
+#ifdef OPLUS_FEATURE_APP_MONITOR
+#Add for apps network monitors
+obj-$(CONFIG_OPLUS_FEATURE_APP_MONITOR) += oplus_apps_monitor/
+#endif /* OPLUS_FEATURE_APP_MONITOR */
+
+#ifdef OPLUS_FEATURE_WIFI_CAPCENTER
+obj-$(CONFIG_OPLUS_FEATURE_WIFI_CAPCENTER) += oplus_wificapcenter/
+#endif /* OPLUS_FEATURE_WIFI_CAPCENTER */
+
+#ifdef OPLUS_FEATURE_DNS_HOOK
+obj-$(CONFIG_OPLUS_FEATURE_DNS_HOOK) += oplus_dns_hook/
+#endif /* OPLUS_FEATURE_DNS_HOOK */

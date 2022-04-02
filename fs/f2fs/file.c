@@ -860,6 +860,7 @@ static void __setattr_copy(struct inode *inode, const struct iattr *attr)
 
 		if (!in_group_p(inode->i_gid) && !capable(CAP_FSETID))
 			mode &= ~S_ISGID;
+		inode->i_mode = (inode->i_mode & S_IRWXUGO) | (mode & ~S_IRWXUGO);
 		set_acl_inode(inode, mode);
 	}
 }
@@ -963,6 +964,14 @@ int f2fs_setattr(struct dentry *dentry, struct iattr *attr)
 			inode->i_mode = F2FS_I(inode)->i_acl_mode;
 			clear_inode_flag(inode, FI_ACL_MODE);
 		}
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+		if (__is_hpb_file(dentry->d_name.name, inode))
+			set_inode_flag(inode, FI_HPB_INODE);
+		else
+			clear_inode_flag(inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 	}
 
 	/* file size may changed here */

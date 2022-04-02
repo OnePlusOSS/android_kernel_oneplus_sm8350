@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2018-2020 Oplus. All rights reserved.
+#Gang.Yang@TECH.BSP.Stability.THEIA_PROJECT 2019/06/15, Add for THEIA_PROJECT
+#change 'y' to 'n', if you want fo close theia feature
+config OPLUS_FEATURE_THEIA
+    tristate "theia project"
+    default n
+    help
+      define this config to init theia project.

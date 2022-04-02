@@ -614,19 +614,6 @@ config ZSMALLOC
 	  returned by an alloc().  This handle must be mapped in order to
 	  access the allocated space.
 
-config PGTABLE_MAPPING
-	bool "Use page table mapping to access object in zsmalloc"
-	depends on ZSMALLOC
-	help
-	  By default, zsmalloc uses a copy-based object mapping method to
-	  access allocations that span two pages. However, if a particular
-	  architecture (ex, ARM) performs VM mapping faster than copying,
-	  then you should select this. This causes zsmalloc to use page table
-	  mapping rather than copying for object mapping.
-
-	  You can check speed with zsmalloc benchmark:
-	  https://github.com/spartacus06/zsmapbench
-
 config ZSMALLOC_STAT
 	bool "Export zsmalloc statistics"
 	depends on ZSMALLOC
@@ -882,6 +869,10 @@ config PROCESS_RECLAIM
 	 (addr, addr + size-bytes) of the process.
 
 	 Any other value is ignored.
+	 
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "mm/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 
 config MULTIPLE_KSWAPD
 	bool "Spawn multiple kswapd threads"
@@ -895,3 +886,46 @@ config MULTIPLE_KSWAPD
 	 (echo <num> > /proc/sys/vm/kswapd_threads)
 
 	 Values not in the range of 1..16 are ignored.
+
+#ifdef OPLUS_FEATURE_MULTI_FREEAREA
+config PHYSICAL_ANTI_FRAGMENTATION
+	bool "Physical memory anti-fragmentation"
+	default n
+	help
+	 Turn on the function of Physical memory anti-fragmentation.
+#endif /* OPLUS_FEATURE_MULTI_FREEAREA */
+
+config VIRTUAL_RESERVE_MEMORY
+	bool "reserved vma for gpu emergency mmap"
+	depends on QGKI
+	default n
+	help
+	 support reserved vma for gpu emergency mmap.
+
+config KVMALLOC_OPTIMIZATION
+	bool "use vmalloc for huge memory allocation"
+	depends on QGKI
+	default n
+	help
+	  use vmalloc for huge memory allocation
+
+config KSWAPD_UNBIND_MAX_CPU
+       bool "kswapd unbind to max capacity cpu"
+       default n
+       depends on QGKI
+       help
+         unbind to max capacity cpu
+
+config DYNAMIC_TUNNING_SWAPPINESS
+	bool "tunning swappiess depends on file_pages size"
+	default n
+	help
+	  tunning swappiess depends on file_pages size
+
+source "mm/zram_opt/Kconfig"
+source "mm/process_reclaim/Kconfig"
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "mm/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+source "mm/malloc_track/Kconfig"
+source "mm/task_mem/Kconfig"

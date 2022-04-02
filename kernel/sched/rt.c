@@ -14,6 +14,9 @@
 #include "walt/walt.h"
 
 #include <trace/hooks/sched.h>
+#ifdef CONFIG_OPLUS_FEATURE_IM
+#include <linux/im/im.h>
+#endif
 
 int sched_rr_timeslice = RR_TIMESLICE;
 int sysctl_sched_rr_timeslice = (MSEC_PER_SEC / HZ) * RR_TIMESLICE;
@@ -1888,6 +1891,17 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	bool boost_on_big = rt_boost_on_big();
 	bool best_cpu_lt = true;
 
+#ifdef CONFIG_OPLUS_SF_BOOST
+	/* For surfaceflinger with util > 90, prefer to use big core */
+	if (task->compensate_need == 2 && tutil > 90)
+		boost_on_big = true;
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_IM
+	/* For hwc with util > 51, prefer to use big core */
+	if (im_hwc(task) && tutil > 51)
+		boost_on_big = true;
+#endif
+
 	rcu_read_lock();
 
 	cpu = cpu_rq(smp_processor_id())->rd->wrd.min_cap_orig_cpu;
@@ -1923,7 +1937,11 @@ retry:
 			if (sched_cpu_high_irqload(cpu))
 				continue;
 
+#ifdef CONFIG_OPLUS_FEATURE_IM
+			if (__cpu_overutilized(cpu, tutil) && !im_hwc(task))
+#else
 			if (__cpu_overutilized(cpu, tutil))
+#endif
 				continue;
 
 			util = cpu_util(cpu);

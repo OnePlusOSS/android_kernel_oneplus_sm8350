@@ -30,7 +30,9 @@
 #include <linux/page_owner.h>
 
 #include "internal.h"
-
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+#include "multi_freearea.h"
+#endif
 #define NUMA_STATS_THRESHOLD (U16_MAX - 2)
 
 #ifdef CONFIG_NUMA
@@ -1022,16 +1024,26 @@ static void fill_contig_page_info(struct zone *zone,
 				struct contig_page_info *info)
 {
 	unsigned int order;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    int flc;
+#endif
 
 	info->free_pages = 0;
 	info->free_blocks_total = 0;
 	info->free_blocks_suitable = 0;
 
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+#endif
 	for (order = 0; order < MAX_ORDER; order++) {
 		unsigned long blocks;
 
 		/* Count number of free blocks */
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+        blocks = zone->free_area[flc][order].nr_free;
+#else
 		blocks = zone->free_area[order].nr_free;
+#endif
 		info->free_blocks_total += blocks;
 
 		/* Count free base pages */
@@ -1042,6 +1054,9 @@ static void fill_contig_page_info(struct zone *zone,
 			info->free_blocks_suitable += blocks <<
 						(order - suitable_order);
 	}
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    }
+#endif
 }
 
 /*
@@ -1126,7 +1141,11 @@ const char * const vmstat_text[] = {
 	"nr_zspages",
 #endif
 	"nr_free_cma",
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+        "nr_ioncache_pages",
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 	/* enum numa_stat_item counters */
 #ifdef CONFIG_NUMA
 	"numa_hit",
@@ -1365,10 +1384,20 @@ static void frag_show_print(struct seq_file *m, pg_data_t *pgdat,
 						struct zone *zone)
 {
 	int order;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    int flc = 0;
+#endif
 
 	seq_printf(m, "Node %d, zone %8s ", pgdat->node_id, zone->name);
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+	    for (order = 0; order < MAX_ORDER; ++order)
+		    seq_printf(m, "%6lu ", zone->free_area[flc][order].nr_free);
+    }
+#else
 	for (order = 0; order < MAX_ORDER; ++order)
 		seq_printf(m, "%6lu ", zone->free_area[order].nr_free);
+#endif
 	seq_putc(m, '\n');
 }
 
@@ -1386,7 +1415,11 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 					pg_data_t *pgdat, struct zone *zone)
 {
 	int order, mtype;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    int flc;
 
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+#endif
 	for (mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
 		seq_printf(m, "Node %4d, zone %8s, type %12s ",
 					pgdat->node_id,
@@ -1397,8 +1430,11 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 			struct free_area *area;
 			struct list_head *curr;
 			bool overflow = false;
-
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+			area = &(zone->free_area[flc][order]);
+#else
 			area = &(zone->free_area[order]);
+#endif
 
 			list_for_each(curr, &area->free_list[mtype]) {
 				/*
@@ -1422,6 +1458,9 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 		}
 		seq_putc(m, '\n');
 	}
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    }
+#endif
 }
 
 /* Print out the free pages at each order for each migatetype */
@@ -1980,6 +2019,9 @@ struct workqueue_struct *mm_percpu_wq;
 void __init init_mm_internals(void)
 {
 	int ret __maybe_unused;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    struct proc_dir_entry *pentry;
+#endif
 
 	mm_percpu_wq = alloc_workqueue("mm_percpu_wq", WQ_MEM_RECLAIM, 0);
 
@@ -2006,6 +2048,13 @@ void __init init_mm_internals(void)
 	proc_create_seq("pagetypeinfo", 0400, NULL, &pagetypeinfo_op);
 	proc_create_seq("vmstat", 0444, NULL, &vmstat_op);
 	proc_create_seq("zoneinfo", 0444, NULL, &zoneinfo_op);
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    pentry = proc_create("free_area_list_show", S_IRWXUGO, NULL, &proc_free_area_fops);
+    if (!pentry) {
+		pr_err("vmstat: failed to create '/proc/free_area_list_show'\n");
+        return;
+    }
+#endif
 #endif
 }
 

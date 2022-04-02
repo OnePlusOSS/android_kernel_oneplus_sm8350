@@ -66,6 +66,19 @@ DECLARE_RESTRICTED_HOOK(android_rvh_setscheduler,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p), 1);
 
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_wakeup,
+	TP_PROTO(struct task_struct *p, int *ignore),
+	TP_ARGS(p, ignore), 1);
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_tick,
+	TP_PROTO(struct task_struct *p, unsigned long *ideal_runtime),
+	TP_ARGS(p, ideal_runtime), 1);
+DECLARE_RESTRICTED_HOOK(android_rvh_find_best_target,
+	TP_PROTO(struct task_struct *p, int cpu, int *ignore),
+	TP_ARGS(p, cpu, ignore), 1);
+struct cpumask;
+DECLARE_RESTRICTED_HOOK(android_rvh_cpupri_find_fitness,
+	TP_PROTO(struct task_struct *p, struct cpumask *lowest_mask),
+	TP_ARGS(p, lowest_mask), 1);
 struct sched_group;
 DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 	TP_PROTO(struct sched_group *busiest, struct rq *dst_rq, int *out_balance),
@@ -84,6 +97,10 @@ DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 #define trace_android_rvh_rtmutex_prepare_setprio(p, pi_task)
 #define trace_android_rvh_set_user_nice(p, nice)
 #define trace_android_rvh_setscheduler(p)
+#define trace_android_rvh_check_preempt_wakeup(p, ignore)
+#define trace_android_rvh_check_preempt_tick(p, ideal_runtime)
+#define trace_android_rvh_find_best_target(p, cpu, ignore)
+#define trace_android_rvh_cpupri_find_fitness(p, lowest_mask)
 #define trace_android_rvh_find_busiest_group(busiest, dst_rq, out_balance)
 #endif
 #endif /* _TRACE_HOOK_SCHED_H */

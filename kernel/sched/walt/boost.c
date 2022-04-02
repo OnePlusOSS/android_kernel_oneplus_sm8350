@@ -28,6 +28,12 @@ void walt_init_sched_boost(struct task_group *tg)
 	tg->wtg.sched_boost_enabled = true;
 	tg->wtg.colocate = false;
 	tg->wtg.colocate_update_disabled = false;
+#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+	tg->wtg.window_policy = 2;
+	tg->wtg.discount_wait_time = false;
+	tg->wtg.top_task_filter = false;
+	tg->wtg.ed_task_filter = false;
+#endif
 }
 
 static void update_cgroup_boost_settings(void)

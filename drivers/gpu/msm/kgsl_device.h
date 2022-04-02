@@ -312,6 +312,10 @@ struct kgsl_device {
 	bool gmu_fault;
 	/** @timelines: xarray for the timelines */
 	struct xarray timelines;
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	bool snapshot_control;
+	int snapshotfault;
+	#endif
 };
 
 #define KGSL_MMU_DEVICE(_mmu) \
@@ -433,10 +437,11 @@ struct kgsl_process_private {
 	spinlock_t mem_lock;
 	struct kref refcount;
 	struct idr mem_idr;
-	struct kgsl_pagetable *pagetable;
-	struct list_head list;
-	struct kobject kobj;
-	struct dentry *debug_root;
+ 	struct kgsl_pagetable *pagetable;
+ 	struct list_head list;
+ 	struct kobject kobj;
+	struct kobject kobj_memtype;
+ 	struct dentry *debug_root;
 	struct {
 		atomic64_t cur;
 		uint64_t max;
@@ -509,6 +514,10 @@ struct kgsl_snapshot {
 	bool first_read;
 	bool recovered;
 	struct kgsl_device *device;
+
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	char snapshot_hashid[96];
+	#endif
 };
 
 /**

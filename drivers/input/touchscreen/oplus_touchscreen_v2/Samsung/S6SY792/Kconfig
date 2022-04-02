@@ -1,0 +1,7 @@
+config TOUCHPANEL_SAMSUNG_S6SY792
+#   default y
+    tristate "TP Samsung s6sy792 IC enable or not for OPLUS"
+    ---help---
+    say Y to enable driver for Touchpanel using Samsung s6sy792
+
+

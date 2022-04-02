@@ -107,3 +107,13 @@ obj-$(CONFIG_PERCPU_STATS) += percpu-stats.o
 obj-$(CONFIG_ZONE_DEVICE) += memremap.o
 obj-$(CONFIG_HMM_MIRROR) += hmm.o
 obj-$(CONFIG_MEMFD_CREATE) += memfd.o
+obj-$(CONFIG_OPLUS_FEATURE_ZRAM_OPT) += zram_opt/
+obj-$(CONFIG_PROCESS_RECLAIM_ENHANCE) += process_reclaim/
+obj-$(CONFIG_VIRTUAL_RESERVE_MEMORY) += reserve_area.o
+#ifdef OPLUS_FEATURE_HEALTHINFO
+obj-$(CONFIG_OPLUS_HEALTHINFO) += healthinfo/
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+obj-$(CONFIG_DUMP_TASKS_MEM) += task_mem/
+#if defined(OPLUS_FEATURE_MULTI_FREEAREA)
+obj-$(CONFIG_PHYSICAL_ANTI_FRAGMENTATION) += multi_freearea.o
+#endif

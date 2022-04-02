@@ -1,0 +1,2 @@
+source "drivers/input/touchscreen/oplus_touchscreen_v2/Synaptics/Syna_tcm_oncell/Kconfig"
+

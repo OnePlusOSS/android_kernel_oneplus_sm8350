@@ -1,0 +1,11 @@
+#
+# Synaptics TCM touchscreen driver configuration
+#
+config TOUCHPANEL_SYNAPTICS_TCM_ONCELL
+    tristate "TP Synaptics_tcm_oncell enable or not"
+    help
+      Say Y here if you have a Synaptics TCM touchscreen connected
+      to your system.
+
+      If unsure, say N.
+

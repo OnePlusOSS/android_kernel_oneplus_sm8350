@@ -1,0 +1,328 @@
+/*this is for different project dtsi*/
+&qupv3_se4_i2c {
+	    synaptics@4B {
+		compatible = "synaptics-s3908";
+		reg = <0x4B>;
+		chip-name = "S3908";
+
+		/* Interrupt && Irq-gpio */
+		interrupt-parent = <&tlmm>;
+		interrupts = <23 0x2008>;
+
+		/* Power Config */
+		enable2v8_gpio = <&tlmm 31 0x1>;
+		enable1v8_gpio = <&tlmm 197 0x1>;
+		vdd_2v8-supply = <&L3C>;
+		//vcc_1v8-supply = <&L6C>;
+		vdd_2v8_volt = <3008000>;
+
+		/* Other HW Resource */
+		irq-gpio = <&tlmm 23 0x2008>;
+		reset-gpio = <&tlmm 22 0x1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+
+		touchpanel,max-num-support = <10>;
+		touchpanel,tx-rx-num = <17 38>;
+		earsense,tx-rx-num = <17 18>;
+		touchpanel,panel-coords = <1440 3216>;
+		touchpanel,display-coords = <1440 3216>;
+		touchpanel,touchmajor-limit = <0 54>;
+		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
+		touchpanel,curved-size = <45>;
+		project_id = <19815>;
+
+		touchpanel,tp_ic_type = <2>;
+		panel_type = <8 8>;
+		firmware_name = "SS","SS";
+		platform_support_project = <19815 19815>;
+		platform_support_project_dir = <19815 19815>;
+		platform_support_project_commandline = "mdss_dsi_samsung_amb670yf01_dsc_cmd",
+		"mdss_dsi_oplus20031_samsung_1440_3216_dsc_cmd";
+
+		prevention,curved_screen_V2;
+		prevention,grip_disable_level = <6>;
+		prevention,updelay_time_ms = <30>;
+		prevention,makeup_cnt_weight = <4 1 2 2 2>;
+		prevention,large_corner_range = <150 350>;
+		prevention,large_corner_judge_condition = <500 100 120 4 4>;
+		prevention,trx_reject_condition = <8 7 7>;
+		prevention,trx_strict_reject_condition = <8 6 6>;
+		prevention,large_judge_time_ms = <500 50 30>;
+		prevention,large_exit_condition = <8 8 2>;
+		prevention,single_channel_width = <40 40>;
+		prevention,normal_tap_condition = <10 300>;
+		prevention,long_edge_condition = <200 90 180 80>;
+		prevention,long_strict_edge_condition = <160 60>;
+		prevention,long_fingerhold_condition = <50 6 4 4>;
+		prevention,short_edge_condition = <200 90 180 80>;
+		prevention,short_strict_edge_condition = <160 60>;
+		prevention,large_strict_exit_condition = <2 2>;
+		prevention,top_corner_config = <70 200 60>;
+		prevention,edge_swipe_config = <38 100>;
+
+		/* SW Support Feature Control */
+		black_gesture_support;
+		//fw_edge_limit_support;
+		pressure_report_support;
+		charger_pump_support;
+		game_switch_support;
+		smart_gesture_support;
+		fw_update_app_support;
+		fingerprint_underscreen_support;
+		freq_hop_simulate_support;
+		report_flow_unlock_support;
+		screenoff_fingerprint_info_support;
+		irq_need_dev_resume_ok;
+		kernel_grip_support;
+		//firmware_in_dts;
+
+		/*
+		 *Virtual Key Config:
+		 *1:touchpanel,button-type: <virtualkey_type  supportted_button-map>
+		 *virtualkey_type:
+		 *Type 1: using board_properties
+		 *Type 2: using same IC (button zone&& touch zone are seprate)
+		 *Type 3: using diffrent IC (button zone&& touch zone are seprate)
+		 *Type 4: No need of virtual key process
+		 *supportted_button-map:select|menu|home|back
+		 *
+		 *2:touchpanel,button-map
+		 *type (X1,Y1)(X2,Y2)(X3,Y3)(Width_X,Hight_Y)--Only when button-type is 0
+		 */
+		touchpanel,button-type = <4>;
+		touchpanel.button-TRx = <0 0>;
+	};
+};
+//#ifdef OPLUS_FEATURE_TP_BASIC
+&soc {
+	//#ifdef OPLUS_FEATURE_RF_CABLE_DETECT
+	oem_rf_cable:oem_rf_cable{
+		compatible = "oem,rf_cable";
+		interrupt-parent = <&tlmm>;
+		rf,cable-gpio-0 = <&tlmm 165 0>;
+		rf,cable-support-timer = <0>;
+		rf,cable-gpio-num = <1>;
+		oem,rf_uevent_feature_enable;
+		pinctrl-names = "oem_rf_cable_active";
+		pinctrl-0= <&rf_cable_ant0_active>;
+	};
+	//#endif /* OPLUS_FEATURE_RF_CABLE_DETECT */
+	//#ifdef OPLUS_FEATURE_SENSOR_SMEM
+	/*enum sensor_id { OPLUS_ACCEL,OPLUS_GYRO,OPLUS_MAG,OPLUS_LIGHT,OPLUS_PROXIMITY,OPLUS_SAR,OPLUS_CT,OPLUS_BAROMETER,SENSORS_NUM};*/
+	oplus_sensor {
+		compatible = "oplus,sensor-devinfo";
+		als-row-coe = <1000>;
+		/*enum {LSM6DSM = 0x01, BMI160 = 0x02, LSM6DS3 = 0x04, BMI260 = 0x08, LSM6DSO = 0x10,ICM4X6XX = 0x20,};*/
+		gsensor@0 {
+			sensor-name = <0x08>;//BMI260
+			sensor-direction = <4>;
+			sensor-index = <0>;//source num
+			sensor-type = <0>;//OPLUS_ACCEL
+		};
+		gsensor@1 {
+			sensor-name = <0x20>;//ICM4X6XX
+			sensor-direction = <0>;
+			sensor-index = <1>;//source num
+			sensor-type = <0>;//OPLUS_ACCEL
+		};
+		/* enum {AKM0991X = 0x01, MMC5x3x = 0x02};*/
+		msensor@0 {
+			sensor-name = <0x01>;//AKM0991X
+			sensor-direction = <1>;
+			sensor-index = <0>;
+			sensor-type = <2>;//OPLUS_MAG
+			parameter-number= <18>;
+			soft-mag-parameter = <10000 0 0 0 0 0 0 0 10000 0 0 0 0 0 0 0 10000 0>;//e00 sign e01 sign...
+		};
+		msensor@1 {
+			sensor-name = <0x2>;//MMC5x3x
+			sensor-direction = <0>;
+			sensor-index = <1>;
+			sensor-type = <2>;//OPLUS_MAG
+			parameter-number= <18>;
+			soft-mag-parameter = <10000 0 0 0 0 0 0 0 10000 0 0 0 0 0 0 0 10000 0>;//e00 sign e01 sign...
+		};
+		/*enum {STK3A5X=0x01,TCS3701=0x02,TCS3408=0x04};*/
+		lsensor@0 {
+			sensor-name = <0x8>;//TCS3701 use see driver
+			sensor-index = <0>;
+			sensor-type = <3>;//OPLUS_LIGHT
+			als-type = <1>;
+			is-unit-device = <0>;
+			is-als-dri = <0>;
+			als-factor = <1000>;
+			is_als_initialed = <0>;
+			als_buffer_length = <10>;
+		};
+		psensor@0 {
+			sensor-name = <0x1>;//STK33502
+			sensor-index = <0>;
+			sensor-type = <4>;//OPLUS_PROXIMITY
+			bus-number = <5>;
+			irq-number = <89>;
+			ps-type = <1>;
+			ps_saturation = <2600>;
+			/*1-need close 2-close has contidition 0-not close*/
+			is_need_close_pd = <0>;
+			/*sensor-reg start*/
+			parameter-number = <4>;
+			sensor-reg = <0x01 0x31
+				0x03 0x60
+				0xDB 0x00>; //override special reg
+			/*sensor-reg end*/
+		};
+		/* enum {SX9324 = 0x01} */
+		ssensor@0 {
+			sensor-name = <0x1>;//SX9324
+			sensor-index = <0>;
+			sensor-type = <5>;//OPLUS_SAR
+			parameter-number = <18>;
+			sensor-reg = <0x24 0x47 0x27 0x14 0x28 0x3D 0x29 0x1F 0x2a 0x37 0x40 0x0B 0x41 0x0B 0x45 0x23 0x11 0x27>;
+		};
+		sdsensor@0 {
+			sensor-name = <0x1>;//SX9324 DOWN
+			sensor-index = <0>;
+			sensor-type = <9>;//OPLUS_SAR
+			parameter-number = <18>;
+			sensor-reg = <0x24 0x47 0x27 0x14 0x28 0x1F 0x29 0x37 0x2a 0x3D 0x40 0x0B 0x41 0x0B 0x45 0x23 0x11 0x27>;
+		};
+		/* enum {tcs3408 = 0x01  tcs3701 = 0x02} */
+		//cctsensor@0 {
+	//        sensor-name = <0x2>; //tcs3701
+	//        sensor-index = <0>;
+	//        sensor-type = <6>; //OPLUS_CCT
+	//        bus-number = <5>;
+	//        //feature
+	//        publish-sensors = <0x3>; //bit[0] - als, bit[1] - rgb, bit[2] - flicker
+	//        is-ch-dri = <0>;
+	//        timer-size = <25>; //ms
+	//        fac-cali-sensor = <0x2>; //0x1 - als, 0x2 - rgb, 0x4, flicker
+	//};
+		cctrsensor@0 {
+			sensor-name = <0x1>; //tcs3408
+			sensor-index = <0>;
+			sensor-type = <7>; //OPLUS_CCT_REAR
+			bus-number = <1>;
+			//feature
+			publish-sensors = <0x7>; //bit[0] - als, bit[1] - rgb, bit[2] - flicker
+			is-ch-dri = <0>;
+			timer-size = <25>; //ms
+			fac-cali-sensor = <0x2>; //0x1 - als, 0x2 - rgb, 0x4, flicker
+                        para-matrix = <1>;
+		};
+		/*virtual sensor
+		enum sensor_algo_id {
+			OPLUS_PICKUP_DETECT,
+			OPLUS_LUX_AOD,
+			OPLUS_TP_GESTURE,
+			OPLUS_FP_DISPLAY,
+			OPLUS_FREE_FALL,
+			OPLUS_CAMERA_PROTECT,
+			SENSOR_ALGO_NUM
+		}*/
+		pickup_detect {
+			sensor-type = <0>;//OPLUS_PICKUP_DETECT
+			is-virtual-sensor;
+			is-need-prox = <1>;
+			prox-type = <0>; // 0 - proximity; 1 - proximity_fake
+		};
+		free_fall {
+			sensor-type = <4>;//OPLUS_FREE_FALL
+			is-virtual-sensor;
+		};
+		lux_aod {
+			sensor-type = <1>; //OPLUS_LUX_AOD
+			is-virtual-sensor;
+			thrd-low = <12>;
+			thrd-high = <50>;
+			als-type = <0>;
+		};
+		fp_display {
+			sensor-type = <3>;//OPLUS_FP_DISPLAY
+			is-virtual-sensor;
+			prox-type = <0>; // 0 - proximity; 1 - proximity_fake
+		};
+	};
+	//#endif /*OPLUS_FEATURE_SENSOR_SMEM*/
+};
+//#ifdef OPLUS_FEATURE_RF_CABLE_DETECT
+&tlmm {
+    rf_cable_ant0_active: rf_cable_ant0_active {
+        mux {
+            pins = "gpio165";
+            function = "gpio";
+        };
+        config {
+            pins = "gpio165";
+            drive-strength = <2>;
+            bias-pull-up;
+        };
+    };
+};
+//#endif /* OPLUS_FEATURE_RF_CABLE_DETECT */
+//#endif /* OPLUS_FEATURE_TP_BASIC */
+
+&battery_charger {
+	oplus,swarp_general_chg_strategy_data_low = <0   50  CURR_LIMIT_7BIT_2_0A 1 0
+						     40  120 CURR_LIMIT_7BIT_2_5A 2 0
+						     110 160 CURR_LIMIT_7BIT_5_0A 3 1
+						     150 425 CURR_LIMIT_7BIT_6_3A 4 4
+						     110 455 CURR_LIMIT_7BIT_5_0A 5 1
+						     435 470 CURR_LIMIT_7BIT_4_0A 5 4>;
+
+	oplus,swarp_general_chg_strategy_data_high = <0   50  CURR_LIMIT_7BIT_2_0A 1 0
+						      40  120 CURR_LIMIT_7BIT_2_5A 2 0
+						      110 160 CURR_LIMIT_7BIT_5_0A 3 1
+						      150 420 CURR_LIMIT_7BIT_6_3A 5 2
+						      110 420 CURR_LIMIT_7BIT_5_0A 5 1
+						      410 440 CURR_LIMIT_7BIT_4_0A 6 4
+						      430 470 CURR_LIMIT_7BIT_2_0A 6 5>;
+};
+
+&battery_charger{
+	qcom,warm_bat_decidegc = <470>;
+};
+
+&oplus_warp_chg {
+	qcom,warp_batt_over_high_temp = <470>;
+};
+
+&oplus_p9415 {
+	status = "ok";
+};
+
+&oplus_hl7227 {
+	status = "ok";
+};
+
+&oplus_chg_wls {
+	status = "ok";
+	oplus,fast_ic = <&oplus_hl7227>;
+	oplus,support_fastchg;
+	oplus,support_epp_plus;
+	oplus,wls_chg_fw = "IDT_P9415_45W";
+	oplus,cp_boost_en-gpio = <&pm8350c_gpios 1 0x00>;
+	pinctrl-names = "default", "wrx_en_active", "wrx_en_sleep",
+			"cp_boost_en_active", "cp_boost_en_sleep";
+	pinctrl-3 = <&cp_boost_en_active>;
+	pinctrl-4 = <&cp_boost_en_sleep>;
+
+	/* fod parameter*/
+	oplus,fastchg-fod-enable;
+	oplus,fastchg-match-q = /bits/ 8 <0x3F>;
+	oplus,fastchg-fod-parm = /bits/ 8 <0xac 0x32 0xac 0x28 0xa0 0x1e
+						0x9a 0x47 0x9a 0x50 0x9f 0xec>;
+	oplus,fastchg-fod-parm-12V = /bits/ 8 <0xac 0x32 0xa0 0x68 0xa0 0x28
+						0x9a 0x47 0x9a 0x32 0x9f 0xc4>;
+
+	oplus,bpp-vol-mv = <5000>;
+	oplus,epp-vol-mv = <11000>;
+	oplus,epp_plus-vol-mv = <12000>;
+	oplus,warp-vol-mv = <12000>;
+	oplus,swarp-vol-mv = <12000>;
+};
+
+&oplus_chg_gki {
+	oplus,support_wls;
+};

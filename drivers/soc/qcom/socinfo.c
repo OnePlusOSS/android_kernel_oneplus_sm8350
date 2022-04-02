@@ -14,7 +14,7 @@
 #include <linux/sys_soc.h>
 #include <linux/types.h>
 #include <soc/qcom/socinfo.h>
-
+#include <soc/oplus/system/oplus_project.h>
 /*
  * SoC version type with major number in the upper 16 bits and minor
  * number in the lower 16 bits.
@@ -208,7 +208,7 @@ static uint32_t socinfo_get_platform_type(void)
 }
 
 /* Version 4 */
-static uint32_t socinfo_get_platform_version(void)
+uint32_t socinfo_get_platform_version(void)
 {
 	return socinfo ?
 		(socinfo_format >= SOCINFO_VERSION(0, 4) ?
@@ -611,6 +611,9 @@ struct soc_id {
 	unsigned int id;
 	const char *name;
 };
+
+static char *fake_soc_id_name = "SM8150";
+static char *real_soc_id_name = "SM8350";
 
 static const struct soc_id soc_id[] = {
 	{ 87, "MSM8960" },
@@ -1183,8 +1186,13 @@ static const char *socinfo_machine(unsigned int id)
 	int idx;
 
 	for (idx = 0; idx < ARRAY_SIZE(soc_id); idx++) {
-		if (soc_id[idx].id == id)
-			return soc_id[idx].name;
+        if (soc_id[idx].id == id) {
+            if (is_confidential()) {
+                return fake_soc_id_name;
+            } else {
+                return real_soc_id_name;
+            }
+        }
 	}
 
 	return NULL;

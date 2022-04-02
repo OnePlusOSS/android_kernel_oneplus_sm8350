@@ -1,0 +1,20 @@
+&soc {
+	timer {
+		clock-frequency = <5000000>;
+	};
+
+	timer@f120000 {
+		clock-frequency = <5000000>;
+	};
+
+	wdog: qcom,wdt@f017000 {
+		status = "disabled";
+	};
+
+};
+
+&gcc {
+	clocks = <&bi_tcxo>, <&bi_tcxo_ao>, <&sleep_clk>;
+};
+
+#include "monaco-stub-regulator.dtsi"

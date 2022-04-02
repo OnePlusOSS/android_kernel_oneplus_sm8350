@@ -61,6 +61,8 @@ source "drivers/nfc/s3fwrn5/Kconfig"
 source "drivers/nfc/st95hf/Kconfig"
 endmenu
 
+source "drivers/nfc/oplus_nfc/Kconfig"
+
 config NFC_QTI_I2C
 	tristate "QTI NCI based NFC I2C Slave Driver for SNxxx"
 	depends on I2C
@@ -87,3 +89,11 @@ config NFC_QTI_I3C
 	  This enables the NFC driver for SNxxx based devices.
 	  This is for I3C connected version. NCI protocol logic
 	  resides in the usermode and it has no other NFC dependencies.
+
+config NFC_NQ
+        tristate "QTI NCI based NFC Controller Driver for NQx"
+        depends on I2C
+        help
+          This enables the NFC driver for NQx based devices.
+          This is for i2c connected version. NCI protocol logic
+          resides in the usermode and it has no other NFC dependencies.

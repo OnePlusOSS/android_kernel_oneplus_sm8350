@@ -1598,6 +1598,12 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 
 	platform_set_drvdata(pdev, pctrl);
 
+	#ifdef OPLUS_BUG_STABILITY
+	pr_err("Disable GPIO151 wakeup\n");
+
+	msm_gpio_mpm_wake_set(151, false);
+	#endif
+
 	dev_dbg(&pdev->dev, "Probed Qualcomm pinctrl driver\n");
 
 	return 0;

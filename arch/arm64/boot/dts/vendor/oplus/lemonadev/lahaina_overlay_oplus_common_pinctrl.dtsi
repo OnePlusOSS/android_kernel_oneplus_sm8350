@@ -1,0 +1,72 @@
+/*this is for different project dtsi*/
+&pm8350c_gpios {
+
+    mps_otg_en_ctrl {
+        mps_otg_en_active: mps_otg_en_active {
+            pins = "gpio1";
+            function = "normal";
+            input-disable;
+            //output-enable;
+            output-high;
+            bias-disable;
+            power-source = <1>; /* 1.8V */
+            qcom,drive-strength = <2>;
+        };
+
+        mps_otg_en_sleep: mps_otg_en_sleep {
+            pins = "gpio1";
+            function = "normal";
+            input-disable;
+            //output-enable;
+            output-low;
+            bias-disable;
+            power-source = <1>; /* 1.8V */
+            qcom,drive-strength = <2>;
+        };
+        mps_otg_en_default: mps_otg_en_default {
+            pins = "gpio1";
+            function = "normal";
+            input-disable;
+            //output-enable;
+            output-low;
+            bias-disable;
+            power-source = <1>; /* 1.8V */
+            qcom,drive-strength = <2>;
+        };
+    };
+};
+&tlmm {
+
+    pmx_ts_int_active {
+        ts_int_active: ts_int_active {
+        mux {
+            pins = "gpio23";
+            function = "gpio";
+        };
+
+        config {
+            pins = "gpio23";
+            drive-strength = <8>;
+            bias-disable;
+            input-enable;
+            };
+        };
+    };
+
+
+    pmx_ts_reset_active {
+        ts_reset_active: ts_reset_active {
+        mux {
+            pins = "gpio22";
+            function = "gpio";
+        };
+
+        config {
+            pins = "gpio22";
+            drive-strength = <8>;
+            bias-pull-up;
+            };
+        };
+    };
+};
+

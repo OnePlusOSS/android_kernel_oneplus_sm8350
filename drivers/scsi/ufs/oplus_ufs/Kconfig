@@ -1,0 +1,4 @@
+config OPLUS_FEATURE_UFS_DRIVER
+  tristate "oplus ufs driver"
+  help
+    define this config to define oplus ufs driver common modify

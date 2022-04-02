@@ -1,0 +1,15 @@
+#include "../../qcom/lahaina-mtp-overlay.dts"
+#include "lahaina_overlay_oplus_common.dtsi"
+#include "lahaina_overlay_oplus_common_pinctrl.dtsi"
+#include "lemonade_common.dtsi"
+#include "lemonadep-19815.dtsi"
+#include "../../qcom/camera/lahaina-oem-camera-lemonadep_evt.dtsi"
+/ {
+    model = "Qualcomm Technologies, Inc. Lahaina MTP lemonadep";
+    /*we can add project id to this array,uefi can auto read it,if new project,we add to this array */
+    oplus,dtsi_no = <19815 133210>;
+    oem,project-id = <0x19815 0x2085A 0x20857 0x20858 0x20859>; /*8350 use hex*/
+    oem,project-codename = "lemonadep","lemonadept";
+    /*we can add hw id to this array,uefi can auto read it,if new hw,we add to this array  */
+    oem,hw-id = <12 13 21 22 23 31 32 33>;
+};

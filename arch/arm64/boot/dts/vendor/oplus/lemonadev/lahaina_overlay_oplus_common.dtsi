@@ -1,0 +1,37 @@
+/*this is for different project dtsi*/
+&qupv3_se0_i2c {
+
+    status = "ok";
+
+    mp2650-charger@5c {
+        status = "okay";
+        compatible = "oplus,mp2650-charger";
+        reg = <0x5c 0>;
+
+        qcom,mps_otg_en-gpio = <&pm8350c_gpios 1 0x00>;
+        pinctrl-names = "mps_otg_en_active", "mps_otg_en_sleep", "mps_otg_en_default";
+        pinctrl-0 = <&mps_otg_en_active>;
+        pinctrl-1 = <&mps_otg_en_sleep>;
+        pinctrl-2 = <&mps_otg_en_default>;
+    };
+};
+//#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+&reserved_memory {
+    ramoops: ramoops@0xE9700000 {
+        compatible = "ramoops";
+        reg = <0 0xE9700000 0 0x05B8000>; //5M + 736k
+        record-size =  <0x40000>; //256k
+        console-size = <0x40000>; //256k
+        ftrace-size =  <0x200000>; //2M
+        pmsg-size=     <0x200000>; //2M
+        devinfo-size=  <0x08000>;  //32k
+        dumpinfo-size=  <0x08000>; //32k
+        rsv01info-size=  <0x08000>; //32k
+        rsv02info-size=  <0x08000>; //32k
+        rsv03info-size=  <0x08000>; //32k
+        rsv04info-size=  <0x08000>; //32k
+        rsv05info-size=  <0x08000>; //32k
+        ecc-size=      <0x0>;
+    };
+};
+//#endif

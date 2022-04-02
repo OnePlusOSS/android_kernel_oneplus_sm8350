@@ -45,6 +45,17 @@
 #include <linux/static_key.h>
 
 #include <trace/events/tcp.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_APP_MONITOR)
+#include <trace/hooks/vh_oplus_app_monitor.h>
+#endif
+
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_tcp_output)(struct sock *sk) = NULL;
+EXPORT_SYMBOL(match_tcp_output);
+void (*match_tcp_output_retrans)(struct sock *sk) = NULL;
+EXPORT_SYMBOL(match_tcp_output_retrans);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.
@@ -76,6 +87,10 @@ static void tcp_event_new_data_sent(struct sock *sk, struct sk_buff *skb)
 		tp->highest_sack = skb;
 
 	tp->packets_out += tcp_skb_pcount(skb);
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_APP_MONITOR)
+	trace_android_vh_oplus_app_monitor_update(sk, skb, 1, 0);
+	#endif /* CONFIG_OPLUS_FEATURE_APP_MONITOR */
+
 	if (!prior_packets || icsk->icsk_pending == ICSK_TIME_LOSS_PROBE)
 		tcp_rearm_rto(sk);
 
@@ -1164,6 +1179,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 			      tcp_skb_pcount(skb));
 
 	tp->segs_out += tcp_skb_pcount(skb);
+
 	/* OK, its time to fill skb_shinfo(skb)->gso_{segs|size} */
 	skb_shinfo(skb)->gso_segs = tcp_skb_pcount(skb);
 	skb_shinfo(skb)->gso_size = tcp_skb_mss(skb);
@@ -1177,6 +1193,12 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	tcp_add_tx_delay(skb, tp);
 
 	err = icsk->icsk_af_ops->queue_xmit(sk, skb, &inet->cork.fl);
+
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_tcp_output != NULL) {
+		match_tcp_output(sk);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 	if (unlikely(err > 0)) {
 		tcp_enter_cwr(sk);
@@ -1654,7 +1676,8 @@ static void tcp_cwnd_validate(struct sock *sk, bool is_cwnd_limited)
 	 * window, and remember whether we were cwnd-limited then.
 	 */
 	if (!before(tp->snd_una, tp->max_packets_seq) ||
-	    tp->packets_out > tp->max_packets_out) {
+	    tp->packets_out > tp->max_packets_out ||
+	    is_cwnd_limited) {
 		tp->max_packets_out = tp->packets_out;
 		tp->max_packets_seq = tp->snd_nxt;
 		tp->is_cwnd_limited = is_cwnd_limited;
@@ -2476,6 +2499,10 @@ repair:
 	else
 		tcp_chrono_stop(sk, TCP_CHRONO_RWND_LIMITED);
 
+	is_cwnd_limited |= (tcp_packets_in_flight(tp) >= tp->snd_cwnd);
+	if (likely(sent_pkts || is_cwnd_limited))
+		tcp_cwnd_validate(sk, is_cwnd_limited);
+
 	if (likely(sent_pkts)) {
 		if (tcp_in_cwnd_reduction(sk))
 			tp->prr_out += sent_pkts;
@@ -2483,8 +2510,6 @@ repair:
 		/* Send one loss probe per tail loss episode. */
 		if (push_one != 2)
 			tcp_schedule_loss_probe(sk, false);
-		is_cwnd_limited |= (tcp_packets_in_flight(tp) >= tp->snd_cwnd);
-		tcp_cwnd_validate(sk, is_cwnd_limited);
 		return false;
 	}
 	return !tp->packets_out && !tcp_write_queue_empty(sk);
@@ -2906,7 +2931,6 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 	unsigned int cur_mss;
 	int diff, len, err;
 
-
 	/* Inconclusive MTU probe */
 	if (icsk->icsk_mtup.probe_size)
 		icsk->icsk_mtup.probe_size = 0;
@@ -3011,7 +3035,16 @@ int __tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb, int segs)
 				  TCP_SKB_CB(skb)->seq, segs, err);
 
 	if (likely(!err)) {
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_APP_MONITOR)
+		trace_android_vh_oplus_app_monitor_update(sk, skb, 1, 1);
+		#endif /* CONFIG_OPLUS_FEATURE_APP_MONITOR */
+
 		trace_tcp_retransmit_skb(sk, skb);
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		if (match_tcp_output_retrans != NULL) {
+			match_tcp_output_retrans(sk);
+		}
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 	} else if (err != -EBUSY) {
 		NET_ADD_STATS(sock_net(sk), LINUX_MIB_TCPRETRANSFAIL, segs);
 	}
