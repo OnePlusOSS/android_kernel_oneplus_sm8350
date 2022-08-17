@@ -1,0 +1,8 @@
+config TOUCHPANEL_CUSTOM
+	tristate "custom touchscreen driver"
+	help
+	  Say Y here if want to add touch custom driver for the built-in touchscreen.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.

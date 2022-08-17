@@ -172,7 +172,7 @@ static int arm_smmu_domain_get_attr(struct iommu_domain *domain,
 static inline int arm_smmu_rpm_get(struct arm_smmu_device *smmu)
 {
 	if (pm_runtime_enabled(smmu->dev))
-		return pm_runtime_resume_and_get(smmu->dev);
+		return pm_runtime_get_sync(smmu->dev);
 
 	return 0;
 }
@@ -3299,6 +3299,7 @@ static size_t arm_smmu_unmap(struct iommu_domain *domain, unsigned long iova,
 	arm_smmu_rpm_get(smmu);
 	spin_lock_irqsave(&smmu_domain->cb_lock, flags);
 	ret = ops->unmap(ops, iova, size, gather);
+	arm_smmu_deferred_flush(smmu_domain);
 	spin_unlock_irqrestore(&smmu_domain->cb_lock, flags);
 	arm_smmu_rpm_put(smmu);
 

@@ -56,6 +56,13 @@
 #include <asm/unistd.h>
 #include <asm/siginfo.h>
 #include <asm/cacheflush.h>
+#if defined(OPLUS_FEATURE_HANS_FREEZE) && defined(CONFIG_OPLUS_FEATURE_HANS)
+#include <linux/hans.h>
+#endif /*OPLUS_FEATURE_HANS_FREEZE*/
+
+#ifdef CONFIG_QGKI
+#include <soc/oplus/system/oplus_process.h>
+#endif
 
 /*
  * SLAB caches for signal bits.
@@ -1080,6 +1087,14 @@ static int __send_signal(int sig, struct kernel_siginfo *info, struct task_struc
 	assert_spin_locked(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
+	#ifdef CONFIG_QGKI
+        if(1) {
+                /*add the SIGKILL print log for some debug*/
+                if((sig == SIGHUP || sig == 33 || sig == SIGKILL || sig == SIGSTOP || sig == SIGABRT || sig == SIGTERM || sig == SIGCONT) && is_key_process(t)) {
+                        printk("Some other process %d:%s want to send sig:%d to pid:%d tgid:%d comm:%s\n", current->pid, current->comm,sig, t->pid, t->tgid, t->comm);
+                }
+        }
+        #endif
 	if (!prepare_signal(sig, t, force))
 		goto ret;
 
@@ -1288,6 +1303,10 @@ int do_send_sig_info(int sig, struct kernel_siginfo *info, struct task_struct *p
 	unsigned long flags;
 	int ret = -ESRCH;
 
+#if defined(OPLUS_FEATURE_HANS_FREEZE) && defined(CONFIG_OPLUS_FEATURE_HANS)
+	hans_check_signal(p, sig);
+#endif /*OPLUS_FEATURE_HANS_FREEZE*/
+
 	if (lock_task_sighand(p, &flags)) {
 		ret = send_signal(sig, info, p, type);
 		unlock_task_sighand(p, &flags);
@@ -1416,8 +1435,7 @@ int group_send_sig_info(int sig, struct kernel_siginfo *info,
 		check_panic_on_foreground_kill(p);
 		ret = do_send_sig_info(sig, info, p, type);
 		if (capable(CAP_KILL) && sig == SIGKILL)
-			if (!strcmp(current->comm, ULMK_MAGIC) ||
-				!strcmp(current->comm, PRE_KILL))
+			if (!strcmp(current->comm, ULMK_MAGIC))
 				add_to_oom_reaper(p);
 	}
 

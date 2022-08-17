@@ -14,7 +14,9 @@
 #include <linux/sys_soc.h>
 #include <linux/types.h>
 #include <soc/qcom/socinfo.h>
-
+#ifdef VENDOR_EDIT
+#include <soc/oplus/system/oplus_project.h>
+#endif /* VENDOR_EDIT */
 /*
  * SoC version type with major number in the upper 16 bits and minor
  * number in the lower 16 bits.
@@ -214,7 +216,7 @@ static uint32_t socinfo_get_platform_type(void)
 }
 
 /* Version 4 */
-static uint32_t socinfo_get_platform_version(void)
+uint32_t socinfo_get_platform_version(void)
 {
 	return socinfo ?
 		(socinfo_format >= SOCINFO_VERSION(0, 4) ?
@@ -620,6 +622,12 @@ struct soc_id {
 	unsigned int id;
 	const char *name;
 };
+
+#ifdef VENDOR_EDIT
+static char *fake_soc_id_name = "SM8150";
+static char *real_soc_id_name = "SM8350";
+static char *real_soc_id_21075_21031 = "SDM778G";
+#endif
 
 static const struct soc_id soc_id[] = {
 	{ 87, "MSM8960" },
@@ -1204,8 +1212,22 @@ static const char *socinfo_machine(unsigned int id)
 	int idx;
 
 	for (idx = 0; idx < ARRAY_SIZE(soc_id); idx++) {
+#ifndef VENDOR_EDIT
 		if (soc_id[idx].id == id)
 			return soc_id[idx].name;
+#else
+        if (soc_id[idx].id == id) {
+            if (is_confidential()) {
+                return fake_soc_id_name;
+            } else {
+		if (get_project() == 21075 || get_project() == 21031) {
+			return real_soc_id_21075_21031;
+		} else {
+			return real_soc_id_name;
+		}
+            }
+        }
+#endif /*VENDOR_EDIT*/
 	}
 
 	return NULL;

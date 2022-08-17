@@ -13,6 +13,9 @@
  */
 #include "sched.h"
 
+#ifdef CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE
+#include <soc/oplus/system/oplus_signal.h>
+#endif
 /**
  * complete: - signals a single thread waiting on this completion
  * @x:  holds the state of this particular completion
@@ -74,7 +77,11 @@ do_wait_for_common(struct completion *x,
 
 		__add_wait_queue_entry_tail_exclusive(&x->wait, &wait);
 		do {
+#ifdef CONFIG_OPLUS_FEATURE_HUNG_TASK_ENHANCE
+			if (signal_pending_state(state, current) || hung_long_and_fatal_signal_pending(current)) {
+#else
 			if (signal_pending_state(state, current)) {
+#endif
 				timeout = -ERESTARTSYS;
 				break;
 			}

@@ -55,6 +55,7 @@ obj-$(CONFIG_CXL_BASE)		+= cxl/
 obj-$(CONFIG_PCI_ENDPOINT_TEST)	+= pci_endpoint_test.o
 obj-$(CONFIG_OCXL)		+= ocxl/
 obj-y				+= cardreader/
+obj-y	+= tri_state_key/
 obj-$(CONFIG_PVPANIC)   	+= pvpanic.o
 obj-$(CONFIG_HABANA_AI)		+= habanalabs/
 obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
@@ -62,6 +63,29 @@ obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_QSEECOM)		+= qseecom-mod.o
 qseecom-mod-y			:= qseecom.o
 qseecom-mod-$(CONFIG_COMPAT)	+= compat_qseecom.o
+
+# ifdef VENDOR_EDIT
+obj-$(CONFIG_CS_F61_NDT) 	+= cs_press/
+# endif /* VENDOR_EDIT */
 obj-$(CONFIG_PROFILER)			+= profiler.o
 obj-$(CONFIG_WIGIG_SENSING_SPI)	+= wigig_sensing.o
 obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
+
+#ifdef OPLUS_FEATURE_SIM_DETECT
+obj-$(CONFIG_SIM_DETECT)	+= sim_detect.o
+#endif
+
+#ifdef OPLUS_FEATURE_SIM_DETECT
+obj-$(CONFIG_OEM_QMI)	+= oem_qmi_client.o
+#endif
+
+#ifdef OPLUS_FEATURE_RF_CABLE_DETECT
+oplus_bsp_rfcablemonitor-y			:= oplus_rf_cable_monitor.o
+obj-$(CONFIG_OPLUS_RF_CABLE_MONITOR)	+= oplus_bsp_rfcablemonitor.o
+oplus_bsp_ant_detect-y	:= op_ant_detect.o
+obj-$(CONFIG_OPLUS_RF_CABLE_MONITOR)	+= oplus_bsp_ant_detect.o
+#endif /* OPLUS_FEATURE_RF_CABLE_DETECT */
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+obj-$(CONFIG_AW8697_HAPTIC) += aw8697_haptic/
+#endif

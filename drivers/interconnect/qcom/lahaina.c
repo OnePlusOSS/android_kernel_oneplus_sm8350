@@ -2803,6 +2803,7 @@ err:
 	}
 
 	clk_bulk_disable_unprepare(qp->num_clks, qp->clks);
+
 	clk_bulk_put_all(qp->num_clks, qp->clks);
 
 	icc_provider_del(provider);

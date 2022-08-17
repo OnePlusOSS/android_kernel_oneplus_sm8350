@@ -1688,6 +1688,10 @@ static int geni_se_iommu_probe(struct device *dev)
 	return 0;
 }
 
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+extern bool ext_boot_with_console(void);
+#endif
+
 static int geni_se_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -1766,30 +1770,35 @@ static int geni_se_probe(struct platform_device *pdev)
 		dev_err(dev, "%s Failed to allocate log context\n", __func__);
 
 	dev_set_drvdata(dev, geni_se_dev);
-
 	/*
 	 * TBD: Proxy vote on QUP core path on behalf of earlycon.
 	 * Once the ICC sync state feature is implemented, we can make
 	 * console UART as dummy consumer of ICC to get rid of this HACK
 	 */
 #if IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE)
-	geni_se_dev->wrapper_rsc.wrapper_dev = dev;
-	geni_se_dev->wrapper_rsc.ctrl_dev = dev;
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(ext_boot_with_console()) {
+	#endif
+		geni_se_dev->wrapper_rsc.wrapper_dev = dev;
+		geni_se_dev->wrapper_rsc.ctrl_dev = dev;
 
-	ret = geni_se_resources_init(&geni_se_dev->wrapper_rsc,
-					UART_CONSOLE_CORE2X_VOTE,
-					(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
-	if (ret) {
-		dev_err(dev, "Resources init failed: %d\n", ret);
-		return ret;
-	}
+		ret = geni_se_resources_init(&geni_se_dev->wrapper_rsc,
+						UART_CONSOLE_CORE2X_VOTE,
+						(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
+		if (ret) {
+			dev_err(dev, "Resources init failed: %d\n", ret);
+			return ret;
+		}
 
-	ret = geni_se_add_ab_ib(geni_se_dev, &geni_se_dev->wrapper_rsc);
-	if (ret) {
-		dev_err(dev, "%s: Error %d during bus_bw_update\n", __func__,
-				ret);
-		return ret;
+		ret = geni_se_add_ab_ib(geni_se_dev, &geni_se_dev->wrapper_rsc);
+		if (ret) {
+			dev_err(dev, "%s: Error %d during bus_bw_update\n", __func__,
+					ret);
+			return ret;
+		}
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
 	}
+	#endif
 #endif
 
 	ret = of_platform_populate(dev->of_node, geni_se_dt_match, NULL, dev);

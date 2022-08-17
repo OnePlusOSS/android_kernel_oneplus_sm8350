@@ -110,6 +110,13 @@ config CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
 
 endchoice
 
+config OPLUS_FEATURE_SUGOV_TL
+	bool "use target loads in schedutil governor"
+	depends on CPU_FREQ_GOV_SCHEDUTIL
+	help
+	  Add target_loads sysfs attr in cpufreq schedutil governor.
+
+
 config CPU_FREQ_GOV_PERFORMANCE
 	tristate "'performance' governor"
 	help

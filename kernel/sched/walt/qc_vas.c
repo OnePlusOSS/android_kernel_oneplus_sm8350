@@ -8,6 +8,14 @@
 
 #include "qc_vas.h"
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include <linux/task_sched_info.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
+
 #ifdef CONFIG_SCHED_WALT
 /* 1ms default for 20ms window size scaled to 1024 */
 unsigned int sysctl_sched_min_task_util_for_boost = 51;
@@ -135,6 +143,10 @@ void walt_check_for_rotation(struct rq *src_rq)
 			continue;
 
 		run = wc - rq->curr->wts.last_enqueued_ts;
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+		if (rq->curr->fbg_depth != 0)
+			continue;
+#endif
 
 		if (run < WALT_ROTATION_THRESHOLD_NS)
 			continue;
@@ -182,13 +194,25 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 	int new_cpu = -1;
 	int prev_cpu = task_cpu(p);
 	int ret;
-
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+        bool need_up_migrate = false;
+	struct cpumask *rtg_target = find_rtg_target(p);
+	if (rtg_target && (capacity_orig_of(prev_cpu) < capacity_orig_of(cpumask_first(rtg_target)))) {
+		need_up_migrate = true;
+	}
+	if (rq->misfit_task_load || need_up_migrate) {
+#else
 	if (rq->misfit_task_load) {
+#endif
 		if (rq->curr->state != TASK_RUNNING ||
 		    rq->curr->nr_cpus_allowed == 1)
 			return;
 
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+		if (walt_rotation_enabled && !need_up_migrate) {
+#else
 		if (walt_rotation_enabled) {
+#endif
 			raw_spin_lock(&migration_lock);
 			walt_check_for_rotation(rq);
 			raw_spin_unlock(&migration_lock);
@@ -665,6 +689,9 @@ out:
 	cpu_maps_update_done();
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 1);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_cpu_isolate_info(cpu, cpu_isolate);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	return ret_code;
 }
 
@@ -711,6 +738,9 @@ int sched_unisolate_cpu_unlocked(int cpu)
 out:
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 0);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_cpu_isolate_info(cpu, cpu_unisolate);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	return ret_code;
 }
 

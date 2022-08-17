@@ -30,6 +30,9 @@
 #include "kgsl_sync.h"
 #include "kgsl_sysfs.h"
 #include "kgsl_trace.h"
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+#include <linux/reserve_area.h>
+#endif
 
 #ifndef arch_mmap_check
 #define arch_mmap_check(addr, len, flags)	(0)
@@ -4164,6 +4167,9 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 					       pid_nr(private->pid), addr, pgoff, len,
 					       (int) val);
 	}
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	update_oom_pid_and_time(len, val, flags);
+#endif
 
 	kgsl_mem_entry_put(entry);
 	return val;
@@ -4496,8 +4502,17 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 	idr_init(&device->timelines);
 	spin_lock_init(&device->timelines_lock);
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled)
+		device->events_wq = alloc_workqueue("kgsl-events",
+			WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI | WQ_UX, 0);
+	else
+		device->events_wq = alloc_workqueue("kgsl-events",
+			WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI, 0);
+#else
 	device->events_wq = alloc_workqueue("kgsl-events",
 		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS | WQ_HIGHPRI, 0);
+#endif
 
 	if (!device->events_wq) {
 		dev_err(device->dev, "Failed to allocate events workqueue\n");

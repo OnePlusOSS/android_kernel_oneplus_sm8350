@@ -34,6 +34,10 @@
 #include "pnode.h"
 #include "internal.h"
 
+
+
+
+
 /* Maximum number of mounts in a mount namespace */
 unsigned int sysctl_mount_max __read_mostly = 100000;
 
@@ -3094,7 +3098,9 @@ char *copy_mount_string(const void __user *data)
 {
 	return data ? strndup_user(data, PATH_MAX) : NULL;
 }
-
+#ifdef CONFIG_OPLUS_KERNEL_SECURE_GUARD
+extern int oplus_mount_block(const char __user *dir_name, unsigned long flags);
+#endif /* CONFIG_OPLUS_KERNEL_SECURE_GUARD */
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -3116,6 +3122,12 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	unsigned int mnt_flags = 0, sb_flags;
 	int retval = 0;
 
+#ifdef CONFIG_OPLUS_KERNEL_SECURE_GUARD
+	retval = oplus_mount_block(dir_name, flags);
+	if (retval < 0){
+		return -EPERM;
+	}
+#endif /* CONFIG_OPLUS_KERNEL_SECURE_GUARD */
 	/* Discard magic */
 	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
 		flags &= ~MS_MGC_MSK;
