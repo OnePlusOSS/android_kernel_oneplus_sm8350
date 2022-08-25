@@ -48,6 +48,10 @@ enum msm_ion_heap_types {
 
 #define ION_FLAGS_CP_MASK	0x6FFE8000
 
+/* boost pool flag. */
+#define ION_FLAG_GRAPHIC_BUFFER ION_BIT(13)
+#define ION_FLAG_CAMERA_BUFFER  ION_BIT(12)
+
 /**
  * Flag to allow non continguous allocation of memory from secure
  * heap

@@ -12,6 +12,7 @@
 uint32_t socinfo_get_id(void);
 uint32_t socinfo_get_serial_number(void);
 const char *socinfo_get_id_string(void);
+uint32_t socinfo_get_platform_version(void);
 #else
 static inline uint32_t socinfo_get_id(void)
 {

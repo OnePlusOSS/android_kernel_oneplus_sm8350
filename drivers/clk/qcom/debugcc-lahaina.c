@@ -387,7 +387,6 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_qupv3_wrap1_core_2x_clk",
 	"gcc_qupv3_wrap1_core_clk",
 	"gcc_qupv3_wrap1_s0_clk",
-	"gcc_qupv3_wrap1_s1_clk",
 	"gcc_qupv3_wrap1_s2_clk",
 	"gcc_qupv3_wrap1_s3_clk",
 	"gcc_qupv3_wrap1_s4_clk",
@@ -527,7 +526,6 @@ static int gcc_debug_mux_sels[] = {
 	0x95,		/* gcc_qupv3_wrap1_core_2x_clk */
 	0x94,		/* gcc_qupv3_wrap1_core_clk */
 	0x96,		/* gcc_qupv3_wrap1_s0_clk */
-	0x97,		/* gcc_qupv3_wrap1_s1_clk */
 	0x98,		/* gcc_qupv3_wrap1_s2_clk */
 	0x99,		/* gcc_qupv3_wrap1_s3_clk */
 	0x9A,		/* gcc_qupv3_wrap1_s4_clk */

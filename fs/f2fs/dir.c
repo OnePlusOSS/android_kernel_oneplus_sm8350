@@ -1094,9 +1094,8 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 		if (npages - n > 1 && !ra_has_index(ra, n))
 			page_cache_sync_readahead(inode->i_mapping, ra, file, n,
 				min(npages - n, (pgoff_t)MAX_DIR_RA_PAGES));
-
 		dentry_page = f2fs_find_data_page(inode, n);
-		if (IS_ERR(dentry_page)) {
+          	if (IS_ERR(dentry_page)) {
 			err = PTR_ERR(dentry_page);
 			if (err == -ENOENT) {
 				err = 0;
@@ -1116,8 +1115,7 @@ static int f2fs_readdir(struct file *file, struct dir_context *ctx)
 			f2fs_put_page(dentry_page, 0);
 			break;
 		}
-
-		f2fs_put_page(dentry_page, 0);
+                f2fs_put_page(dentry_page, 0);
 	}
 out_free:
 	fscrypt_fname_free_buffer(&fstr);

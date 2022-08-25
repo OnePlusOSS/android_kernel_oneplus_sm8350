@@ -1984,6 +1984,10 @@ static int battery_chg_probe(struct platform_device *pdev)
 	struct pmic_glink_client_data client_data = { };
 	int rc, i;
 
+#ifdef VENDOR_EDIT
+	pr_info("battery_chg_probe start...\n");
+#endif
+
 	bcdev = devm_kzalloc(&pdev->dev, sizeof(*bcdev), GFP_KERNEL);
 	if (!bcdev)
 		return -ENOMEM;
@@ -2081,6 +2085,10 @@ static int battery_chg_probe(struct platform_device *pdev)
 	}
 
 	schedule_work(&bcdev->usb_type_work);
+
+#ifdef VENDOR_EDIT
+	pr_info("battery_chg_probe end...\n");
+#endif
 
 	return 0;
 error:

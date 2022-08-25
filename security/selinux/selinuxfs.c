@@ -41,6 +41,10 @@
 #include "objsec.h"
 #include "conditional.h"
 
+#ifdef OPLUS_FEATURE_SELINUX_CONTROL_LOG
+#include <soc/oplus/system/proc.h>
+#endif /* OPLUS_FEATURE_SELINUX_CONTROL_LOG */
+
 enum sel_inos {
 	SEL_ROOT_INO = 2,
 	SEL_LOAD,	/* load policy */
@@ -2136,6 +2140,10 @@ static int __init init_sel_fs(void)
 		err = PTR_ERR(selinux_null.dentry);
 		selinux_null.dentry = NULL;
 	}
+
+#ifdef OPLUS_FEATURE_SELINUX_CONTROL_LOG
+	init_denied_proc();
+#endif /* OPLUS_FEATURE_SELINUX_CONTROL_LOG */
 
 	return err;
 }

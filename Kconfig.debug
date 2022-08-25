@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# This config refers to the generic oplus debug mode.
+
+#ifdef CONFIG_OPLUS_SYSTEM_KERNEL
+#config OPLUS_SYSTEM_KERNEL_QCOM
+#  bool "config oplus system feature "
+#  default y
+#  help
+#	define this config to Distinguish between qcom and mtk platform
+#
+#config OPLUS_SYSTEM_KERNEL_MTK
+#  bool "config oplus system feature "
+#  default n
+#  help
+#	define this config to Distinguish between qcom and mtk platform
+
+config OPLUS_AGING_DEBUG
+	bool "oplus aging add config"
+	depends on QGKI
+	select IPC_LOGGING
+	select QCOM_RTB
+	select QCOM_RTB_SEPARATE_CPUS
+	select QCOM_RTB_QGKI
+	select SCSI_LOGGING
+	#select SCSI_UFSHCD_CMD_LOGGING
+	select KPROBES
+	select MHI_DEBUG
+	select DEBUG_LIST
+	select DEBUG_SPINLOCK
+	select DEBUG_MUTEXES
+	select SCSI_UFSHCD_CMD_LOGGING
+	default y if "$(OPLUS_AGING_TEST)" = "true"
+	default n
+
+config OPLUS_KASAN_DEBUG
+	bool "oplus kasan debug"
+	depends on QGKI
+	select KASAN
+	select KASAN_GENERIC
+	select SECTION_MISMATCH_WARN_ONLY
+	#select KCOV
+	#select KCOV_ENABLE_COMPARISONS
+	default y if "$(OPLUS_KASAN_TEST)" = "true"
+	default n
+
+config OPLUS_KMEMLEAK_DEBUG
+	bool "oplus kmemleak debug"
+	depends on QGKI
+	select DEBUG_KMEMLEAK
+	select SLUB_DEBUG
+	#select SLABTRACE_DEBUG
+	default y if "$(OPLUS_KMEMLEAK_TEST)" = "true"
+	default n
+
+config OPLUS_SLUB_DEBUG
+	bool "oplus slub debug"
+	depends on QGKI
+	select SLUB_DEBUG
+	select SLUB_DEBUG_ON
+	select SLUB_DEBUG_PANIC_ON
+	default y if "$(OPLUS_SLUB_TEST)" = "true"
+	default n
+
+config OPLUS_PAGEOWNER_DEBUG
+	bool "oplus pageowner debug"
+	depends on QGKI
+	select PAGE_OWNER
+	select PAGE_OWNER_ENABLE_DEFAULT
+	default y if "$(OPLUS_PAGEOWNER_TEST)" = "true"
+	default n
+#endif /*CONFIG_OPLUS_SYSTEM_KERNEL*/

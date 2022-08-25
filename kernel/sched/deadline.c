@@ -19,6 +19,10 @@
 #include "pelt.h"
 #include "walt/walt.h"
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+#include <linux/task_load.h>
+#endif
+
 struct dl_bandwidth def_dl_bandwidth;
 
 static inline struct task_struct *dl_task_of(struct sched_dl_entity *dl_se)
@@ -1212,6 +1216,10 @@ static void update_curr_dl(struct rq *rq)
 
 	curr->se.exec_start = now;
 	cgroup_account_cputime(curr, delta_exec);
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+	account_normalize_runtime(rq->curr, delta_exec, rq);
+#endif
 
 	if (dl_entity_is_special(dl_se))
 		return;

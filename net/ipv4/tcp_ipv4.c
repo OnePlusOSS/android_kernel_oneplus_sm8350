@@ -82,6 +82,15 @@
 
 #include <trace/events/tcp.h>
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_ipa_ip_wakeup)(int type, struct sk_buff *skb) = NULL;
+EXPORT_SYMBOL(match_ipa_ip_wakeup);
+void (*match_ipa_tcp_wakeup)(int type, struct sock *sk) = NULL;
+EXPORT_SYMBOL(match_ipa_tcp_wakeup);
+void (*ipa_schedule_work)(void) = NULL;
+EXPORT_SYMBOL(ipa_schedule_work);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 #ifdef CONFIG_TCP_MD5SIG
 static int tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
 			       __be32 daddr, __be32 saddr, const struct tcphdr *th);
@@ -1826,6 +1835,12 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	struct sock *sk;
 	int ret;
 
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_ipa_ip_wakeup != NULL) {
+		match_ipa_ip_wakeup(1, skb);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1857,6 +1872,12 @@ lookup:
 			       th->dest, sdif, &refcounted);
 	if (!sk)
 		goto no_tcp_socket;
+
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_ipa_tcp_wakeup != NULL) {
+		match_ipa_tcp_wakeup(1, sk);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 process:
 	if (sk->sk_state == TCP_TIME_WAIT)
@@ -1985,6 +2006,11 @@ bad_packet:
 
 discard_it:
 	/* Discard frame. */
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (ipa_schedule_work != NULL) {
+		ipa_schedule_work();
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 	kfree_skb(skb);
 	return 0;
 
@@ -2701,6 +2727,11 @@ static int __net_init tcp_sk_init(struct net *net)
 	net->ipv4.sysctl_tcp_sack = 1;
 	net->ipv4.sysctl_tcp_window_scaling = 1;
 	net->ipv4.sysctl_tcp_timestamps = 1;
+
+#if IS_ENABLED(CONFIG_OPLUS_BUG_STABILITY)
+	net->ipv4.sysctl_tcp_random_timestamp = 1;
+#endif /* CONFIG_OPLUS_BUG_STABILITY */
+
 	net->ipv4.sysctl_tcp_early_retrans = 3;
 	net->ipv4.sysctl_tcp_recovery = TCP_RACK_LOSS_DETECTION;
 	net->ipv4.sysctl_tcp_slow_start_after_idle = 1; /* By default, RFC2861 behavior.  */

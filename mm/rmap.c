@@ -308,6 +308,7 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	return -ENOMEM;
 }
 
+
 /*
  * Attach vma to its own anon_vma, as well as to the anon_vmas that
  * the corresponding VMA in the parent process is attached to.
@@ -333,7 +334,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	error = anon_vma_clone(vma, pvma);
 	if (error)
 		return error;
-
+	
 	/* An existing anon_vma has been reused, all done then. */
 	if (vma->anon_vma)
 		return 0;

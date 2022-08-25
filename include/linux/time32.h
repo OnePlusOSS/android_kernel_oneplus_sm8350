@@ -221,4 +221,17 @@ extern struct __kernel_old_timeval ns_to_kernel_old_timeval(s64 nsec);
 #define compat_get_timespec64	get_old_timespec32
 #define compat_put_timespec64	put_old_timespec32
 
+/*#ifdef VENDOR_EDIT*/
+extern void set_normalized_timespec(struct timespec *ts, time_t sec, s64 nsec);
+static inline struct timespec timespec_sub(struct timespec lhs,
+						struct timespec rhs)
+{
+	struct timespec ts_delta;
+
+	set_normalized_timespec(&ts_delta, lhs.tv_sec - rhs.tv_sec,
+				lhs.tv_nsec - rhs.tv_nsec);
+	return ts_delta;
+}
+/*#endif*/
+
 #endif

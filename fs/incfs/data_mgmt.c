@@ -389,7 +389,7 @@ static void log_block_read(struct mount_info *mi, incfs_uuid_t *id,
 }
 
 static int validate_hash_tree(struct backing_file_context *bfc, struct file *f,
-			      int block_index, struct mem_range data, u8 *buf)
+			     int block_index, struct mem_range data, u8 *buf)
 {
 	struct data_file *df = get_incfs_data_file(f);
 	u8 stored_digest[INCFS_MAX_HASH_SIZE] = {};
@@ -952,7 +952,7 @@ ssize_t incfs_read_data_file_block(struct mem_range dst, struct file *f,
 				decompress(range(tmp.data, bytes_to_read), dst);
 			if (result < 0) {
 				const char *name =
-				    bfc->bc_file->f_path.dentry->d_name.name;
+                                   bfc->bc_file->f_path.dentry->d_name.name;
 
 				pr_warn_once("incfs: Decompression error. %s",
 					     name);

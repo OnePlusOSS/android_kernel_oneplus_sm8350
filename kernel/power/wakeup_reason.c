@@ -311,12 +311,20 @@ static ssize_t last_resume_reason_show(struct kobject *kobj,
 		spin_unlock_irqrestore(&wakeup_reason_lock, flags);
 		return buf_offset;
 	}
-
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (wakeup_reason == RESUME_IRQ && !list_empty(&leaf_irqs)) {
+		list_for_each_entry(n, &leaf_irqs, siblings)
+			buf_offset += scnprintf(buf + buf_offset,
+						PAGE_SIZE - buf_offset,
+						"%d %s\n", n->irq, (strncmp(n->irq_name, "ipcc_0", strlen("ipcc_0")) == 0) ? "qmi" : n->irq_name);
+	}
+	#else
 	if (wakeup_reason == RESUME_IRQ && !list_empty(&leaf_irqs))
 		list_for_each_entry(n, &leaf_irqs, siblings)
 			buf_offset += scnprintf(buf + buf_offset,
 						PAGE_SIZE - buf_offset,
 						"%d %s\n", n->irq, n->irq_name);
+	#endif
 	else if (wakeup_reason == RESUME_ABNORMAL)
 		buf_offset = scnprintf(buf, PAGE_SIZE, "-1 %s",
 				       non_irq_wake_reason);

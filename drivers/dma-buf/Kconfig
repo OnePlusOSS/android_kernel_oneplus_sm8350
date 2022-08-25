@@ -70,4 +70,11 @@ config DMABUF_SELFTESTS
 	default n
 	depends on DMA_SHARED_BUFFER
 
+config DMABUF_PROC_INTERFACE
+	bool "create proc interface for getting dmabuf meminfo"
+	default n
+	depends on QGKI
+	depends on PROC_FS
+	help
+	  Create proc interface for getting ion meminfo
 endmenu

@@ -278,6 +278,12 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	pr_debug("%s: enter\n", __func__);
 
+	//#ifdef OPLUS_FEATURE_NFC_BRINGUP
+        #if IS_ENABLED(CONFIG_OPLUS_NFC)
+	CHECK_NFC_CHIP(SN100T);
+	#endif
+	//#endif /* OPLUS_FEATURE_NFC_BRINGUP */
+
 	//retrieve details of gpios from dt
 
 	ret = nfc_parse_dt(&client->dev, &nfc_gpio, &nfc_ldo, PLATFORM_IF_I2C);
@@ -368,9 +374,15 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	ret = nfcc_hw_check(nfc_dev);
 	if (ret) {
+		#ifndef OPLUS_BUG_STABILITY
 		pr_err("nfc hw check failed ret %d\n", ret);
-		goto err_nfcc_hw_check;
+		//goto err_nfcc_hw_check;
+		#endif /* OPLUS_BUG_STABILITY */
 	}
+
+	#ifdef OPLUS_BUG_STABILITY
+	nfc_dev->nqx_info.info.chip_type = NFCC_SN100_B;
+	#endif /* OPLUS_BUG_STABILITY */
 
 	device_init_wakeup(&client->dev, true);
 	i2c_dev->irq_wake_up = false;
@@ -379,11 +391,6 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	pr_info("%s success\n", __func__);
 	return 0;
 
-err_nfcc_hw_check:
-	if (nfc_dev->reg) {
-		nfc_ldo_unvote(nfc_dev);
-		regulator_put(nfc_dev->reg);
-	}
 err_ldo_config_failed:
 	free_irq(client->irq, nfc_dev);
 err_nfc_misc_remove:
