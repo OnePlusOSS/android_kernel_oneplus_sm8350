@@ -254,8 +254,7 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 	};
 	unsigned int seq_id = 0;
 
-	if (unlikely(f2fs_readonly(inode->i_sb) ||
-				is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
+	if (unlikely(f2fs_readonly(inode->i_sb)))
 		return 0;
 
 	trace_f2fs_sync_file_enter(inode);
@@ -269,7 +268,7 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 	ret = file_write_and_wait_range(file, start, end);
 	clear_inode_flag(inode, FI_NEED_IPU);
 
-	if (ret) {
+	if (ret || is_sbi_flag_set(sbi, SBI_CP_DISABLED)) {
 		trace_f2fs_sync_file_exit(inode, cp_reason, datasync, ret);
 		return ret;
 	}
@@ -865,6 +864,7 @@ static void __setattr_copy(struct inode *inode, const struct iattr *attr)
 		if (!in_group_p(inode->i_gid) &&
 			!capable_wrt_inode_uidgid(inode, CAP_FSETID))
 			mode &= ~S_ISGID;
+		inode->i_mode = (inode->i_mode & S_IRWXUGO) | (mode & ~S_IRWXUGO);
 		set_acl_inode(inode, mode);
 	}
 }
@@ -968,6 +968,14 @@ int f2fs_setattr(struct dentry *dentry, struct iattr *attr)
 			inode->i_mode = F2FS_I(inode)->i_acl_mode;
 			clear_inode_flag(inode, FI_ACL_MODE);
 		}
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+		if (__is_hpb_file(dentry->d_name.name, inode))
+			set_inode_flag(inode, FI_HPB_INODE);
+		else
+			clear_inode_flag(inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 	}
 
 	/* file size may changed here */
@@ -3934,6 +3942,10 @@ static ssize_t f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			 */
 			if (!f2fs_force_buffered_io(inode, iocb, from) &&
 					allow_outplace_dio(inode, iocb, from))
+				goto write;
+
+			if (f2fs_overwrite_io(inode, iocb->ki_pos,
+						iov_iter_count(from)))
 				goto write;
 		}
 		preallocated = true;

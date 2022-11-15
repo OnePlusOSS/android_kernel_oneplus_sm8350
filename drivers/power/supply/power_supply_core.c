@@ -32,7 +32,11 @@ EXPORT_SYMBOL_GPL(power_supply_notifier);
 
 static struct device_type power_supply_dev_type;
 
-#define POWER_SUPPLY_DEFERRED_REGISTER_TIME	msecs_to_jiffies(10)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define POWER_SUPPLY_DEFERRED_REGISTER_TIME	msecs_to_jiffies(2000)
+#else
+#define POWER_SUPPLY_DEFERRED_REGISTER_TIME     msecs_to_jiffies(10)
+#endif
 
 static bool __power_supply_is_supplied_by(struct power_supply *supplier,
 					 struct power_supply *supply)

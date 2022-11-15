@@ -171,6 +171,13 @@ extern int sched_energy_aware_handler(struct ctl_table *table, int write,
 				 loff_t *ppos);
 #endif
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern int sysctl_sched_assist_scene_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *lenp, loff_t *ppos);
+extern int sysctl_sched_assist_input_boost_ctrl_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *lenp, loff_t *ppos);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 #define LIB_PATH_LENGTH 512
 extern char sched_lib_name[LIB_PATH_LENGTH];
 extern unsigned int sched_lib_mask_force;

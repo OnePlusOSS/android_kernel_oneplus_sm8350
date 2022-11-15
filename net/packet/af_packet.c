@@ -90,6 +90,7 @@
 #include <net/compat.h>
 
 #include "internal.h"
+#include <trace/hooks/vh_af_packet.h>
 
 /*
    Assumptions:
@@ -235,6 +236,10 @@ struct packet_skb_cb {
 static void __fanout_unlink(struct sock *sk, struct packet_sock *po);
 static void __fanout_link(struct sock *sk, struct packet_sock *po);
 
+//#ifdef OPLUS_FEATURE_DHCP
+int (*handle_dhcp)(struct sock *sk, struct sk_buff *skb, struct net_device *dev, struct packet_type *pt) = NULL;
+EXPORT_SYMBOL(handle_dhcp);
+//#endif /* OPLUS_FEATURE_DHCP */
 static int packet_direct_xmit(struct sk_buff *skb)
 {
 	return dev_direct_xmit(skb, packet_pick_tx_queue(skb));
@@ -2053,6 +2058,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	int skb_len = skb->len;
 	unsigned int snaplen, res;
 	bool is_drop_n_account = false;
+	int do_drop = 0;
 
 	if (skb->pkt_type == PACKET_LOOPBACK)
 		goto drop;
@@ -2131,6 +2137,16 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	/* drop conntrack reference */
 	nf_reset_ct(skb);
+//#ifdef OPLUS_FEATURE_DHCP
+    if (handle_dhcp != NULL && handle_dhcp(sk, skb, dev, pt)) {
+        printk("drop dhcp offer packet");
+        goto drop;
+    }
+//#endif /* OPLUS_FEATURE_DHCP */
+
+	trace_android_vh_check_dhcp_pkt(sk, skb, dev, pt, &do_drop);
+	if (do_drop)
+		goto drop;
 
 	spin_lock(&sk->sk_receive_queue.lock);
 	po->stats.stats1.tp_packets++;
@@ -4453,9 +4469,10 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 	}
 
 out_free_pg_vec:
-	bitmap_free(rx_owner_map);
-	if (pg_vec)
+    if (pg_vec){
+    bitmap_free(rx_owner_map);
 		free_pg_vec(pg_vec, order, req->tp_block_nr);
+    }
 out:
 	return err;
 }

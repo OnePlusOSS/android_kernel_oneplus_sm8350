@@ -2,3 +2,73 @@
 source "drivers/power/avs/Kconfig"
 source "drivers/power/reset/Kconfig"
 source "drivers/power/supply/Kconfig"
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+config OPLUS_CHG
+	tristate "OPLUS CHARGER KO module"
+	default m
+	help
+	  Enables support for the oplus charging framework
+
+config OPLUS_SM8350_CHARGER
+	bool "OPLUS SM8350 charger driver"
+	help
+	  Enables support for the sm8350 charging
+
+config OPLUS_SHORT_C_BATT_CHECK
+	bool "OPLUS_SHORT_C_BATT CHECK SUPPORT"
+	default n
+	help
+	  Say Y to include support
+
+config OPLUS_CALL_MODE_SUPPORT
+	bool "OPLUS call mode support"
+	help
+	  Say Y to include support
+
+config OPLUS_SMART_CHARGER_SUPPORT
+	bool "OPLUS smart charger support"
+	help
+	  Say Y to include support
+
+config OPLUS_SHORT_HW_CHECK
+	bool "OPLUS_SHORT_HW CHECK SUPPORT"
+	default n
+	help
+	  Say Y to include support
+
+config OPLUS_CHIP_SOC_NODE
+	bool "OPLUS chip soc node"
+	help
+	  Say Y to include support
+
+config OPLUS_SHORT_IC_CHECK
+	bool "OPLUS_SHORT_IC CHECK SUPPORT"
+	default n
+	help
+	  Say Y to include support
+
+config OPLUS_SHORT_USERSPACE
+	bool "OPLUS batt userspace"
+	help
+	 Say Y to include support
+
+config OPLUS_RTC_DET_SUPPORT
+	bool "OPLUS RTC DET SUPPORT"
+	default n
+	help
+	  Say Y to include support
+
+config OPLUS_CHECK_CHARGERID_VOLT
+	bool "OPLUS CHECK CHARGERID VOLT"
+	default n
+	help
+	  Say Y to include support
+
+config OPLUS_SHIP_MODE_SUPPORT
+	bool "OPLUS_SHIP_MODE_SUPPORT"
+	default n
+	help
+	  Say Y to include support
+source "drivers/power/oplus/Kconfig"
+#endif

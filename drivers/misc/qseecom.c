@@ -8178,8 +8178,14 @@ long qseecom_ioctl(struct file *file,
 		atomic_dec(&data->ioctl_count);
 		wake_up_all(&data->abort_wq);
 		mutex_unlock(&app_access_lock);
-		if (ret)
+		//#ifdef OPLUS_FEATURE_BOOT_SECURITY
+		/* 2020/12/16, modify for bug778753 temp qcom CR */
+		//if (ret)
+		if (ret) {
 			pr_err("failed open_session_cmd: %d\n", ret);
+			pr_err("scm_call failed: syscall returns: 0xffffffffffffffff, 0x0\n");
+		}
+		//#endif /* OPLUS_FEATURE_BOOT_SECURITY */
 		__qseecom_clean_data_sglistinfo(data);
 		break;
 	}

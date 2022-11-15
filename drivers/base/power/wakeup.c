@@ -19,9 +19,17 @@
 #include <linux/irqdesc.h>
 #include <linux/wakeup_reason.h>
 #include <trace/events/power.h>
+#ifdef OPLUS_FEATURE_LOGKIT
+#include <linux/rtc.h>
+#include <soc/oplus/system/oplus_sync_time.h>
+#endif
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/irqdesc.h>
+
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
 
 #include "power.h"
 
@@ -544,7 +552,10 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 	if (WARN_ONCE(wakeup_source_not_registered(ws),
 			"unregistered wakeup source\n"))
 		return;
-
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+	//wakeup_get_start_hold_time();
+	wakeup_get_start_time();
+	#endif
 	ws->active = true;
 	ws->active_count++;
 	ws->last_time = ktime_get();
@@ -686,8 +697,12 @@ static void wakeup_source_deactivate(struct wakeup_source *ws)
 	trace_wakeup_source_deactivate(ws->name, cec);
 
 	split_counters(&cnt, &inpr);
-	if (!inpr && waitqueue_active(&wakeup_count_wait_queue))
+	if (!inpr && waitqueue_active(&wakeup_count_wait_queue)) {
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		wakeup_get_end_hold_time();
+		#endif
 		wake_up(&wakeup_count_wait_queue);
+	}
 }
 
 /**
@@ -849,6 +864,9 @@ void pm_get_active_wakeup_sources(char *pending_wakeup_source, size_t max)
 				last_active_ws->name);
 	}
 	rcu_read_unlock();
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+	pr_info("%s, active: %d, pending: %s for debug\n", __func__, active, pending_wakeup_source);
+	#endif
 }
 EXPORT_SYMBOL_GPL(pm_get_active_wakeup_sources);
 
@@ -861,7 +879,11 @@ void pm_print_active_wakeup_sources(void)
 	srcuidx = srcu_read_lock(&wakeup_srcu);
 	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
 		if (ws->active) {
+			#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+			pr_info("active wakeup source: %s, %ld, %ld\n", ws->name, ws->active_count, ktime_to_ms(ws->total_time));
+			#else
 			pm_pr_dbg("active wakeup source: %s\n", ws->name);
+			#endif
 			active = 1;
 		} else if (!active &&
 			   (!last_activity_ws ||
@@ -871,12 +893,45 @@ void pm_print_active_wakeup_sources(void)
 		}
 	}
 
-	if (!active && last_activity_ws)
+	if (!active && last_activity_ws) {
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+		pr_info("last active wakeup source: %s, %ld, %ld\n",
+			last_activity_ws->name, last_activity_ws->active_count, ktime_to_ms(last_activity_ws->total_time));
+		#else
 		pm_pr_dbg("last active wakeup source: %s\n",
 			last_activity_ws->name);
+		#endif
+	}
 	srcu_read_unlock(&wakeup_srcu, srcuidx);
 }
 EXPORT_SYMBOL_GPL(pm_print_active_wakeup_sources);
+
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+void get_ws_listhead(struct list_head **ws)
+{
+	if (ws)
+		*ws = &wakeup_sources;
+}
+
+void wakeup_srcu_read_lock(int *srcuidx)
+{
+	*srcuidx = srcu_read_lock(&wakeup_srcu);
+}
+
+void wakeup_srcu_read_unlock(int srcuidx)
+{
+	srcu_read_unlock(&wakeup_srcu, srcuidx);
+}
+
+bool ws_all_release(void)
+{
+	unsigned int cnt, inpr;
+
+	pr_info("Enter: %s\n", __func__);
+	split_counters(&cnt, &inpr);
+	return (!inpr) ? true : false;
+}
+#endif
 
 /**
  * pm_wakeup_pending - Check if power transition in progress should be aborted.
@@ -903,7 +958,12 @@ bool pm_wakeup_pending(void)
 	raw_spin_unlock_irqrestore(&events_lock, flags);
 
 	if (ret) {
-		pm_pr_dbg("Wakeup pending, aborting suspend\n");
+		#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+		pr_debug("PM: Wakeup pending, aborting suspend\n");
+		#else
+		pr_info("PM: Wakeup pending, aborting suspend\n");
+		wakeup_reasons_statics(IRQ_NAME_ABORT, WS_CNT_ABORT);
+		#endif /* OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG */
 		pm_print_active_wakeup_sources();
 		pm_get_active_wakeup_sources(suspend_abort,
 					     MAX_SUSPEND_ABORT_LEN);
@@ -939,6 +999,7 @@ void pm_system_irq_wakeup(unsigned int irq_number)
 	struct irq_desc *desc;
 	const char *name = "null";
 
+	pr_info("%s %d\n", __func__, __LINE__);
 	if (pm_wakeup_irq == 0) {
 		if (msm_show_resume_irq_mask) {
 			desc = irq_to_desc(irq_number);
@@ -950,7 +1011,11 @@ void pm_system_irq_wakeup(unsigned int irq_number)
 			log_irq_wakeup_reason(irq_number);
 			pr_warn("%s: %d triggered %s\n", __func__,
 					irq_number, name);
-
+			#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+			pr_info("%s: resume caused by irq=%d, name=%s\n", __func__, irq_number, name);
+			wakeup_reasons_statics(name,
+				WS_CNT_POWERKEY|WS_CNT_RTCALARM|WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+			#endif
 		}
 		pm_wakeup_irq = irq_number;
 		pm_system_wakeup();
@@ -1176,12 +1241,20 @@ static const struct file_operations wakeup_sources_stats_fops = {
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = seq_release_private,
+#ifdef OPLUS_FEATURE_LOGKIT
+	.write          = watchdog_write,
+#endif
 };
 
 static int __init wakeup_sources_debugfs_init(void)
 {
+	#ifndef OPLUS_FEATURE_LOGKIT
 	debugfs_create_file("wakeup_sources", S_IRUGO, NULL, NULL,
 			    &wakeup_sources_stats_fops);
+	#else
+	debugfs_create_file("wakeup_sources",S_IRUGO| S_IWUGO, NULL, NULL,
+				&wakeup_sources_stats_fops);
+	#endif
 	return 0;
 }
 

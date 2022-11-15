@@ -52,6 +52,9 @@
 #include <asm/cacheflush.h>
 #include <asm/tlb.h>
 #include <asm/mmu_context.h>
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+#include <linux/reserve_area.h>
+#endif
 
 #include "internal.h"
 
@@ -766,9 +769,29 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	long adjust_next = 0;
 	int remove_next = 0;
 
-	vm_write_begin(vma);
+	/*
+	 * Why using vm_raw_write*() functions here to avoid lockdep's warning ?
+	 *
+	 * Locked is complaining about a theoretical lock dependency, involving
+	 * 3 locks:
+	 *   mapping->i_mmap_rwsem --> vma->vm_sequence --> fs_reclaim
+	 *
+	 * Here are the major path leading to this dependency :
+	 *  1. __vma_adjust() mmap_sem  -> vm_sequence -> i_mmap_rwsem
+	 *  2. move_vmap() mmap_sem -> vm_sequence -> fs_reclaim
+	 *  3. __alloc_pages_nodemask() fs_reclaim -> i_mmap_rwsem
+	 *  4. unmap_mapping_range() i_mmap_rwsem -> vm_sequence
+	 *
+	 * So there is no way to solve this easily, especially because in
+	 * unmap_mapping_range() the i_mmap_rwsem is grab while the impacted
+	 * VMAs are not yet known.
+	 * However, the way the vm_seq is used is guarantying that we will
+	 * never block on it since we just check for its value and never wait
+	 * for it to move, see vma_has_changed() and handle_speculative_fault().
+	 */
+	vm_raw_write_begin(vma);
 	if (next)
-		vm_write_begin(next);
+		vm_raw_write_begin(next);
 
 	if (next && !insert) {
 		struct vm_area_struct *exporter = NULL, *importer = NULL;
@@ -852,8 +875,8 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 			error = anon_vma_clone(importer, exporter);
 			if (error) {
 				if (next && next != vma)
-					vm_write_end(next);
-				vm_write_end(vma);
+					vm_raw_write_end(next);
+				vm_raw_write_end(vma);
 				return error;
 			}
 		}
@@ -982,7 +1005,7 @@ again:
 		if (next->anon_vma)
 			anon_vma_merge(vma, next);
 		mm->map_count--;
-		vm_write_end(next);
+		vm_raw_write_end(next);
 		put_vma(next);
 		/*
 		 * In mprotect's case 6 (see comments on vma_merge),
@@ -998,7 +1021,7 @@ again:
 			 */
 			next = vma->vm_next;
 			if (next)
-				vm_write_begin(next);
+				vm_raw_write_begin(next);
 		} else {
 			/*
 			 * For the scope of the comment "next" and
@@ -1046,9 +1069,9 @@ again:
 		uprobe_mmap(insert);
 
 	if (next && next != vma)
-		vm_write_end(next);
+		vm_raw_write_end(next);
 	if (!keep_locked)
-		vm_write_end(vma);
+		vm_raw_write_end(vma);
 
 	validate_mm(mm);
 
@@ -2055,6 +2078,9 @@ unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info)
 	if (length < info->length)
 		return -ENOMEM;
 
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	GET_UNMMPAED_AREA_FROME_ANTI_FRAGMENT(info, mm);
+#endif
 	/*
 	 * Adjust search limits by the desired length.
 	 * See implementation comment at top of unmapped_area().
@@ -2233,6 +2259,11 @@ arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 	info.flags = VM_UNMAPPED_AREA_TOPDOWN;
 	info.length = len;
 	info.low_limit = max(PAGE_SIZE, mmap_min_addr);
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	/* get unmmaped area first time, update the low limit */
+	GET_UNMMAPED_AREA_FIRST_TIME(info);
+#endif
+
 	info.high_limit = arch_get_mmap_base(addr, mm->mmap_base);
 	info.align_mask = 0;
 	info.align_offset = 0;
@@ -2251,6 +2282,10 @@ arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 		info.high_limit = mmap_end;
 		addr = vm_unmapped_area(&info);
 	}
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	/* get unmmaped area third time */
+	GET_UNMMAPED_AREA_THIRD_TIME(info, mm, addr);
+#endif
 
 	return addr;
 }
@@ -3392,7 +3427,7 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 		 * that we protect it right now, and let the caller unprotect
 		 * it once the move is done.
 		 */
-		vm_write_begin(new_vma);
+		vm_raw_write_begin(new_vma);
 		vma_link(mm, new_vma, prev, rb_link, rb_parent);
 		*need_rmap_locks = false;
 	}

@@ -10,6 +10,7 @@
  * Following tracepoints are not exported in tracefs and provide a
  * mechanism for vendor modules to hook and extend functionality
  */
+ #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_ANDROID_VENDOR_HOOKS)
 struct task_struct;
 DECLARE_RESTRICTED_HOOK(android_rvh_select_task_rq_fair,
 	TP_PROTO(struct task_struct *p, int prev_cpu, int sd_flag, int wake_flags, int *new_cpu),
@@ -65,10 +66,43 @@ DECLARE_RESTRICTED_HOOK(android_rvh_setscheduler,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p), 1);
 
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_wakeup,
+	TP_PROTO(struct task_struct *p, int *ignore),
+	TP_ARGS(p, ignore), 1);
+DECLARE_RESTRICTED_HOOK(android_rvh_check_preempt_tick,
+	TP_PROTO(struct task_struct *p, unsigned long *ideal_runtime),
+	TP_ARGS(p, ideal_runtime), 1);
+DECLARE_RESTRICTED_HOOK(android_rvh_find_best_target,
+	TP_PROTO(struct task_struct *p, int cpu, int *ignore),
+	TP_ARGS(p, cpu, ignore), 1);
+struct cpumask;
+DECLARE_RESTRICTED_HOOK(android_rvh_cpupri_find_fitness,
+	TP_PROTO(struct task_struct *p, struct cpumask *lowest_mask),
+	TP_ARGS(p, lowest_mask), 1);
 struct sched_group;
 DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 	TP_PROTO(struct sched_group *busiest, struct rq *dst_rq, int *out_balance),
 		TP_ARGS(busiest, dst_rq, out_balance), 1);
+#else
+#define trace_android_rvh_select_task_rq_fair(p, prev_cpu, sd_flag, wake_flags, new_cpu)
+#define trace_android_rvh_select_task_rq_rt(p, prev_cpu, sd_flag, wake_flags, new_cpu)
+#define trace_android_rvh_select_fallback_rq(cpu, p, dest_cpu)
+#define trace_android_vh_scheduler_tick(rq)
+#define trace_android_rvh_enqueue_task(rq, p)
+#define trace_android_rvh_dequeue_task(rq, p)
+#define trace_android_rvh_can_migrate_task(p, dst_cpu, can_migrate)
+#define trace_android_rvh_find_lowest_rq(p, local_cpu_mask, lowest_cpu)
+#define trace_android_rvh_prepare_prio_fork(p)
+#define trace_android_rvh_finish_prio_fork(p)
+#define trace_android_rvh_rtmutex_prepare_setprio(p, pi_task)
+#define trace_android_rvh_set_user_nice(p, nice)
+#define trace_android_rvh_setscheduler(p)
+#define trace_android_rvh_check_preempt_wakeup(p, ignore)
+#define trace_android_rvh_check_preempt_tick(p, ideal_runtime)
+#define trace_android_rvh_find_best_target(p, cpu, ignore)
+#define trace_android_rvh_cpupri_find_fitness(p, lowest_mask)
+#define trace_android_rvh_find_busiest_group(busiest, dst_rq, out_balance)
+#endif
 
 DECLARE_HOOK(android_vh_map_util_freq,
 	TP_PROTO(unsigned long util, unsigned long freq,

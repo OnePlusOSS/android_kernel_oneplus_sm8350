@@ -68,6 +68,21 @@
 #include <asm/unistd.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+//reserved area operations
+#include <linux/reserve_area.h>
+#endif
+#ifdef CONFIG_QGKI
+#include <soc/oplus/system/oplus_process.h>
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_TPD
+#include <linux/tpd/tpd.h>
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_UID_PERF
+extern void uid_check_out_pevent(struct task_struct *task);
+#endif
 
 static void __unhash_process(struct task_struct *p, bool group_dead)
 {
@@ -177,6 +192,9 @@ static void delayed_put_task_struct(struct rcu_head *rhp)
 {
 	struct task_struct *tsk = container_of(rhp, struct task_struct, rcu);
 
+#ifdef CONFIG_OPLUS_FEATURE_TPD
+	tpd_tglist_del(tsk);
+#endif
 	perf_event_delayed_put(tsk);
 	trace_sched_process_free(tsk);
 	put_task_struct(tsk);
@@ -485,6 +503,10 @@ static void exit_mm(void)
 	enter_lazy_tlb(mm, current);
 	task_unlock(current);
 	mm_update_next_owner(mm);
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_OPLUS_HEALTHINFO) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+	//Trigger and upload the event.
+	trigger_svm_oom_event(mm, false, false);
+#endif
 	mmput(mm);
 	if (test_thread_flag(TIF_MEMDIE))
 		exit_oom_victim();
@@ -715,6 +737,11 @@ void __noreturn do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
+        #ifdef CONFIG_QGKI
+        if (is_critial_process(tsk)) {
+            printk("critical svc %d:%s exit with %ld !\n", tsk->pid, tsk->comm,code);
+        }
+        #endif
 
 	/*
 	 * We can get here from a kernel oops, sometimes with preemption off.
@@ -722,13 +749,16 @@ void __noreturn do_exit(long code)
 	 * Then fix up important state like USER_DS and preemption.
 	 * Then do everything else.
 	 */
-
 	WARN_ON(blk_needs_flush_plug(tsk));
 
 	if (unlikely(in_interrupt()))
 		panic("Aiee, killing interrupt handler!");
 	if (unlikely(!tsk->pid))
 		panic("Attempted to kill the idle task!");
+#if defined(CONFIG_QGKI)
+	if ((tsk->pid == 1) && (code != 0))
+		panic("[1]init do_exit !!!");
+#endif
 
 	/*
 	 * If do_exit is called because this processes oopsed, it's possible
@@ -765,6 +795,10 @@ void __noreturn do_exit(long code)
 	}
 
 	exit_signals(tsk);  /* sets PF_EXITING */
+
+#ifdef CONFIG_OPLUS_FEATURE_UID_PERF
+	uid_check_out_pevent(tsk);
+#endif
 
 	/* sync mm's RSS info before statistics gathering */
 	if (tsk->mm)

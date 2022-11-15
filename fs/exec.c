@@ -73,6 +73,10 @@
 
 #include <trace/events/sched.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_IM
+#include <linux/im/im.h>
+#endif
+
 int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
@@ -1252,12 +1256,26 @@ EXPORT_SYMBOL_GPL(__get_task_comm);
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
  */
-
+#ifdef CONFIG_OPLUS_FEATURE_SCHED_ASSIST
+extern void sched_assist_target_comm(struct task_struct *task);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+extern void task_rename_hook(struct task_struct *task);
+#endif
 void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 {
 	task_lock(tsk);
 	trace_task_rename(tsk, buf);
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
+#ifdef CONFIG_OPLUS_FEATURE_SCHED_ASSIST
+	sched_assist_target_comm(tsk);
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_IM
+	im_wmi(tsk);
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_INPUT_BOOST
+	task_rename_hook(tsk);
+#endif
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
 }
@@ -1721,10 +1739,16 @@ static int exec_binprm(struct linux_binprm *bprm)
 		ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
 		proc_exec_connector(current);
 	}
+#ifdef CONFIG_OPLUS_SF_BOOST
+	if (strcmp(current->comm, "surfaceflinger") == 0)
+		current->compensate_need = 2;
+#endif
 
 	return ret;
 }
-
+#ifdef CONFIG_OPLUS_KERNEL_SECURE_GUARD
+extern int oplus_exec_block(struct file *file);
+#endif /* CONFIG_OPLUS_KERNEL_SECURE_GUARD */
 /*
  * sys_execve() executes a new program.
  */
@@ -1778,7 +1802,13 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out_unmark;
-
+#ifdef CONFIG_OPLUS_KERNEL_SECURE_GUARD
+    retval = oplus_exec_block(file);
+	if (retval){
+		fput(file);
+		goto out_unmark;
+	}
+#endif /* CONFIG_OPLUS_KERNEL_SECURE_GUARD */
 	sched_exec();
 
 	bprm->file = file;

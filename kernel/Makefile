@@ -122,8 +122,22 @@ obj-$(CONFIG_RSEQ) += rseq.o
 obj-$(CONFIG_SYSCTL_KUNIT_TEST) += sysctl-test.o
 
 obj-$(CONFIG_GCC_PLUGIN_STACKLEAK) += stackleak.o
+
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+obj-$(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) += sched_assist/
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
+#ifdef OPLUS_FEATURE_INPUT_BOOST
+obj-$(CONFIG_OPLUS_FEATURE_INPUT_BOOST) += tuning/
+#endif /* OPLUS_FEATURE_INPUT_BOOST */
+
+
 KASAN_SANITIZE_stackleak.o := n
 KCOV_INSTRUMENT_stackleak.o := n
+
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+obj-$(CONFIG_OPLUS_FEATURE_UIFRIST_HEAVYLOAD) += special_opt/
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 $(obj)/configs.o: $(obj)/config_data.gz
 
@@ -144,3 +158,4 @@ $(obj)/kheaders_data.tar.xz: FORCE
 	$(call cmd,genikh)
 
 clean-files := kheaders_data.tar.xz kheaders.md5
+

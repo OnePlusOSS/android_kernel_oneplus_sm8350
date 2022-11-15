@@ -372,8 +372,14 @@ void kgsl_process_init_sysfs(struct kgsl_device *device,
 			WARN(1, "Couldn't create sysfs file '%s'\n",
 				memtypes[i].attr.name);
 	}
-}
 
+}
+#ifdef OPLUS_FEATURE_HEALTHINFO
+unsigned long gpu_total(void)
+{
+	return (unsigned long)atomic_long_read(&kgsl_driver.stats.page_alloc);
+}
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 static ssize_t memstat_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
@@ -898,6 +904,7 @@ void kgsl_get_memory_usage(char *name, size_t name_size, uint64_t memflags)
 {
 	unsigned int type = MEMFLAGS(memflags, KGSL_MEMTYPE_MASK,
 		KGSL_MEMTYPE_SHIFT);
+
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(memtypes); i++) {

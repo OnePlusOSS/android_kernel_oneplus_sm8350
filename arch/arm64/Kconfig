@@ -1637,6 +1637,8 @@ config RELOCATABLE
 
 config RANDOMIZE_BASE
 	bool "Randomize the address of the kernel image"
+	#bsp.stability, 2020/10/12 disable RANDOMIZE_BASE for kasan version
+	depends on !KASAN
 	select ARM64_MODULE_PLTS if MODULES
 	select RELOCATABLE
 	help
@@ -1843,3 +1845,5 @@ source "arch/arm64/kvm/Kconfig"
 if CRYPTO
 source "arch/arm64/crypto/Kconfig"
 endif
+
+source "arch/arm64/kernel/secureguard/Kconfig"

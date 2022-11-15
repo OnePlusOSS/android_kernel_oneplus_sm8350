@@ -425,10 +425,8 @@ static void devlink_remove_symlinks(struct device *dev,
 		return;
 	}
 
-	if (device_is_registered(con)) {
-		snprintf(buf, len, "supplier:%s", dev_name(sup));
-		sysfs_remove_link(&con->kobj, buf);
-	}
+	snprintf(buf, len, "supplier:%s", dev_name(sup));
+	sysfs_remove_link(&con->kobj, buf);
 	snprintf(buf, len, "consumer:%s", dev_name(con));
 	sysfs_remove_link(&sup->kobj, buf);
 	kfree(buf);

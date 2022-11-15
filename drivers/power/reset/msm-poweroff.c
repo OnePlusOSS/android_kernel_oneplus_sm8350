@@ -421,7 +421,20 @@ static void msm_restart_prepare(const char *cmd)
 		need_warm_reset = (get_dload_mode() ||
 				(cmd != NULL && cmd[0] != '\0'));
 	}
+#ifdef OPLUS_BUG_STABILITY
+    if (in_panic){
+        //warm reset
+        qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+        qpnp_pon_set_restart_reason(
+                    PON_RESTART_REASON_KERNEL);
 
+        /*outer_flush_all is not supported by 64bit kernel*/
+#ifndef CONFIG_ARM64
+        outer_flush_all();
+#endif
+        return;
+    }
+#endif /* OPLUS_BUG_STABILITY */
 	if (force_warm_reboot)
 		pr_info("Forcing a warm reset of the system\n");
 
@@ -460,10 +473,56 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
+		}
+#ifdef VENDOR_EDIT
+		/*xiaofan.yang,2019/01/07,Add for factory agingtest*/
+		//#ifdef OPLUS_FEATURE_AGINGTEST
+		else if(!strcmp(cmd, "sbllowmemtest")){
+			reason = PON_RESTART_REASON_SBL_DDR_CUS;
+			__raw_writel(0x7766550b, restart_reason);
+		}else if (!strcmp(cmd, "sblmemtest")){//oplus factory aging test
+			printk("[%s:%d] lunch ddr test!!\n", current->comm, current->pid);
+			reason = PON_RESTART_REASON_SBL_DDRTEST;
+			__raw_writel(0x7766550b, restart_reason);
+		} else if(!strcmp(cmd, "usermemaging")){
+			printk("[%s:%d] lunch user memory test!!\n", current->comm, current->pid);
+			reason = PON_RESTART_REASON_MEM_AGING;
+			__raw_writel(0x7766550b, restart_reason);
+		}
+		//#endif/*OPLUS_FEATURE_AGINGTEST*/
+		else if (!strncmp(cmd, "rf", 2)) {
+			reason = PON_RESTART_REASON_RF;
+		} else if (!strncmp(cmd, "wlan",4)) {
+			reason = PON_RESTART_REASON_WLAN;
+		#ifdef USE_MOS_MODE
+		} else if (!strncmp(cmd, "mos", 3)) {
+			reason = PON_RESTART_REASON_MOS;
+		#endif
+		} else if (!strncmp(cmd, "ftm", 3)) {
+			reason = PON_RESTART_REASON_FACTORY;
+		} else if (!strncmp(cmd, "kernel", 6)) {
+			reason = PON_RESTART_REASON_KERNEL;
+		} else if (!strncmp(cmd, "modem", 5)) {
+			reason = PON_RESTART_REASON_MODEM;
+		} else if (!strncmp(cmd, "android", 7)) {
+			reason = PON_RESTART_REASON_ANDROID;
+		} else if (!strncmp(cmd, "silence", 7)) {
+			reason = PON_RESTART_REASON_SILENCE;
+		} else if (!strncmp(cmd, "sau", 3)) {
+			reason = PON_RESTART_REASON_SAU;
+		} else if (!strncmp(cmd, "safe", 4)) {
+			reason = PON_RESTART_REASON_SAFE;
+		} else if (!strncmp(cmd, "novib", 5)) {
+			reason = PON_RESTART_REASON_BOOT_NO_VIBRATION;
 		} else {
+			reason = PON_RESTART_REASON_NORMAL;
 			__raw_writel(0x77665501, restart_reason);
 		}
-
+#else
+		else {
+			__raw_writel(0x77665501, restart_reason);
+		}
+#endif /*VENDOR_EDIT*/
 		if (reason && nvmem_cell)
 			nvmem_cell_write(nvmem_cell, &reason, sizeof(reason));
 		else

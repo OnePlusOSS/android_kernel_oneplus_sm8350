@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
+ * Copyright (C) 2020 Oplus. All rights reserved.
  * Copyright (c) 2013, 2018-2019, 2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/kthread.h>
@@ -21,6 +22,15 @@
 #include <soc/qcom/boot_stats.h>
 
 #include "qrtr.h"
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_qrtr_service_port)(int type, int id, int port) = NULL;
+EXPORT_SYMBOL(match_qrtr_service_port);
+void (*match_qrtr_wakeup)(int src_node, int src_port, int dst_port, unsigned int arg1, unsigned int arg2) = NULL;
+EXPORT_SYMBOL(match_qrtr_wakeup);
+void (*update_qrtr_flag)(int val) = NULL;
+EXPORT_SYMBOL(update_qrtr_flag);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 #define QRTR_LOG_PAGE_CNT 4
 #define QRTR_INFO(ctx, x, ...)				\
@@ -232,6 +242,12 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 	if (!hdr || !skb)
 		return;
 
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (update_qrtr_flag != NULL) {
+		update_qrtr_flag(0);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	type = le32_to_cpu(hdr->type);
 	if (type == QRTR_TYPE_DATA) {
 		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pl_buf, sizeof(pl_buf));
@@ -246,12 +262,26 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 		skb_copy_bits(skb, QRTR_HDR_MAX_SIZE, &pkt, sizeof(pkt));
 		if (type == QRTR_TYPE_NEW_SERVER ||
 		    type == QRTR_TYPE_DEL_SERVER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		{
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
 				  type, le32_to_cpu(pkt.server.service),
 				  le32_to_cpu(pkt.server.instance),
 				  le32_to_cpu(pkt.server.node),
 				  le32_to_cpu(pkt.server.port));
+			if (match_qrtr_service_port != NULL) {
+				match_qrtr_service_port(hdr->type, le32_to_cpu(pkt.server.service), le32_to_cpu(pkt.server.port));
+			}
+		}
+		#else
+			QRTR_INFO(node->ilc,
+				  "TX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
+				  type, le32_to_cpu(pkt.server.service),
+				  le32_to_cpu(pkt.server.instance),
+				  le32_to_cpu(pkt.server.node),
+				  le32_to_cpu(pkt.server.port));
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		else if (type == QRTR_TYPE_DEL_CLIENT ||
 			 type == QRTR_TYPE_RESUME_TX)
 			QRTR_INFO(node->ilc,
@@ -307,6 +337,11 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 
 	if (cb->type == QRTR_TYPE_DATA) {
 		skb_copy_bits(skb, 0, &pl_buf, sizeof(pl_buf));
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		if (match_qrtr_wakeup != NULL) {
+			match_qrtr_wakeup(cb->src_node, cb->src_port, cb->dst_port, (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+		}
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		QRTR_INFO(node->ilc,
 			  "RX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]\n",
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
@@ -319,12 +354,26 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
 		    cb->type == QRTR_TYPE_DEL_SERVER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		{
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
 				  cb->type, le32_to_cpu(pkt.server.service),
 				  le32_to_cpu(pkt.server.instance),
 				  le32_to_cpu(pkt.server.node),
 				  le32_to_cpu(pkt.server.port));
+			if (match_qrtr_service_port != NULL) {
+				match_qrtr_service_port(cb->type, le32_to_cpu(pkt.server.service), le32_to_cpu(pkt.server.port));
+			}
+		}
+		#else
+			QRTR_INFO(node->ilc,
+				  "RX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
+				  cb->type, le32_to_cpu(pkt.server.service),
+				  le32_to_cpu(pkt.server.instance),
+				  le32_to_cpu(pkt.server.node),
+				  le32_to_cpu(pkt.server.port));
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 		else if (cb->type == QRTR_TYPE_DEL_CLIENT ||
 			 cb->type == QRTR_TYPE_RESUME_TX)
 			QRTR_INFO(node->ilc,
@@ -600,15 +649,19 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
  * cause the next transmission attempt to be sent with the confirm_rx.
  */
 static void qrtr_tx_flow_failed(struct qrtr_node *node, int dest_node,
-				int dest_port)
+				int dest_port, int confirm_rx)
 {
 	unsigned long key = (u64)dest_node << 32 | dest_port;
 	struct qrtr_tx_flow *flow;
 
 	mutex_lock(&node->qrtr_tx_lock);
 	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
-	if (flow)
-		WRITE_ONCE(flow->tx_failed, 1);
+	if (flow) {
+		if (confirm_rx)
+			WRITE_ONCE(flow->tx_failed, 1);
+		else
+			atomic_dec(&flow->pending);
+	}
 	mutex_unlock(&node->qrtr_tx_lock);
 }
 
@@ -674,9 +727,12 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	mutex_unlock(&node->ep_lock);
 
 	/* Need to ensure that a subsequent message carries the otherwise lost
-	 * confirm_rx flag if we dropped this one */
-	if (rc && confirm_rx)
-		qrtr_tx_flow_failed(node, to->sq_node, to->sq_port);
+	 * confirm_rx flag if we dropped this one and decrement flow pending count
+	 * in case confirm flag is not set
+	 */
+	if (rc)
+		qrtr_tx_flow_failed(node, to->sq_node, to->sq_port, confirm_rx);
+
 	if (!rc && type == QRTR_TYPE_HELLO)
 		atomic_inc(&node->hello_sent);
 

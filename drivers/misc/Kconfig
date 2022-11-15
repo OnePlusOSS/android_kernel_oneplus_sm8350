@@ -473,6 +473,13 @@ config UID_SYS_STATS_DEBUG
 	help
 	  Per TASK based io statistics exported to /proc/uid_io
 
+config OPLUS_FEATURE_UID_PERF
+	bool "Per-TASK perf_event statistics"
+	depends on UID_SYS_STATS
+	default n
+	help
+	  Per TASK based on perf_event
+
 config PVPANIC
 	tristate "pvpanic device support"
 	depends on HAS_IOMEM && (ACPI || OF)
@@ -524,6 +531,40 @@ config HISI_HIKEY_USB
 	help
 	  If you say yes here you get support for usb functionality of HiSilicon Hikey Platform.
 
+#ifdef OPLUS_FEATURE_SIM_DETECT
+config SIM_DETECT
+	tristate "SIM_DETECT system"
+	default n
+	help
+	  Say Y here to enable sim detect system support
+#endif /* OPLUS_FEATURE_SIM_DETECT */
+
+#ifdef OPLUS_FEATURE_SIM_DETECT
+config OEM_QMI
+	tristate "oem qmi feature"
+	default n
+	help
+	  Say Y here to enable oem qmi support
+#endif /* OPLUS_FEATURE_SIM_DETECT */
+
+#ifdef OPLUS_FEATURE_RF_CABLE_DETECT
+config OPLUS_RF_CABLE_MONITOR
+	tristate "OPLUS rf cable monitor system"
+	depends on OF
+	select PINMUX
+	default n
+	help
+	Say Y here to enable OPLUS rf cable monitor system support
+#endif /* OPLUS_FEATURE_RF_CABLE_DETECT */
+
+#ifdef OPLUS_FEATURE_LMVIBRATOR
+config AW8697_HAPTIC
+	tristate "Haptic driver for awinic aw8697 series"
+	depends on I2C
+	help
+	This option enables support for aw8697 series Haptic Driver.
+#endif /* OPLUS_FEATURE_LMVIBRATOR */
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -539,4 +580,9 @@ source "drivers/misc/cxl/Kconfig"
 source "drivers/misc/ocxl/Kconfig"
 source "drivers/misc/cardreader/Kconfig"
 source "drivers/misc/habanalabs/Kconfig"
+source "drivers/misc/tri_state_key/Kconfig"
+
+#ifdef VENDOR_EDIT
+source "drivers/misc/cs_press/Kconfig"
+#endif /* VENDOR_EDIT */
 endmenu

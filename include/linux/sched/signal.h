@@ -226,6 +226,9 @@ struct signal_struct {
 	struct mutex cred_guard_mutex;	/* guard against foreign influences on
 					 * credential calculations
 					 * (notably. ptrace) */
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+	u64                             sum_runtime;
+#endif
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);

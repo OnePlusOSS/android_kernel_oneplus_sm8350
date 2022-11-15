@@ -63,6 +63,11 @@ config ANDROID_VENDOR_HOOKS
 	  Allow vendor modules to attach to tracepoint "hooks" defined via
 	  DECLARE_HOOK or DECLARE_RESTRICTED_HOOK.
 
+config OPLUS_BINDER_STRATEGY
+	default n
+	bool "config binder control"
+	help
+	  it helps to reduce anr by restricting background app binder behavior.
 endif # if ANDROID
 
 endmenu

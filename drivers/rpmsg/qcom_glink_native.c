@@ -29,6 +29,14 @@
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
 
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+int is_first_ipcc_msg = 0;
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 #define GLINK_LOG_PAGE_CNT 2
 #define GLINK_INFO(ctxt, x, ...)					  \
 	ipc_log_string(ctxt, "[%s]: "x, __func__, ##__VA_ARGS__)
@@ -45,7 +53,7 @@ do {									     \
 	if (ch->glink) {						     \
 		ipc_log_string(ch->glink->ilc, "%s[%d:%d] %s: "x, ch->name,  \
 			       ch->lcid, ch->rcid, __func__, ##__VA_ARGS__); \
-		dev_err_ratelimited(ch->glink->dev, "[%s]: "x, __func__, ##__VA_ARGS__); \
+		dev_err(ch->glink->dev, "[%s]: "x, __func__, ##__VA_ARGS__); \
 	}								     \
 } while (0)
 
@@ -1070,7 +1078,7 @@ static int qcom_glink_rx_data(struct qcom_glink *glink, size_t avail)
 					channel->ept.priv,
 					RPMSG_ADDR_ANY);
 
-			if (ret < 0 && ret != -ENODEV) {
+			if (ret < 0) {
 				CH_ERR(channel,
 					"callback error ret = %d\n", ret);
 				ret = 0;
@@ -1246,7 +1254,6 @@ static int qcom_glink_handle_signals(struct qcom_glink *glink,
 		channel->ept.sig_cb(channel->ept.rpdev, channel->ept.priv,
 				    old, channel->rsigs);
 	}
-
 	return 0;
 }
 
@@ -1262,6 +1269,14 @@ static irqreturn_t qcom_glink_native_intr(int irq, void *data)
 
 	if (should_wake) {
 		pr_info("%s: %d triggered %s\n", __func__, irq, glink->irqname);
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER) && IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		if (is_first_ipcc_msg == 1) {
+			do {
+				wakeup_reasons_statics(glink->irqname, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+			} while(0);
+			is_first_ipcc_msg = 0;
+		}
+		#endif
 		glink_resume_pkt = true;
 		pm_system_wakeup();
 	}
@@ -1478,6 +1493,7 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 	int size;
 
 	CH_INFO(channel, "Entered\n");
+
 	if (glink->intentless || !completion_done(&channel->open_ack))
 		return 0;
 

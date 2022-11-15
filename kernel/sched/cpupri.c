@@ -23,6 +23,10 @@
  *  yields the worst case search is fairly contrived.
  */
 #include "sched.h"
+#include <trace/hooks/sched.h>
+#ifdef CONFIG_OPLUS_FEATURE_IM
+#include <linux/im/im.h>
+#endif
 
 /* Convert between a 140 based task->prio, and our 102 based cpupri */
 static int convert_prio(int prio)
@@ -63,6 +67,13 @@ drop_nopreempt_cpus(struct cpumask *lowest_mask)
 	}
 }
 #endif /* CONFIG_SCHED_WALT */
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_common.h>
+extern void drop_ux_task_cpus(struct task_struct *p, struct cpumask *lowest_mask);
+extern void kick_min_cpu_from_mask(struct cpumask *lowest_mask);
+extern bool sf_task_misfit(struct task_struct *p);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 #ifndef CONFIG_SCHED_WALT
 static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
@@ -159,16 +170,22 @@ int cpupri_find_fitness(struct cpupri *cp, struct task_struct *p,
 {
 	int task_pri = convert_prio(p->prio);
 	int idx, cpu;
+	bool drop_vendor = true;
 
 #ifdef CONFIG_SCHED_WALT
 	bool drop_nopreempts = task_pri <= MAX_RT_PRIO;
 #endif
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	bool drop_uxtasks = sysctl_sched_assist_enabled;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	BUG_ON(task_pri >= CPUPRI_NR_PRIORITIES);
 
 #ifdef CONFIG_SCHED_WALT
 retry:
 #endif
+retry_vendor:
 	for (idx = 0; idx < task_pri; idx++) {
 
 #ifndef CONFIG_SCHED_WALT
@@ -177,9 +194,22 @@ retry:
 		if (!__cpupri_find(cp, p, lowest_mask, idx, drop_nopreempts))
 			continue;
 #endif
+		if (drop_vendor)
+			trace_android_rvh_cpupri_find_fitness(p, lowest_mask);
 
 		if (!lowest_mask || !fitness_fn)
 			return 1;
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#ifdef CONFIG_OPLUS_FEATURE_IM
+		if (drop_uxtasks && !im_hwc(p) && !im_hwbinder(p))
+#else
+		if (drop_uxtasks)
+#endif
+			drop_ux_task_cpus(p, lowest_mask);
+		if (drop_uxtasks && sf_task_misfit(p))
+			kick_min_cpu_from_mask(lowest_mask);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 		/* Ensure the capacity of the CPUs fit the task */
 		for_each_cpu(cpu, lowest_mask) {
@@ -207,6 +237,17 @@ retry:
 		goto retry;
 	}
 #endif
+
+	if (drop_vendor) {
+		drop_vendor = false;
+		goto retry_vendor;
+	}
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (drop_uxtasks) {
+		drop_uxtasks = false;
+		goto retry;
+	}
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	/*
 	 * If we failed to find a fitting lowest_mask, kick off a new search

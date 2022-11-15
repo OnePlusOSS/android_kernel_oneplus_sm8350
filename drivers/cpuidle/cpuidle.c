@@ -26,6 +26,10 @@
 
 #include "cpuidle.h"
 
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+#include "../soc/oplus/game_opt/game_ctrl.h"
+#endif
+
 DEFINE_PER_CPU(struct cpuidle_device *, cpuidle_devices);
 DEFINE_PER_CPU(struct cpuidle_device, cpuidle_dev);
 
@@ -225,6 +229,9 @@ int __nocfi cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_drive
 
 	trace_cpu_idle_rcuidle(index, dev->cpu);
 	time_start = ns_to_ktime(local_clock());
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+	g_time_in_state_update_idle(dev->cpu, 1);
+#endif
 
 	stop_critical_timings();
 	entered_state = target_state->enter(dev, drv, index);
@@ -232,6 +239,9 @@ int __nocfi cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_drive
 
 	sched_clock_idle_wakeup_event();
 	time_end = ns_to_ktime(local_clock());
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+	g_time_in_state_update_idle(dev->cpu, 0);
+#endif
 	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
 
 	/* The cpu is no longer idle or about to enter idle. */
