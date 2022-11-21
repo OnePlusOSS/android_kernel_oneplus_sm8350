@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2013-2017 ARM Limited, All Rights Reserved.
+ * Copyright (C) 2020 Oplus. All rights reserved.
  * Author: Marc Zyngier <marc.zyngier@arm.com>
  */
 
@@ -36,6 +37,17 @@
 #include <linux/syscore_ops.h>
 
 #include "irq-gic-common.h"
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_modem_wakeup)(void) = NULL;
+EXPORT_SYMBOL(match_modem_wakeup);
+void (*match_wlan_wakeup)(void) = NULL;
+EXPORT_SYMBOL(match_wlan_wakeup);
+extern is_first_ipcc_msg;
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 #define GICD_INT_NMI_PRI	(GICD_INT_DEF_PRI & ~0x80)
 
@@ -582,6 +594,29 @@ static int gic_suspend(void)
 	return 0;
 }
 
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+static bool wlan_resume_flag = false;
+bool get_wlan_touch_flag(void)
+{
+	return wlan_resume_flag;
+}
+EXPORT_SYMBOL(get_wlan_touch_flag);
+void set_wlan_touch_flag(void)
+{
+	wlan_resume_flag = true;
+}
+EXPORT_SYMBOL(set_wlan_touch_flag);
+void clear_wlan_touch_flag(void)
+{
+	wlan_resume_flag = false;
+}
+EXPORT_SYMBOL(clear_wlan_touch_flag);
+void wlan_resume_inc(void)
+{
+	wakeup_reasons_statics("wlan_", WS_CNT_WLAN);
+}
+EXPORT_SYMBOL(wlan_resume_inc);
+#endif
 static void gic_show_resume_irq(struct gic_chip_data *gic)
 {
 	unsigned int i;
@@ -591,7 +626,10 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 
 	if (!msm_show_resume_irq_mask)
 		return;
-
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+	wakeup_reasons_statics(IRQ_NAME_WAKE_SUM, WS_CNT_SUM);
+	set_wlan_touch_flag();
+	#endif
 	for (i = 0; i * 32 < GIC_LINE_NR; i++) {
 		enabled = readl_relaxed(base + GICD_ICENABLER + i * 4);
 		pending[i] = readl_relaxed(base + GICD_ISPENDR + i * 4);
@@ -615,8 +653,38 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 		else if (desc->irq_data.chip && desc->irq_data.chip->name)
 			name = desc->irq_data.chip->name;
 
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		if ((name != NULL)&&(strncmp(name, "ipa", strlen("ipa")) != 0))
+			log_irq_wakeup_reason(irq);
+		#endif
+
 		pr_warn("%s: irq:%d hwirq:%u triggered %s\n",
 			 __func__, irq, i, name);
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		if (strncmp(name, "ipcc_0", strlen("ipcc_0")) == 0) {
+			is_first_ipcc_msg = 1;
+			if (match_modem_wakeup != NULL) {
+				match_modem_wakeup();
+			}
+		} else if (strncmp(name, "wlan_wake_irq", strlen("wlan_wake_irq")) == 0) {
+			if (match_wlan_wakeup != NULL) {
+				match_wlan_wakeup();
+			}
+		}
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+		do {
+			if (strncmp(name, "ipa", strlen("ipa")) != 0) {
+				wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+			}
+		} while (0);
+		#else
+		do {
+			wakeup_reasons_statics(name, WS_CNT_MODEM|WS_CNT_WLAN|WS_CNT_ADSP|WS_CNT_CDSP|WS_CNT_SLPI);
+		} while(0);
+		#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+		#endif
 	}
 }
 

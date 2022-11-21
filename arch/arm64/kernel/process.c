@@ -601,6 +601,41 @@ out:
 	put_task_stack(p);
 	return ret;
 }
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+static unsigned long backtrace[4];
+
+unsigned long* get_backtrace(struct task_struct *p)
+{
+        struct stackframe frame;
+        unsigned long stack_page = 0;
+        int count = 0;
+	int layer_count = 0;
+	memset(backtrace, 0, 4 * sizeof(unsigned long));
+        if (!p || p == current || p->state == TASK_RUNNING)
+                return NULL;
+
+        stack_page = (unsigned long)try_get_task_stack(p);
+        if (!stack_page)
+                return NULL;
+ 	start_backtrace(&frame, thread_saved_fp(p), thread_saved_pc(p));
+
+        do {
+                if (unwind_frame(p, &frame))
+                        goto out;
+                if (!in_sched_functions(frame.pc) ) {
+			backtrace[layer_count] = frame.pc;
+			layer_count++;
+			if(layer_count == 4) {
+                        	goto out;
+			}
+                }
+        } while (count ++ < 16);
+
+out:
+        put_task_stack(p);
+        return backtrace;
+}
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 
 unsigned long arch_align_stack(unsigned long sp)
 {

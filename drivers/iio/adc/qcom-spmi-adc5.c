@@ -146,6 +146,10 @@ struct adc5_channel_prop {
 	unsigned int		avg_samples;
 	enum vadc_scale_fn_type	scale_fn_type;
 	const char		*datasheet_name;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int			cust_type;
+	int			cust_scale_fn_type;
+#endif
 };
 
 /**
@@ -1025,19 +1029,109 @@ static const struct adc5_channels adc7_chans_pmic[ADC5_MAX_CHANNEL] = {
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_AMUX_THM4_100K_PU]	= ADC5_CHAN_TEMP("amux_thm4_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	[ADC7_AMUX_THM5_100K_PU]	= ADC5_CHAN_TEMP("amux_thm5_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#else
+	[ADC7_AMUX_THM5_100K_PU]	= ADC5_CHAN_VOLT("amux_thm5_pu2", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
 	[ADC7_AMUX_THM6_100K_PU]	= ADC5_CHAN_TEMP("amux_thm6_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
-	[ADC7_GPIO1_100K_PU]	= ADC5_CHAN_TEMP("gpio1_pu2", 0,
+	[ADC7_GPIO1_100K_PU]    = ADC5_CHAN_TEMP("gpio1_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifdef VENDOR_EDIT
+	[ADC7_GPIO1]	= ADC5_CHAN_VOLT("pm8350_board_id", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif /*VENDOR_EDIT*/
+#ifndef OPLUS_FEATURE_CHG_BASIC
+	[ADC7_GPIO2_100K_PU]	= ADC5_CHAN_TEMP("gpio2_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#else
+	[ADC7_GPIO2_100K_PU]	= ADC5_CHAN_VOLT("gpio2_pu2", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
+#ifndef OPLUS_FEATURE_CHG_BASIC
+	[ADC7_GPIO3_100K_PU]	= ADC5_CHAN_TEMP("gpio3_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#else
+	[ADC7_GPIO3_100K_PU]	= ADC5_CHAN_VOLT("gpio3_pu2", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
+	[ADC7_GPIO4_100K_PU]	= ADC5_CHAN_TEMP("gpio4_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	[ADC7_AMUX_THM5_30K_PU]	= ADC5_CHAN_VOLT("gpio1_v", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_GPIO2_30K_PU]	= ADC5_CHAN_VOLT("gpio3_v", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
+};
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static const struct adc5_channels adc7_chans_pmic_walle[ADC5_MAX_CHANNEL] = {
+	[ADC7_REF_GND]		= ADC5_CHAN_VOLT("ref_gnd", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_1P25VREF]		= ADC5_CHAN_VOLT("vref_1p25", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_VREF_VADC]	= ADC5_CHAN_VOLT("vref_vadc", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_VPH_PWR]		= ADC5_CHAN_VOLT("vph_pwr", 1,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_VBAT_SNS]		= ADC5_CHAN_VOLT("vbat_sns", 3,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_AMUX_THM3]	= ADC5_CHAN_TEMP("smb_temp", 0,
+					SCALE_HW_CALIB_PM7_SMB_TEMP)
+	[ADC7_CHG_TEMP]		= ADC5_CHAN_TEMP("chg_temp", 0,
+					SCALE_HW_CALIB_PM7_CHG_TEMP)
+	[ADC7_IIN_FB]		= ADC5_CHAN_CUR("iin_fb", 9,
+					SCALE_HW_CALIB_CUR)
+	[ADC7_IIN_SMB]		= ADC5_CHAN_CUR("iin_smb", 9,
+					SCALE_HW_CALIB_CUR)
+	[ADC7_ICHG_SMB]		= ADC5_CHAN_CUR("ichg_smb", 10,
+					SCALE_HW_CALIB_CUR)
+	[ADC7_ICHG_FB]		= ADC5_CHAN_CUR("ichg_fb", 11,
+					SCALE_HW_CALIB_CUR_RAW)
+	[ADC7_DIE_TEMP]		= ADC5_CHAN_TEMP("die_temp", 0,
+					SCALE_HW_CALIB_PMIC_THERM_PM7)
+	[ADC7_AMUX_THM1_100K_PU]	= ADC5_CHAN_TEMP("amux_thm1_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+	[ADC7_AMUX_THM2_100K_PU]	= ADC5_CHAN_TEMP("amux_thm2_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+	[ADC7_AMUX_THM3_100K_PU]	= ADC5_CHAN_TEMP("amux_thm3_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+	[ADC7_AMUX_THM4_100K_PU]	= ADC5_CHAN_TEMP("amux_thm4_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifndef OPLUS_FEATURE_CHG_BASIC
+	[ADC7_AMUX_THM5_100K_PU]	= ADC5_CHAN_TEMP("amux_thm5_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#else
+	[ADC7_AMUX_THM5_100K_PU]	= ADC5_CHAN_VOLT("amux_thm5_pu2", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
+	[ADC7_AMUX_THM6_100K_PU]	= ADC5_CHAN_TEMP("amux_thm6_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+	[ADC7_GPIO1_100K_PU]    = ADC5_CHAN_TEMP("gpio1_pu2", 0,
+					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	[ADC7_GPIO1]	= ADC5_CHAN_VOLT("pm8350_board_id", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
+
 	[ADC7_GPIO2_100K_PU]	= ADC5_CHAN_TEMP("gpio2_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_GPIO3_100K_PU]	= ADC5_CHAN_TEMP("gpio3_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
 	[ADC7_GPIO4_100K_PU]	= ADC5_CHAN_TEMP("gpio4_pu2", 0,
 					SCALE_HW_CALIB_THERM_100K_PU_PM7)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	[ADC7_AMUX_THM5_30K_PU]	= ADC5_CHAN_VOLT("gpio1_v", 0,
+					SCALE_HW_CALIB_DEFAULT)
+	[ADC7_GPIO2_30K_PU]	= ADC5_CHAN_VOLT("gpio3_v", 0,
+					SCALE_HW_CALIB_DEFAULT)
+#endif
 };
+#endif
 
 static const struct adc5_channels adc5_chans_rev2[ADC5_MAX_CHANNEL] = {
 	[ADC5_REF_GND]		= ADC5_CHAN_VOLT("ref_gnd", 0,
@@ -1197,6 +1291,17 @@ static int adc5_get_dt_channel_data(struct adc5_chip *adc,
 	else
 		prop->cal_method = ADC5_ABSOLUTE_CAL;
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if (!of_property_read_u32(node, "oplus,cust_type", &value))
+		prop->cust_type = value;
+	else
+		prop->cust_type = -1;
+
+	if (!of_property_read_u32(node, "oplus,cust_scale_fn_type", &value))
+		prop->cust_scale_fn_type = value;
+	else
+		prop->cust_scale_fn_type = -1;
+#endif
 	/*
 	 * Default to using timer calibration. Using a fresh calibration value
 	 * for every conversion will increase the overall time for a request.
@@ -1234,7 +1339,19 @@ static const struct adc5_data adc7_data_pmic = {
 				1000, 2000, 4000, 8000, 16000, 32000,
 				64000, 128000},
 };
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+static const struct adc5_data adc7_data_pmic_walle = {
+	.name = "pm-adc7",
+	.full_scale_code_volt = 0x70e4,
+	.adc_chans = adc7_chans_pmic_walle,
+	.decimation = (unsigned int [ADC5_DECIMATION_SAMPLES_MAX])
+				{85, 340, 1360},
+	.hw_settle_2 = (unsigned int [VADC_HW_SETTLE_SAMPLES_MAX])
+				{15, 100, 200, 300, 400, 500, 600, 700,
+				1000, 2000, 4000, 8000, 16000, 32000,
+				64000, 128000},
+};
+#endif
 static const struct adc5_data adc5_data_pmic5_lite = {
 	.name = "pm-adc5-lite",
 	.full_scale_code_volt = 0x70e4,
@@ -1282,6 +1399,12 @@ static const struct of_device_id adc5_match_table[] = {
 		.compatible = "qcom,spmi-adc5-lite",
 		.data = &adc5_data_pmic5_lite,
 	},
+	#ifdef OPLUS_FEATURE_CHG_BASIC
+	{
+		.compatible = "qcom,spmi-adc7-walle",
+		.data = &adc7_data_pmic_walle,
+	},
+	#endif
 	{ }
 };
 MODULE_DEVICE_TABLE(of, adc5_match_table);
@@ -1340,6 +1463,14 @@ static int adc5_get_dt_data(struct adc5_chip *adc, struct device_node *node)
 		iio_chan->info_mask_separate = adc_chan->info_mask;
 		iio_chan->type = adc_chan->type;
 		iio_chan->address = index;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if(prop.cust_type != -1 && prop.cust_scale_fn_type != -1) {
+			pr_err("%s: force to cust_type %d, cust_scale_fn_type %d\n", prop.datasheet_name, prop.cust_type, prop.cust_scale_fn_type);
+			iio_chan->type = prop.cust_type;
+			iio_chan->info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED);
+			adc->chan_props[index].scale_fn_type = prop.cust_scale_fn_type;
+		}
+#endif
 		iio_chan++;
 		chan_props++;
 		index++;
@@ -1402,6 +1533,12 @@ static int adc5_probe(struct platform_device *pdev)
 		}
 		indio_dev->info = &adc7_sw_calib_info;
 		adc->is_pmic7 = true;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	} else if (of_device_is_compatible(node, "qcom,spmi-adc7-walle")) {
+		pr_err("qcom,spmi-adc7-walle device\n");
+		indio_dev->info = &adc7_info;
+		adc->is_pmic7 = true;
+#endif
 	} else {
 		indio_dev->info = &adc5_info;
 	}

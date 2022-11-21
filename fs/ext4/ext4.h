@@ -40,6 +40,12 @@
 #include <linux/compat.h>
 #endif
 
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+#include <linux/fs_hpb.h>
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+
 #define FSCRYPT_NEED_OPS
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
@@ -1597,6 +1603,12 @@ enum {
 	EXT4_STATE_EXT_PRECACHED,	/* extents have been precached */
 	EXT4_STATE_LUSTRE_EA_INODE,	/* Lustre-style ea_inode */
 	EXT4_STATE_VERITY_IN_PROGRESS,	/* building fs-verity Merkle tree */
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	EXT4_STATE_HPB,                 /* HPB I/O */
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\

@@ -968,6 +968,10 @@ static void msm_geni_serial_poll_put_char(struct uart_port *uport,
 }
 #endif
 
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+extern bool ext_boot_with_console(void);
+#endif
+
 #if IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE) || \
 					IS_ENABLED(CONFIG_CONSOLE_POLL)
 static void msm_geni_serial_wr_char(struct uart_port *uport, int ch)
@@ -1130,6 +1134,12 @@ static int handle_rx_console(struct uart_port *uport,
 	unsigned char *rx_char;
 	struct tty_port *tport;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return -EPERM;
+	}
+	#endif
 
 	tport = &uport->state->port;
 	for (i = 0; i < rx_fifo_wc; i++) {
@@ -1624,6 +1634,11 @@ static int stop_rx_sequencer(struct uart_port *uport)
 
 	geni_cancel_s_cmd(uport->membase);
 
+	port->s_cmd_done = false;
+	port->s_cmd = true;
+	reinit_completion(&port->s_cmd_timeout);
+
+	geni_cancel_s_cmd(uport->membase);
 	/*
 	 * Ensure that the cancel goes through before polling for the
 	 * cancel control bit.
@@ -2906,11 +2921,24 @@ static int msm_geni_console_setup(struct console *co, char *options)
 
 static int console_register(struct uart_driver *drv)
 {
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return 0;
+	}
+	#endif
+
 	return uart_register_driver(drv);
+
 }
 
 static void console_unregister(struct uart_driver *drv)
 {
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return ;
+	}
+	#endif
+
 	uart_unregister_driver(drv);
 }
 
@@ -3483,6 +3511,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		spin_lock_init(&dev_port->rx_lock);
 
 	ret = uart_add_one_port(drv, uport);
+
 	if (ret)
 		dev_err(&pdev->dev, "Failed to register uart_port: %d\n",
 				ret);
@@ -3752,6 +3781,48 @@ static struct uart_driver msm_geni_serial_hs_driver = {
 	.nr =  GENI_UART_NR_PORTS,
 };
 
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+static int msm_serial_pinctrl_probe(struct platform_device *pdev)
+{
+
+	struct pinctrl *pinctrl = NULL;
+	struct pinctrl_state *set_state = NULL;
+	struct device *dev = &pdev->dev;
+
+	pr_err("%s\n", __func__);
+	pinctrl = devm_pinctrl_get(dev);
+
+	if (pinctrl != NULL) {
+
+		set_state = pinctrl_lookup_state(
+				pinctrl, "uart_pinctrl_deactive");
+
+		if (set_state != NULL)
+			pinctrl_select_state(pinctrl, set_state);
+
+		devm_pinctrl_put(pinctrl);
+	}
+	return 0;
+}
+static int msm_serial_pinctrl_remove(struct platform_device *pdev)
+{
+	return 0;
+}
+
+static const struct of_device_id oem_serial_pinctrl_of_match[] = {
+	{ .compatible = "oem,oem_serial_pinctrl" },
+	{}
+};
+
+static struct platform_driver msm_platform_serial_pinctrl_driver = {
+	.remove = msm_serial_pinctrl_remove,
+	.probe = msm_serial_pinctrl_probe,
+	.driver = {
+		.name = "oem_serial_pinctrl",
+		.of_match_table = oem_serial_pinctrl_of_match,
+	},
+};
+#endif
 static int __init msm_geni_serial_init(void)
 {
 	int ret = 0;
@@ -3787,7 +3858,12 @@ static int __init msm_geni_serial_init(void)
 		uart_unregister_driver(&msm_geni_serial_hs_driver);
 		return ret;
 	}
-
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if (!ext_boot_with_console()) {
+		pr_err("console disabled, config uart gpio to low\n");
+		ret = platform_driver_register(&msm_platform_serial_pinctrl_driver);
+	}
+#endif
 	pr_info("%s: Driver initialized\n", __func__);
 
 	return ret;

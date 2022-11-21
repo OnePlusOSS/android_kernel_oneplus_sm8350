@@ -124,7 +124,9 @@ static void backlight_generate_event(struct backlight_device *bd,
 		break;
 	}
 	envp[1] = NULL;
-	kobject_uevent_env(&bd->dev.kobj, KOBJ_CHANGE, envp);
+#ifdef OPLUS_BUG_STABILITY
+	//kobject_uevent_env(&bd->dev.kobj, KOBJ_CHANGE, envp);
+#endif /*OPLUS_BUG_STABILITY*/
 	sysfs_notify(&bd->dev.kobj, NULL, "actual_brightness");
 }
 

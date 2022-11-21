@@ -24,6 +24,9 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/delay.h>
+#if IS_BUILTIN(CONFIG_QCOM_SOCINFO)
+#include <soc/qcom/socinfo.h>
+#endif  /* IS_BUILTIN(CONFIG_QCOM_SOCINFO) */
 
 /*
  * In case the boot CPU is hotpluggable, we record its initial state and
@@ -178,6 +181,10 @@ static int c_show(struct seq_file *m, void *v)
 		seq_printf(m, "CPU part\t: 0x%03x\n", MIDR_PARTNUM(midr));
 		seq_printf(m, "CPU revision\t: %d\n\n", MIDR_REVISION(midr));
 	}
+
+#if IS_BUILTIN(CONFIG_QCOM_SOCINFO)
+	seq_printf(m, "Hardware\t: Qualcomm Technologies, Inc %s\n", socinfo_get_id_string());
+#endif  /* IS_BUILTIN(CONFIG_QCOM_SOCINFO) */
 
 	return 0;
 }

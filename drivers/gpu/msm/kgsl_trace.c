@@ -10,3 +10,6 @@
 /* Instantiate tracepoints */
 #define CREATE_TRACE_POINTS
 #include "kgsl_trace.h"
+#ifdef CONFIG_OPLUS_GPU_FREQ_TRACE_POINT
+#include "kgsl_pwrtrace.h"
+#endif

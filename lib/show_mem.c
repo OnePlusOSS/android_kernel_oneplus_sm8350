@@ -7,7 +7,12 @@
 
 #include <linux/mm.h>
 #include <linux/cma.h>
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+#include <linux/healthinfo/ion.h>
+extern unsigned long gpu_total(void);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 void show_mem(unsigned int filter, nodemask_t *nodemask)
 {
 	pg_data_t *pgdat;
@@ -41,4 +46,10 @@ void show_mem(unsigned int filter, nodemask_t *nodemask)
 #ifdef CONFIG_MEMORY_FAILURE
 	printk("%lu pages hwpoisoned\n", atomic_long_read(&num_poisoned_pages));
 #endif
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	printk("%lu pages ion total used\n", ion_total()>> PAGE_SHIFT);
+	printk("%lu pages gpu total used\n", gpu_total()>> PAGE_SHIFT);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 }

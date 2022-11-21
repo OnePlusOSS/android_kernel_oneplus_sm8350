@@ -23,6 +23,13 @@
 #include <linux/clkdev.h>
 
 #include "clk.h"
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/proc_fs.h>
+#include "qcom/vdd-class.h"
+#include "../soc/qcom/rpmh_master_stat.h"
+#endif
 
 static DEFINE_SPINLOCK(enable_lock);
 static DEFINE_MUTEX(prepare_lock);
@@ -32,6 +39,9 @@ static struct task_struct *enable_owner;
 
 static int prepare_refcnt;
 static int enable_refcnt;
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+static unsigned int debug_suspend_flag = 1;
+#endif
 
 static HLIST_HEAD(clk_root_list);
 static HLIST_HEAD(clk_orphan_list);
@@ -86,7 +96,7 @@ struct clk_core {
 	struct hlist_node	child_node;
 	struct hlist_head	clks;
 	unsigned int		notifier_count;
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || (defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG))
 	struct dentry		*dentry;
 	struct hlist_node	debug_node;
 #endif
@@ -2953,10 +2963,13 @@ EXPORT_SYMBOL_GPL(clk_is_match);
 
 /***        debugfs support        ***/
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || (defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG))
 #include <linux/debugfs.h>
 
 static struct dentry *rootdir;
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+static struct proc_dir_entry *procdir;
+#endif
 static int inited = 0;
 static DEFINE_MUTEX(clk_debug_lock);
 static HLIST_HEAD(clk_debug_list);
@@ -3359,7 +3372,7 @@ static void clk_debug_unregister(struct clk_core *core)
 	mutex_unlock(&clk_debug_lock);
 }
 
-#ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
+#if defined(CONFIG_COMMON_CLK_QCOM_DEBUG) || (defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG))
 #define clock_debug_output(m, c, fmt, ...)		\
 do {							\
 	if (m)						\
@@ -3384,13 +3397,30 @@ static int clock_debug_print_clock(struct clk_core *c, struct seq_file *s)
 
 	do {
 		c = clk->core;
+
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 		if (c->ops->list_rate_vdd_level)
+#else
+		#ifndef CONFIG_COMMON_CLK_QCOM_DEBUG
+		if (clk_list_rate_vdd_level(c->hw, c->rate) > 0)
+		#else
+		if (c->ops->list_rate_vdd_level)
+		#endif
+#endif
 			clock_debug_output(s, 1, "%s%s:%u:%u [%ld, %d]", start,
 				c->name,
 				c->prepare_count,
 				c->enable_count,
 				c->rate,
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 				c->ops->list_rate_vdd_level(c->hw, c->rate));
+#else
+				#ifndef CONFIG_COMMON_CLK_QCOM_DEBUG
+				clk_list_rate_vdd_level(c->hw, c->rate));
+				#else
+				c->ops->list_rate_vdd_level(c->hw, c->rate));
+				#endif
+#endif
 		else
 			clock_debug_output(s, 1, "%s%s:%u:%u [%ld]", start,
 				c->name,
@@ -3447,7 +3477,11 @@ static const struct file_operations clk_enabled_list_fops = {
 	.release	= seq_release,
 };
 
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 static u32 debug_suspend;
+#else
+static u32 debug_suspend = 1;
+#endif
 
 /*
  * Print the names of all enabled clocks and their parents if
@@ -3455,6 +3489,7 @@ static u32 debug_suspend;
  */
 void clock_debug_print_enabled(void)
 {
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 	if (likely(!debug_suspend))
 		return;
 
@@ -3464,8 +3499,53 @@ void clock_debug_print_enabled(void)
 	clock_debug_print_enabled_clocks(NULL);
 
 	mutex_unlock(&clk_debug_lock);
+#else
+	if (IS_ENABLED(CONFIG_DEBUG_FS)) {
+		if (likely(!debug_suspend))
+			return;
+
+		if (!mutex_trylock(&clk_debug_lock))
+			return;
+
+		clock_debug_print_enabled_clocks(NULL);
+
+		mutex_unlock(&clk_debug_lock);
+	} else {
+		if (debug_suspend_flag == 1) {
+			pr_info("Enable debug_suspend mode: clk list.");
+			clock_debug_print_enabled_clocks(NULL);
+		} else if (debug_suspend_flag == 2) {
+			pr_info("Enable debug_suspend mode: RPMh.");
+		} else if (debug_suspend_flag == 3) {
+			pr_info("Enable debug_suspend mode: Both clk and RPMh.");
+			clock_debug_print_enabled_clocks(NULL);
+		} else
+			return;
+	}
+#endif
 }
 EXPORT_SYMBOL(clock_debug_print_enabled);
+
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) && defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
+static ssize_t debug_suspend_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, sizeof(buf), "%d\n", debug_suspend_flag);
+}
+
+static ssize_t debug_suspend_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	if (kstrtouint(buf, 10, &debug_suspend_flag))
+		return -EINVAL;
+
+	pr_info("debug_suspend flag: %d", debug_suspend_flag);
+	return count;
+}
+
+static struct kobj_attribute debug_suspend_attribute =
+__ATTR(debug_suspend, 0644, debug_suspend_show, debug_suspend_store);
+#endif
 
 static void clk_state_subtree(struct clk_core *c)
 {
@@ -3475,9 +3555,14 @@ static void clk_state_subtree(struct clk_core *c)
 	if (!c)
 		return;
 
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 	if (c->ops->list_rate_vdd_level)
 		vdd_level = c->ops->list_rate_vdd_level(c->hw, c->rate);
-
+#else
+	vdd_level = clk_list_rate_vdd_level(c->hw, c->rate);
+	if (vdd_level < 0)
+		vdd_level = 0;
+#endif
 	trace_clk_state(c->name, c->prepare_count, c->enable_count,
 						c->rate, vdd_level);
 
@@ -3524,6 +3609,7 @@ static const struct file_operations clk_state_fops = {
  * debugfs is setup. It should only be called once at boot-time, all other clks
  * added dynamically will be done so with clk_debug_register.
  */
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY_DEBUG) || !defined(CONFIG_OPLUS_POWERINFO_STANDBY_DEBUG)
 static int __init clk_debug_init(void)
 {
 	struct clk_core *core;
@@ -3556,6 +3642,50 @@ static int __init clk_debug_init(void)
 
 	return 0;
 }
+#else
+static int __init clk_debug_init(void)
+{
+	struct clk_core *core;
+	int ret;
+
+	if (IS_ENABLED(CONFIG_DEBUG_FS)) {
+		rootdir = debugfs_create_dir("clk", NULL);
+
+		debugfs_create_file("clk_summary", 0444, rootdir, &all_lists,
+				    &clk_summary_fops);
+		debugfs_create_file("clk_dump", 0444, rootdir, &all_lists,
+				    &clk_dump_fops);
+		debugfs_create_file("clk_orphan_summary", 0444, rootdir, &orphan_list,
+				    &clk_summary_fops);
+		debugfs_create_file("clk_orphan_dump", 0444, rootdir, &orphan_list,
+				    &clk_dump_fops);
+
+		#ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
+				debugfs_create_file("clk_enabled_list", 0444, rootdir,
+						    &clk_debug_list, &clk_enabled_list_fops);
+				debugfs_create_u32("debug_suspend", 0644, rootdir, &debug_suspend);
+				debugfs_create_file("trace_clocks", 0444, rootdir, &all_lists,
+						    &clk_state_fops);
+		#endif
+
+		mutex_lock(&clk_debug_lock);
+		hlist_for_each_entry(core, &clk_debug_list, debug_node)
+			clk_debug_create_one(core, rootdir);
+
+		inited = 1;
+		mutex_unlock(&clk_debug_lock);
+	}
+
+	ret = sysfs_create_file(power_kobj, &debug_suspend_attribute.attr);
+	if (ret < 0)
+		pr_err("Failed to create debug_suspend sysfs.");
+
+	procdir = proc_mkdir("power", NULL);
+	proc_create("clk_enabled_list", 0444, procdir, &clk_enabled_list_fops);
+
+	return 0;
+}
+#endif
 late_initcall(clk_debug_init);
 #else
 static inline void clk_debug_register(struct clk_core *core) { }

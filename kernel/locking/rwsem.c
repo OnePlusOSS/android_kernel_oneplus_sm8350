@@ -345,6 +345,9 @@ void __init_rwsem(struct rw_semaphore *sem, const char *name,
 	osq_lock_init(&sem->osq);
 #endif
 	trace_android_vh_rwsem_init(sem);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	sem->ux_dep_task = NULL;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 }
 EXPORT_SYMBOL(__init_rwsem);
 
@@ -1068,7 +1071,16 @@ queue:
 					&waiter,
 					sem, &already_on_list);
 	if (!already_on_list)
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	{
+		if (sysctl_sched_assist_enabled)
+			rwsem_list_add(waiter.task, &waiter.list, &sem->wait_list);
+		else
+			list_add_tail(&waiter.list, &sem->wait_list);
+	}
+#else /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 		list_add_tail(&waiter.list, &sem->wait_list);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	/* we're now waiting on the lock, but no longer actively locking */
 	if (adjustment)
@@ -1091,6 +1103,11 @@ queue:
 		rwsem_mark_wake(sem, RWSEM_WAKE_ANY, &wake_q);
 
 	trace_android_vh_rwsem_wake(sem);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled && !is_rwsem_reader_owned(sem)) {
+		rwsem_set_inherit_ux(current, waiter.task, rwsem_owner(sem), sem);
+	}
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	raw_spin_unlock_irq(&sem->wait_lock);
 	wake_up_q(&wake_q);
 
@@ -1110,7 +1127,17 @@ queue:
 			/* Ordered by sem->wait_lock against rwsem_mark_wake(). */
 			break;
 		}
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+		current->in_downread = 1;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 		schedule();
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+		current->in_downread = 0;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 		lockevent_inc(rwsem_sleep_reader);
 	}
 
@@ -1190,7 +1217,16 @@ rwsem_down_write_slowpath(struct rw_semaphore *sem, int state)
 					&waiter,
 					sem, &already_on_list);
 	if (!already_on_list)
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	{
+		if (sysctl_sched_assist_enabled)
+			rwsem_list_add(waiter.task, &waiter.list, &sem->wait_list);
+		else
+			list_add_tail(&waiter.list, &sem->wait_list);
+	}
+#else /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 		list_add_tail(&waiter.list, &sem->wait_list);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	/* we're now waiting on the lock */
 	if (wstate == WRITER_NOT_FIRST) {
@@ -1227,6 +1263,12 @@ rwsem_down_write_slowpath(struct rw_semaphore *sem, int state)
 
 wait:
 	trace_android_vh_rwsem_wake(sem);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled && !is_rwsem_reader_owned(sem)) {
+		rwsem_set_inherit_ux(waiter.task, current, rwsem_owner(sem), sem);
+	}
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 	/* wait until we successfully acquire the lock */
 	trace_android_vh_rwsem_write_wait_start(sem);
 	set_current_state(state);
@@ -1255,7 +1297,17 @@ wait:
 			if (signal_pending_state(state, current))
 				goto out_nolock;
 
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+			current->in_downwrite = 1;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 			schedule();
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+			current->in_downwrite = 0;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 			lockevent_inc(rwsem_sleep_writer);
 			set_current_state(state);
 			/*
@@ -1303,7 +1355,7 @@ out_nolock:
 	list_del(&waiter.list);
 
 	if (unlikely(wstate == WRITER_HANDOFF))
-		atomic_long_add(-RWSEM_FLAG_HANDOFF,  &sem->count);
+		atomic_long_andnot(RWSEM_FLAG_HANDOFF,  &sem->count);
 
 	if (list_empty(&sem->wait_list))
 		atomic_long_andnot(RWSEM_FLAG_WAITERS, &sem->count);
@@ -1329,6 +1381,12 @@ static struct rw_semaphore *rwsem_wake(struct rw_semaphore *sem, long count)
 
 	if (!list_empty(&sem->wait_list))
 		rwsem_mark_wake(sem, RWSEM_WAKE_ANY, &wake_q);
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled) {
+		rwsem_unset_inherit_ux(sem, current);
+	}
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
 	raw_spin_unlock_irqrestore(&sem->wait_lock, flags);
 	wake_up_q(&wake_q);

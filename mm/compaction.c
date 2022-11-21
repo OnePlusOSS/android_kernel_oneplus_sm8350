@@ -25,6 +25,10 @@
 #include <linux/psi.h>
 #include "internal.h"
 
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+#include <linux/mm.h>
+#endif
+
 #ifdef CONFIG_COMPACTION
 static inline void count_compact_event(enum vm_event_item item)
 {
@@ -1282,7 +1286,9 @@ fast_isolate_freepages(struct compact_control *cc)
 	struct page *page = NULL;
 	bool scan_start = false;
 	int order;
-
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+	int flc = 0;
+#endif
 	/* Full compaction passes in a negative order */
 	if (cc->order <= 0)
 		return cc->free_pfn;
@@ -1312,11 +1318,17 @@ fast_isolate_freepages(struct compact_control *cc)
 	 * order to search after a previous failure
 	 */
 	cc->search_order = min_t(unsigned int, cc->order - 1, cc->search_order);
-
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+#endif
 	for (order = cc->search_order;
 	     !page && order >= 0;
 	     order = next_search_order(cc, order)) {
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+		struct free_area *area = &cc->zone->free_area[flc][order];
+#else
 		struct free_area *area = &cc->zone->free_area[order];
+#endif
 		struct list_head *freelist;
 		struct page *freepage;
 		unsigned long flags;
@@ -1328,6 +1340,13 @@ fast_isolate_freepages(struct compact_control *cc)
 
 		spin_lock_irqsave(&cc->zone->lock, flags);
 		freelist = &area->free_list[MIGRATE_MOVABLE];
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+		if (list_empty(freelist)) {
+			spin_unlock_irqrestore(&cc->zone->lock, flags);
+			continue;
+		}
+#endif
+
 		list_for_each_entry_reverse(freepage, freelist, lru) {
 			unsigned long pfn;
 
@@ -1391,6 +1410,9 @@ fast_isolate_freepages(struct compact_control *cc)
 		if (order_scanned >= limit)
 			limit = min(1U, limit >> 1);
 	}
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    }
+#endif
 
 	if (!page) {
 		cc->fast_search_fail++;
@@ -1630,6 +1652,9 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 	unsigned long pfn = cc->migrate_pfn;
 	unsigned long high_pfn;
 	int order;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+	int flc = 0;
+#endif
 	bool found_block = false;
 
 	/* Skip hints are relied on to avoid repeats on the fast search */
@@ -1672,10 +1697,17 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 		distance >>= 2;
 	high_pfn = pageblock_start_pfn(cc->migrate_pfn + distance);
 
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+#endif
 	for (order = cc->order - 1;
 	     order >= PAGE_ALLOC_COSTLY_ORDER && !found_block && nr_scanned < limit;
 	     order--) {
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+		struct free_area *area = &cc->zone->free_area[flc][order];
+#else
 		struct free_area *area = &cc->zone->free_area[order];
+#endif
 		struct list_head *freelist;
 		unsigned long flags;
 		struct page *freepage;
@@ -1685,6 +1717,13 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 
 		spin_lock_irqsave(&cc->zone->lock, flags);
 		freelist = &area->free_list[MIGRATE_MOVABLE];
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+		if (list_empty(freelist)) {
+			spin_unlock_irqrestore(&cc->zone->lock, flags);
+			continue;
+		}
+#endif
+
 		list_for_each_entry(freepage, freelist, lru) {
 			unsigned long free_pfn;
 
@@ -1717,7 +1756,9 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 		}
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
 	}
-
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    }
+#endif
 	cc->total_migrate_scanned += nr_scanned;
 
 	/*
@@ -1849,6 +1890,9 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 	unsigned int order;
 	const int migratetype = cc->migratetype;
 	int ret;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    int flc = 0;
+#endif
 
 	/* Compaction run completes if the migrate and free scanner meet */
 	if (compact_scanners_met(cc)) {
@@ -1884,8 +1928,15 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 
 	/* Direct compactor: Is a suitable page free? */
 	ret = COMPACT_NO_SUITABLE_PAGE;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    for (flc = 0; flc < FREE_AREA_COUNTS; flc++) {
+#endif
 	for (order = cc->order; order < MAX_ORDER; order++) {
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+		struct free_area *area = &cc->zone->free_area[flc][order];
+#else
 		struct free_area *area = &cc->zone->free_area[order];
+#endif
 		bool can_steal;
 
 		/* Job done if page is free of the right migratetype */
@@ -1927,7 +1978,9 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 			break;
 		}
 	}
-
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    }
+#endif
 	if (cc->contended || fatal_signal_pending(current))
 		ret = COMPACT_CONTENDED;
 

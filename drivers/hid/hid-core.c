@@ -911,7 +911,16 @@ static int hid_scan_report(struct hid_device *hid)
 				hid->group = HID_GROUP_RMI;
 		break;
 	}
+#if IS_ENABLED(CONFIG_OPLUS_BT_BUG_STABILITY)
+//add for BLE-M1 uhid group change HID_GROUP_GENERIC
+	if (0x248a == hid->vendor && 2 == hid->group) {
+		hid_warn(hid, "scan_report change to GENERIC %u\n", hid->group);
+		hid->group = HID_GROUP_GENERIC;
+	}
 
+	/* fall back to generic driver in case specific driver doesn't exist */
+	hid_warn(hid, "report vendor %u,group %u\n", hid->vendor, hid->group);
+#endif /* CONFIG_OPLUS_BT_BUG_STABILITY */
 	kfree(parser->collection_stack);
 	vfree(parser);
 	return 0;
@@ -1997,9 +2006,6 @@ int hid_connect(struct hid_device *hdev, unsigned int connect_mask)
 		break;
 	case BUS_I2C:
 		bus = "I2C";
-		break;
-	case BUS_SPI:
-		bus = "SPI";
 		break;
 	case BUS_VIRTUAL:
 		bus = "VIRTUAL";

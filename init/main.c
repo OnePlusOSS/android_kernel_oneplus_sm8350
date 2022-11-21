@@ -104,6 +104,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+#include "../drivers/soc/oplus/system/oplus_phoenix/oplus_phoenix.h"
+#endif  //OPLUS_FEATURE_PHOENIX
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 #include <soc/qcom/boot_stats.h>
 #endif
@@ -481,6 +484,25 @@ void __init parse_early_options(char *cmdline)
 		   do_early_param);
 }
 
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+static bool printk_disable_uart = true;
+int board_uart_console_status(char *cmdline)
+{
+	char *substr = NULL;
+	substr = strstr(cmdline, "printk.disable_uart=0");
+	if (substr) {
+		printk_disable_uart = false;
+		return 0;
+	}
+	printk_disable_uart = true;
+	return 0;
+}
+bool ext_boot_with_console(void)
+{
+	return !printk_disable_uart;
+}
+EXPORT_SYMBOL(ext_boot_with_console);
+#endif
 /* Arch code calls this early on, or if not, just before other parsing. */
 void __init parse_early_param(void)
 {
@@ -492,6 +514,9 @@ void __init parse_early_param(void)
 
 	/* All fall through to do_early_param. */
 	strlcpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	board_uart_console_status(tmp_cmdline);
+	#endif
 	parse_early_options(tmp_cmdline);
 	done = 1;
 }
@@ -636,6 +661,11 @@ asmlinkage __visible void __init start_kernel(void)
 	trap_init();
 	mm_init();
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_MM_INIT_DONE);
+#endif //OPLUS_FEATURE_PHOENIX
+
 	ftrace_init();
 
 	/* trace_printk can be enabled here */
@@ -710,6 +740,10 @@ asmlinkage __visible void __init start_kernel(void)
 
 	early_boot_irqs_disabled = false;
 	local_irq_enable();
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_LOCAL_IRQ_ENABLE);
+#endif
 
 	kmem_cache_init_late();
 
@@ -782,7 +816,10 @@ asmlinkage __visible void __init start_kernel(void)
 	taskstats_init_early();
 	delayacct_init();
 
-	poking_init();
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_DELAYACCT_INIT_DONE);
+#endif
 	check_bugs();
 
 	acpi_subsystem_init();
@@ -1036,10 +1073,18 @@ static void __init do_basic_setup(void)
 {
 	cpuset_init_smp();
 	driver_init();
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_DRIVER_INIT_DONE);
+#endif
 	init_irq_proc();
 	do_ctors();
 	usermodehelper_enable();
 	do_initcalls();
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_DO_INITCALLS_DONE);
+#endif
 }
 
 static void __init do_pre_smp_initcalls(void)
@@ -1113,6 +1158,10 @@ void __weak free_initmem(void)
 	free_initmem_default(POISON_FREE_INITMEM);
 }
 
+#if IS_BUILTIN(CONFIG_OPLUS_FEATURE_PHOENIX_REBOOT_SPEED)
+extern void bootprof_log_boot(char *str);
+#endif
+
 static int __ref kernel_init(void *unused)
 {
 	int ret;
@@ -1136,6 +1185,13 @@ static int __ref kernel_init(void *unused)
 
 	rcu_end_inkernel_boot();
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_INIT_DONE);
+#endif
+#if IS_BUILTIN(CONFIG_OPLUS_FEATURE_PHOENIX_REBOOT_SPEED)
+	bootprof_log_boot("Kernel_init_done");
+#endif
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 	place_marker("M - DRIVER Kernel Boot Done");
 #endif
@@ -1206,6 +1262,10 @@ static noinline void __init kernel_init_freeable(void)
 
 	do_basic_setup();
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PHOENIX)
+	if(phx_set_boot_stage)
+		phx_set_boot_stage(KERNEL_DO_BASIC_SETUP_DONE);
+#endif
 	/* Open the /dev/console on the rootfs, this should never fail */
 	if (ksys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
 		pr_err("Warning: unable to open an initial console.\n");

@@ -13,6 +13,9 @@
 #ifdef CONFIG_SCSI_UFSHCD_QTI
 #include "unipro.h"
 #endif
+#ifdef OPLUS_FEATURE_UFSPLUS
+#include <uapi/scsi/ufs/ioctl.h>
+#endif /* OPLUS_FEATURE_UFSPLUS */
 
 #define MAX_UFS_QCOM_HOSTS	2
 #define MAX_U32                 (~(u32)0)
@@ -441,6 +444,7 @@ out:
 	return err;
 }
 
+#ifndef OPLUS_FEATURE_UFSPLUS
 /*
  *  IOCTL opcode for ufs queries has the following opcode after
  *  SCSI_IOCTL_GET_PCI
@@ -492,5 +496,5 @@ struct ufs_ioctl_query_data {
 	 */
 	__u8 buffer[0];
 };
-
+#endif /* OPLUS_FEATURE_UFSPLUS */
 #endif /* UFS_QCOM_H_ */

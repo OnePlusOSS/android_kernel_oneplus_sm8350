@@ -318,6 +318,7 @@ static int qcom_ipcc_pm_resume(struct device *dev)
 	struct ipcc_protocol_data *proto_data = dev_get_drvdata(dev);
 
 	packed_id = readl_no_log(proto_data->base + IPCC_REG_RECV_ID);
+	pr_err("%s: debug :packed_id is: %u\n", __func__, packed_id);
 	if (packed_id == IPCC_NO_PENDING_IRQ)
 		return 0;
 
