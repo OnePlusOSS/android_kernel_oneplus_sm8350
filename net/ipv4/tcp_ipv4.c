@@ -82,6 +82,15 @@
 
 #include <trace/events/tcp.h>
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+void (*match_ipa_ip_wakeup)(int type, struct sk_buff *skb) = NULL;
+EXPORT_SYMBOL(match_ipa_ip_wakeup);
+void (*match_ipa_tcp_wakeup)(int type, struct sock *sk) = NULL;
+EXPORT_SYMBOL(match_ipa_tcp_wakeup);
+void (*ipa_schedule_work)(void) = NULL;
+EXPORT_SYMBOL(ipa_schedule_work);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 #ifdef CONFIG_TCP_MD5SIG
 static int tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
 			       __be32 daddr, __be32 saddr, const struct tcphdr *th);
@@ -105,10 +114,10 @@ static u32 tcp_v4_init_ts_off(const struct net *net, const struct sk_buff *skb)
 
 int tcp_twsk_unique(struct sock *sk, struct sock *sktw, void *twp)
 {
+	int reuse = READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_tw_reuse);
 	const struct inet_timewait_sock *tw = inet_twsk(sktw);
 	const struct tcp_timewait_sock *tcptw = tcp_twsk(sktw);
 	struct tcp_sock *tp = tcp_sk(sk);
-	int reuse = sock_net(sk)->ipv4.sysctl_tcp_tw_reuse;
 
 	if (reuse == 2) {
 		/* Still does not detect *everything* that goes through
@@ -1383,7 +1392,7 @@ struct request_sock_ops tcp_request_sock_ops __read_mostly = {
 	.syn_ack_timeout =	tcp_syn_ack_timeout,
 };
 
-static const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
+const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 	.mss_clamp	=	TCP_MSS_DEFAULT,
 #ifdef CONFIG_TCP_MD5SIG
 	.req_md5_lookup	=	tcp_v4_md5_lookup,
@@ -1426,6 +1435,7 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 				  bool *own_req)
 {
 	struct inet_request_sock *ireq;
+	bool found_dup_sk = false;
 	struct inet_sock *newinet;
 	struct tcp_sock *newtp;
 	struct sock *newsk;
@@ -1496,12 +1506,22 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 
 	if (__inet_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;
-	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash));
+	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
+				       &found_dup_sk);
 	if (likely(*own_req)) {
 		tcp_move_syn(newtp, req);
 		ireq->ireq_opt = NULL;
 	} else {
 		newinet->inet_opt = NULL;
+
+		if (!req_unhash && found_dup_sk) {
+			/* This code path should only be executed in the
+			 * syncookie case only
+			 */
+			bh_unlock_sock(newsk);
+			sock_put(newsk);
+			newsk = NULL;
+		}
 	}
 	return newsk;
 
@@ -1826,6 +1846,12 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	struct sock *sk;
 	int ret;
 
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_ipa_ip_wakeup != NULL) {
+		match_ipa_ip_wakeup(1, skb);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1857,6 +1883,12 @@ lookup:
 			       th->dest, sdif, &refcounted);
 	if (!sk)
 		goto no_tcp_socket;
+
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_ipa_tcp_wakeup != NULL) {
+		match_ipa_tcp_wakeup(1, sk);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 process:
 	if (sk->sk_state == TCP_TIME_WAIT)
@@ -1985,6 +2017,11 @@ bad_packet:
 
 discard_it:
 	/* Discard frame. */
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (ipa_schedule_work != NULL) {
+		ipa_schedule_work();
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 	kfree_skb(skb);
 	return 0;
 
@@ -2701,6 +2738,11 @@ static int __net_init tcp_sk_init(struct net *net)
 	net->ipv4.sysctl_tcp_sack = 1;
 	net->ipv4.sysctl_tcp_window_scaling = 1;
 	net->ipv4.sysctl_tcp_timestamps = 1;
+
+#if IS_ENABLED(CONFIG_OPLUS_BUG_STABILITY)
+	net->ipv4.sysctl_tcp_random_timestamp = 1;
+#endif /* CONFIG_OPLUS_BUG_STABILITY */
+
 	net->ipv4.sysctl_tcp_early_retrans = 3;
 	net->ipv4.sysctl_tcp_recovery = TCP_RACK_LOSS_DETECTION;
 	net->ipv4.sysctl_tcp_slow_start_after_idle = 1; /* By default, RFC2861 behavior.  */

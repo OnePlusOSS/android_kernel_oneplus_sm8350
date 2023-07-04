@@ -28,6 +28,11 @@ ccflags-y  :=
 cppflags-y :=
 ldflags-y  :=
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#oplus add for charging
+KBUILD_LDS_MODULE_ATTACH :=
+#endif
+
 subdir-asflags-y :=
 subdir-ccflags-y :=
 
@@ -293,8 +298,17 @@ cmd_mod = { \
 	$(undefined_syms) echo; \
 	} > $@
 
+#ifdef OPLUS_FEATURE_CHG_BASIC #Add for charging
+	cmd_mod_lds = $(if $(KBUILD_LDS_MODULE_ATTACH), cat $(srctree)/$(src)/$(firstword $(KBUILD_LDS_MODULE_ATTACH)) > $(@:.mod=.lds))
+#endif
+
 $(obj)/%.mod: $(obj)/%.o FORCE
 	$(call if_changed,mod)
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#oplus add for charging
+	$(call cmd,mod_lds)
+#endif
 
 targets += $(mod-targets)
 

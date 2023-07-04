@@ -44,12 +44,12 @@
 #include <soc/qcom/ramdump.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
-#include <trace/events/trace_msm_ssr_event.h>
 #include "main.h"
 #include "qmi.h"
 #include "debug.h"
 #include "power.h"
 #include "genl.h"
+#include <soc/oplus/system/boot_mode.h>
 
 #define MAX_PROP_SIZE			32
 #define NUM_LOG_PAGES			10
@@ -73,14 +73,7 @@
 #define ICNSS_BDF_TYPE_DEFAULT         ICNSS_BDF_ELF
 
 #define PROBE_TIMEOUT                 15000
-
-#ifdef CONFIG_ICNSS2_DEBUG
-static unsigned long qmi_timeout = 3000;
-module_param(qmi_timeout, ulong, 0600);
-#define WLFW_TIMEOUT                    msecs_to_jiffies(qmi_timeout)
-#else
-#define WLFW_TIMEOUT                    msecs_to_jiffies(3000)
-#endif
+#define WLFW_TIMEOUT			msecs_to_jiffies(3000)
 
 static struct icnss_priv *penv;
 static struct work_struct wpss_loader;
@@ -108,6 +101,11 @@ static const char * const icnss_pdr_cause[] = {
 	[ICNSS_ROOT_PD_SHUTDOWN] = "Root PD shutdown",
 	[ICNSS_HOST_ERROR] = "Host error",
 };
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for: check fw status for switch issue
+static unsigned int cnssprobestate = 0;
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 static void icnss_set_plat_priv(struct icnss_priv *priv)
 {
@@ -195,8 +193,6 @@ char *icnss_driver_event_to_str(enum icnss_driver_event_type type)
 		return "M3_DUMP_UPLOAD";
 	case ICNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
 		return "QDSS_TRACE_REQ_DATA";
-	case ICNSS_DRIVER_EVENT_SUBSYS_RESTART_LEVEL:
-		return "SUBSYS_RESTART_LEVEL";
 	case ICNSS_DRIVER_EVENT_MAX:
 		return "EVENT_MAX";
 	}
@@ -1095,25 +1091,6 @@ static int icnss_qdss_trace_req_data_hdlr(struct icnss_priv *priv,
 	return ret;
 }
 
-static int icnss_subsys_restart_level_type(struct icnss_priv *priv,
-					   void *data)
-{
-	int ret = 0;
-	struct icnss_subsys_restart_level_data *event_data = data;
-
-	if (!priv)
-		return -ENODEV;
-
-	if (!data)
-		return -EINVAL;
-
-	ret = wlfw_subsys_restart_level_msg(priv, event_data->restart_level);
-
-	kfree(data);
-
-	return ret;
-}
-
 static int icnss_event_soc_wake_request(struct icnss_priv *priv, void *data)
 {
 	int ret = 0;
@@ -1545,9 +1522,6 @@ static void icnss_driver_event_work(struct work_struct *work)
 		case ICNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA:
 			ret = icnss_qdss_trace_req_data_hdlr(priv,
 							     event->data);
-			break;
-		case ICNSS_DRIVER_EVENT_SUBSYS_RESTART_LEVEL:
-			ret = icnss_subsys_restart_level_type(priv, event->data);
 			break;
 		default:
 			icnss_pr_err("Invalid Event type: %d", event->type);
@@ -3404,6 +3378,16 @@ static ssize_t wpss_boot_store(struct device *dev,
 {
 	struct icnss_priv *priv = dev_get_drvdata(dev);
 	int wpss_subsys = 0;
+	//#ifdef OPLUS_FEATURE_WIFI_FTM
+	int boot_mode;
+
+	boot_mode = get_boot_mode();
+	icnss_pr_err("boot_mode=%d", boot_mode);
+	if ((WCN6750_DEVICE_ID == priv->device_id) && (MSM_BOOT_MODE__FACTORY == boot_mode)) {
+	    icnss_pr_err("bsp ftm mode, donot load wlan firmware!");
+	    return count;
+	}
+	//#endif  /*OPLUS_FEATURE_WIFI_FTM*/
 
 	if (priv->device_id != WCN6750_DEVICE_ID)
 		return count;
@@ -3868,8 +3852,12 @@ void icnss_add_fw_prefix_name(struct icnss_priv *priv, char *prefix_name,
 		return;
 	}
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_BDF2)
+	scnprintf(prefix_name, ICNSS_MAX_FILE_NAME, "%s", name);
+#else
 	scnprintf(prefix_name, ICNSS_MAX_FILE_NAME,
 		  QCA6750_PATH_PREFIX "%s", name);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_BDF2 */
 
 	icnss_pr_dbg("File added with prefix: %s\n", prefix_name);
 }
@@ -3933,38 +3921,46 @@ static inline void icnss_runtime_pm_deinit(struct icnss_priv *priv)
 	pm_runtime_put_sync(&priv->pdev->dev);
 }
 
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for: check fw status for switch issue
+static void icnss_create_fw_state_kobj(void);
+static ssize_t icnss_show_fw_ready(struct device_driver *driver, char *buf)
+{
+	bool firmware_ready = false;
+	bool bdfloadsuccess = false;
+	bool regdbloadsuccess = false;
+	bool cnssprobesuccess = false;
+	if (!penv) {
+           icnss_pr_err("icnss_show_fw_ready plat_env is NULL!\n");
+	} else {
+           firmware_ready = test_bit(ICNSS_FW_READY, &penv->state);
+           regdbloadsuccess = test_bit(CNSS_LOAD_REGDB_SUCCESS, &penv->loadRegdbState);
+           bdfloadsuccess = test_bit(CNSS_LOAD_BDF_SUCCESS, &penv->loadBdfState);
+	}
+	cnssprobesuccess = (cnssprobestate == CNSS_PROBE_SUCCESS);
+	return sprintf(buf, "%s:%s:%s:%s",
+           (firmware_ready ? "fwstatus_ready" : "fwstatus_not_ready"),
+           (regdbloadsuccess ? "regdb_loadsuccess" : "regdb_loadfail"),
+           (bdfloadsuccess ? "bdf_loadsuccess" : "bdf_loadfail"),
+           (cnssprobesuccess ? "cnssprobe_success" : "cnssprobe_fail")
+           );
+}
+
+struct driver_attribute icnss_fw_ready_attr = {
+	.attr = {
+		.name = "firmware_ready",
+		.mode = S_IRUGO,
+	},
+	.show = icnss_show_fw_ready,
+	//read only so we don't need to impl store func
+};
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
+
 static inline bool icnss_use_nv_mac(struct icnss_priv *priv)
 {
 	return of_property_read_bool(priv->pdev->dev.of_node,
 				     "use-nv-mac");
 }
-
-#ifdef CONFIG_ICNSS2_RESTART_LEVEL_NOTIF
-static void pil_restart_level_notifier(void *ignore,
-				       int restart_level,
-				       const char *fw)
-{
-	struct icnss_subsys_restart_level_data *restart_level_data;
-
-	icnss_pr_err("PIL Notifier, restart_level: %d, FW:%s",
-		     restart_level, fw);
-
-	restart_level_data = kzalloc(sizeof(*restart_level_data), GFP_ATOMIC);
-
-	if (!restart_level_data)
-		return;
-
-	if (!strcmp(fw, "wpss")) {
-		if (restart_level == RESET_SUBSYS_COUPLED)
-			restart_level_data->restart_level = ICNSS_ENABLE_M3_SSR;
-		else
-			restart_level_data->restart_level = ICNSS_DISABLE_M3_SSR;
-
-		icnss_driver_event_post(penv, ICNSS_DRIVER_EVENT_SUBSYS_RESTART_LEVEL,
-					0, restart_level_data);
-	}
-}
-#endif
 
 static int icnss_probe(struct platform_device *pdev)
 {
@@ -4005,6 +4001,11 @@ static int icnss_probe(struct platform_device *pdev)
 	icnss_allow_recursive_recovery(dev);
 
 	icnss_init_control_params(priv);
+
+	#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	//Add for: check fw status for switch issue
+	icnss_create_fw_state_kobj();
+	#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 	ret = icnss_resource_parse(priv);
 	if (ret)
@@ -4082,12 +4083,14 @@ static int icnss_probe(struct platform_device *pdev)
 		icnss_pr_dbg("NV MAC feature is %s\n",
 			     priv->use_nv_mac ? "Mandatory":"Not Mandatory");
 		INIT_WORK(&wpss_loader, icnss_wpss_load);
-#ifdef CONFIG_ICNSS2_RESTART_LEVEL_NOTIF
-		register_trace_pil_restart_level(pil_restart_level_notifier, NULL);
-#endif
 	}
 
 	INIT_LIST_HEAD(&priv->icnss_tcdev_list);
+
+	#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+	//Add for: check fw status for switch issue
+	cnssprobestate = CNSS_PROBE_SUCCESS;
+	#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 	icnss_pr_info("Platform driver probed successfully\n");
 
@@ -4103,6 +4106,10 @@ out_free_resources:
 	icnss_put_resources(priv);
 out_reset_drvdata:
 	dev_set_drvdata(dev, NULL);
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for: check fw status for switch issue
+	cnssprobestate = CNSS_PROBE_FAIL;
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 	return ret;
 }
 
@@ -4116,9 +4123,6 @@ static int icnss_remove(struct platform_device *pdev)
 		icnss_dms_deinit(priv);
 		icnss_genl_exit();
 		icnss_runtime_pm_deinit(priv);
-#ifdef CONFIG_ICNSS2_RESTART_LEVEL_NOTIF
-		unregister_trace_pil_restart_level(pil_restart_level_notifier, NULL);
-#endif
 	}
 
 	device_init_wakeup(&priv->pdev->dev, false);
@@ -4383,6 +4387,15 @@ static struct platform_driver icnss_driver = {
 		.of_match_table = icnss_dt_match,
 	},
 };
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for: check fw status for switch issue
+static void icnss_create_fw_state_kobj(void) {
+	if (driver_create_file(&(icnss_driver.driver), &icnss_fw_ready_attr)) {
+		icnss_pr_info("failed to create %s", icnss_fw_ready_attr.attr.name);
+	}
+}
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 static int __init icnss_initialize(void)
 {

@@ -28,13 +28,39 @@
 
 #include <uapi/linux/dma-buf.h>
 #include <uapi/linux/magic.h>
+#if defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE)
+#include <linux/kernel.h>
+#include <linux/atomic.h>
+#include <linux/sched/signal.h>
+#include <linux/fdtable.h>
+#include <linux/list_sort.h>
+#include <linux/hashtable.h>
+#include <linux/proc_fs.h>
+#endif
 
-static inline int is_dma_buf_file(struct file *);
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+#include <soc/oplus/lowmem_dbg.h>
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 
 struct dma_buf_list {
 	struct list_head head;
 	struct mutex lock;
 };
+
+#if defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE)
+struct dma_info {
+	struct dma_buf *dmabuf;
+	struct hlist_node head;
+};
+
+struct dma_proc {
+	char name[TASK_COMM_LEN];
+	pid_t pid;
+	size_t size;
+	struct hlist_head dma_bufs[1 << 10];
+	struct list_head head;
+};
+#endif
 
 static struct dma_buf_list db_list;
 
@@ -472,10 +498,20 @@ static const struct file_operations dma_buf_fops = {
 /*
  * is_dma_buf_file - Check if struct file* is associated with dma_buf
  */
-static inline int is_dma_buf_file(struct file *file)
+int is_dma_buf_file(struct file *file)
 {
 	return file->f_op == &dma_buf_fops;
 }
+
+#ifdef CONFIG_OPLUS_FEATURE_LOWMEM_DBG
+/**
+ * Add for dump memory usage when lowmmem occurs.
+ */
+inline int oplus_is_dma_buf_file(struct file *file)
+{
+	return is_dma_buf_file(file);
+}
+#endif /* CONFIG_OPLUS_FEATURE_LOWMEM_DBG */
 
 static struct file *dma_buf_getfile(struct dma_buf *dmabuf, int flags)
 {
@@ -1302,7 +1338,7 @@ int dma_buf_get_uuid(struct dma_buf *dmabuf, uuid_t *uuid)
 }
 EXPORT_SYMBOL_GPL(dma_buf_get_uuid);
 
-#ifdef CONFIG_DEBUG_FS
+#if defined(CONFIG_DEBUG_FS) || (defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE))
 static int dma_buf_debug_show(struct seq_file *s, void *unused)
 {
 	int ret;
@@ -1395,7 +1431,187 @@ static int dma_buf_debug_show(struct seq_file *s, void *unused)
 }
 
 DEFINE_SHOW_ATTRIBUTE(dma_buf_debug);
+#if defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE)
+static struct proc_dir_entry *dma_buf_procfs_root;
 
+static int get_dma_info(const void *data, struct file *file, unsigned int n)
+{
+	struct dma_proc *dma_proc;
+	struct dma_info *dma_info;
+
+	dma_proc = (struct dma_proc *)data;
+	if (!is_dma_buf_file(file))
+		return 0;
+
+	hash_for_each_possible(dma_proc->dma_bufs, dma_info,
+			       head, (unsigned long)file->private_data)
+		if (file->private_data == dma_info->dmabuf)
+			return 0;
+
+	dma_info = kzalloc(sizeof(*dma_info), GFP_ATOMIC);
+	if (!dma_info)
+		return -ENOMEM;
+
+	get_file(file);
+	dma_info->dmabuf = file->private_data;
+	dma_proc->size += dma_info->dmabuf->size / SZ_1K;
+	hash_add(dma_proc->dma_bufs, &dma_info->head,
+			(unsigned long)dma_info->dmabuf);
+	return 0;
+}
+
+static void write_proc(struct seq_file *s, struct dma_proc *proc)
+{
+	struct dma_info *tmp;
+	int i;
+
+	seq_printf(s, "\n%s (PID %d) size: %ld\nDMA Buffers:\n",
+			proc->name, proc->pid, proc->size);
+	seq_printf(s, "%-8s\t%-8s\n", "Inode", "Size (KB)");
+
+	hash_for_each(proc->dma_bufs, i, tmp, head) {
+		struct dma_buf *dmabuf = tmp->dmabuf;
+
+		seq_printf(s, "%-8ld\t%-8ld\n",
+				file_inode(dmabuf->file)->i_ino,
+				dmabuf->size / SZ_1K);
+	}
+}
+
+static void free_proc(struct dma_proc *proc)
+{
+	struct dma_info *tmp;
+	struct hlist_node *n;
+	int i;
+
+	hash_for_each_safe(proc->dma_bufs, i, n, tmp, head) {
+		fput(tmp->dmabuf->file);
+		hash_del(&tmp->head);
+		kfree(tmp);
+	}
+	kfree(proc);
+}
+
+static int proccmp(void *unused, struct list_head *a, struct list_head *b)
+{
+	struct dma_proc *a_proc, *b_proc;
+
+	a_proc = list_entry(a, struct dma_proc, head);
+	b_proc = list_entry(b, struct dma_proc, head);
+	return b_proc->size - a_proc->size;
+}
+
+static int dma_procs_debug_show(struct seq_file *s, void *unused)
+{
+	struct task_struct *task, *thread;
+	struct files_struct *files;
+	int ret = 0;
+	struct dma_proc *tmp, *n;
+	LIST_HEAD(plist);
+
+	rcu_read_lock();
+	for_each_process(task) {
+		struct files_struct *group_leader_files = NULL;
+
+		tmp = kzalloc(sizeof(*tmp), GFP_ATOMIC);
+		if (!tmp) {
+			ret = -ENOMEM;
+			rcu_read_unlock();
+			goto mem_err;
+		}
+		hash_init(tmp->dma_bufs);
+		for_each_thread(task, thread) {
+			task_lock(thread);
+			if (unlikely(!group_leader_files))
+				group_leader_files = task->group_leader->files;
+			files = thread->files;
+			if (files && (group_leader_files != files ||
+				      thread == task->group_leader))
+				ret = iterate_fd(files, 0, get_dma_info, tmp);
+			task_unlock(thread);
+		}
+		if (ret || hash_empty(tmp->dma_bufs))
+			goto skip;
+		get_task_comm(tmp->name, task);
+		tmp->pid = task->tgid;
+		list_add(&tmp->head, &plist);
+		continue;
+skip:
+		free_proc(tmp);
+	}
+	rcu_read_unlock();
+
+	list_sort(NULL, &plist, proccmp);
+	list_for_each_entry(tmp, &plist, head)
+		write_proc(s, tmp);
+
+	ret = 0;
+mem_err:
+	list_for_each_entry_safe(tmp, n, &plist, head) {
+		list_del(&tmp->head);
+		free_proc(tmp);
+	}
+	return ret;
+}
+
+static int dma_procs_debug_open(struct inode *f_inode, struct file *file)
+{
+	return single_open(file, dma_procs_debug_show, NULL);
+}
+
+static const struct file_operations dma_procs_debug_fops = {
+	.open           = dma_procs_debug_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = single_release
+};
+
+int dma_buf_init_procfs(void)
+{
+	struct proc_dir_entry *p;
+	int err = 0;
+
+	p = proc_mkdir("dma_buf", NULL);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
+
+	dma_buf_procfs_root = p;
+
+	p = proc_create_data("bufinfo",
+			     S_IFREG | 0664,
+			     dma_buf_procfs_root,
+			     &dma_buf_debug_fops,
+			     NULL);
+	if (IS_ERR(p)) {
+		pr_debug("dma_buf: procfs: failed to create node bufinfo\n");
+		proc_remove(dma_buf_procfs_root);
+		dma_buf_procfs_root = NULL;
+		err = PTR_ERR(dma_buf_procfs_root);
+		return err;
+	}
+
+	p = proc_create_data("dmaprocs",
+			     S_IFREG | 0664,
+			     dma_buf_procfs_root,
+			     &dma_procs_debug_fops,
+			     NULL);
+	if (IS_ERR(p)) {
+		pr_debug("dma_buf: procfs: failed to create node dmaprocs\n");
+		proc_remove(dma_buf_procfs_root);
+		dma_buf_procfs_root = NULL;
+		err = PTR_ERR(dma_buf_procfs_root);
+	}
+
+	return err;
+}
+
+void dma_buf_uninit_procfs(void)
+{
+	proc_remove(dma_buf_procfs_root);
+}
+#endif /* defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE) */
+
+#ifdef CONFIG_DEBUG_FS
 static struct dentry *dma_buf_debugfs_dir;
 
 static int dma_buf_init_debugfs(void)
@@ -1433,7 +1649,16 @@ static inline int dma_buf_init_debugfs(void)
 static inline void dma_buf_uninit_debugfs(void)
 {
 }
-#endif
+#endif /* CONFIG_DEBUG_FS */
+#else
+static inline int dma_buf_init_debugfs(void)
+{
+	return 0;
+}
+static inline void dma_buf_uninit_debugfs(void)
+{
+}
+#endif /* CONFIG_DEBUG_FS || (OPLUS_FEATURE_PERFORMANCE && CONFIG_DMABUF_PROC_INTERFACE) */
 
 static int __init dma_buf_init(void)
 {
@@ -1444,6 +1669,9 @@ static int __init dma_buf_init(void)
 	mutex_init(&db_list.lock);
 	INIT_LIST_HEAD(&db_list.head);
 	dma_buf_init_debugfs();
+#if defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE)
+	dma_buf_init_procfs();
+#endif
 	return 0;
 }
 subsys_initcall(dma_buf_init);
@@ -1452,5 +1680,8 @@ static void __exit dma_buf_deinit(void)
 {
 	dma_buf_uninit_debugfs();
 	kern_unmount(dma_buf_mnt);
+#if defined(OPLUS_FEATURE_PERFORMANCE) && defined(CONFIG_DMABUF_PROC_INTERFACE)
+	dma_buf_uninit_procfs();
+#endif
 }
 __exitcall(dma_buf_deinit);

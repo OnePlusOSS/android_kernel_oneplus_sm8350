@@ -117,6 +117,11 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 		loff_t *ppos);
 #endif
 
+#ifdef CONFIG_OPLUS_CPUFREQ_IOWAIT_PROTECT
+extern unsigned int sysctl_iowait_reset_ticks;
+extern unsigned int sysctl_iowait_apply_ticks;
+#endif
+
 /*
  *  control realtime throttling:
  *
@@ -170,6 +175,18 @@ extern int sched_energy_aware_handler(struct ctl_table *table, int write,
 				 void __user *buffer, size_t *lenp,
 				 loff_t *ppos);
 #endif
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern int sysctl_sched_assist_scene_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *lenp, loff_t *ppos);
+extern int sysctl_sched_assist_input_boost_ctrl_handler(struct ctl_table *table, int write,
+	void __user *buffer, size_t *lenp, loff_t *ppos);
+#if defined(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+extern int slide_boost_ctrl_handler(struct ctl_table *table, int write, void __user *buffer,
+			size_t *lenp, loff_t *ppos);
+#endif
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 
 #define LIB_PATH_LENGTH 512
 extern char sched_lib_name[LIB_PATH_LENGTH];

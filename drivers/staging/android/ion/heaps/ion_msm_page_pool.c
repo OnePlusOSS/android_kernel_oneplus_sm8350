@@ -13,7 +13,7 @@
 #include "msm_ion_priv.h"
 #include "ion_msm_page_pool.h"
 
-static inline struct page
+inline struct page
 *ion_msm_page_pool_alloc_pages(struct ion_msm_page_pool *pool)
 {
 	if (fatal_signal_pending(current))
@@ -31,6 +31,12 @@ static void ion_msm_page_pool_add(struct ion_msm_page_pool *pool,
 				  struct page *page)
 {
 	mutex_lock(&pool->mutex);
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	zone_page_state_add(1L << pool->order, page_zone(page),
+		NR_IONCACHE_PAGES);
+#endif
+#endif  /* OPLUS_FEATURE_HEALTHINFO */
 	if (PageHighMem(page)) {
 		list_add_tail(&page->lru, &pool->high_items);
 		pool->high_count++;
@@ -120,6 +126,12 @@ static struct page *ion_msm_page_pool_remove(struct ion_msm_page_pool *pool,
 	}
 
 	atomic_dec(&pool->count);
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	zone_page_state_add(-(1L << pool->order), page_zone(page),
+			NR_IONCACHE_PAGES);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 	list_del(&page->lru);
 	mod_node_page_state(page_pgdat(page), NR_KERNEL_MISC_RECLAIMABLE,
 					-(1 << pool->order));
@@ -136,14 +148,24 @@ struct page *ion_msm_page_pool_alloc(struct ion_msm_page_pool *pool,
 	if (fatal_signal_pending(current))
 		return ERR_PTR(-EINTR);
 
-	if (*from_pool && mutex_trylock(&pool->mutex)) {
-		if (pool->high_count)
-			page = ion_msm_page_pool_remove(pool, true);
-		else if (pool->low_count)
-			page = ion_msm_page_pool_remove(pool, false);
-		mutex_unlock(&pool->mutex);
+	if (*from_pool) {
+		if (pool->boost_flag) {
+			mutex_lock(&pool->mutex);
+			if (pool->high_count)
+				page = ion_msm_page_pool_remove(pool, true);
+			else if (pool->low_count)
+				page = ion_msm_page_pool_remove(pool, false);
+			mutex_unlock(&pool->mutex);
+		} else if (mutex_trylock(&pool->mutex)) {
+			if (pool->high_count)
+				page = ion_msm_page_pool_remove(pool, true);
+			else if (pool->low_count)
+				page = ion_msm_page_pool_remove(pool, false);
+			mutex_unlock(&pool->mutex);
+		}
 	}
-	if (!page) {
+
+	if (!page && !(pool->boost_flag)) {
 		page = ion_msm_page_pool_alloc_pages(pool);
 		*from_pool = false;
 	}

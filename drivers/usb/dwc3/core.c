@@ -1394,10 +1394,10 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	u8			lpm_nyet_threshold;
 	u8			tx_de_emphasis;
 	u8			hird_threshold;
-	u8			rx_thr_num_pkt_prd;
-	u8			rx_max_burst_prd;
-	u8			tx_thr_num_pkt_prd;
-	u8			tx_max_burst_prd;
+	u8			rx_thr_num_pkt_prd = 0;
+	u8			rx_max_burst_prd = 0;
+	u8			tx_thr_num_pkt_prd = 0;
+	u8			tx_max_burst_prd = 0;
 
 	/* default to highest possible threshold */
 	lpm_nyet_threshold = 0xf;
@@ -1755,9 +1755,13 @@ static int dwc3_probe(struct platform_device *pdev)
 			goto err3;
 		}
 	}
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES * 4,
+					dev_name(dwc->dev), 0);
+#else
 	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
 					dev_name(dwc->dev), 0);
+#endif
 	if (!dwc->dwc_ipc_log_ctxt)
 		dev_err(dwc->dev, "Error getting ipc_log_ctxt\n");
 
@@ -2164,6 +2168,6 @@ static struct platform_driver dwc3_driver = {
 module_platform_driver(dwc3_driver);
 
 MODULE_ALIAS("platform:dwc3");
-MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
+MODULE_AUTHOR("Felipe Balbi");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 DRD Controller Driver");

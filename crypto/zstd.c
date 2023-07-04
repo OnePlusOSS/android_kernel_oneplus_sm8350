@@ -15,7 +15,7 @@
 #include <crypto/internal/scompress.h>
 
 
-#define ZSTD_DEF_LEVEL	3
+#define ZSTD_DEF_LEVEL	1
 
 struct zstd_ctx {
 	ZSTD_CCtx *cctx;
@@ -241,6 +241,7 @@ static int __init zstd_mod_init(void)
 	if (ret)
 		crypto_unregister_alg(&alg);
 
+	pr_warn("ZSTD_DEF_LEVEL val %d\n", ZSTD_DEF_LEVEL);
 	return ret;
 }
 

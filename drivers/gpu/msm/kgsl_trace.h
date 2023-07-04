@@ -291,6 +291,7 @@ TRACE_EVENT(kgsl_pwrlevel,
 /*
  * Tracepoint for kgsl gpu_frequency
  */
+#ifndef CONFIG_OPLUS_GPU_FREQ_TRACE_POINT
 TRACE_EVENT(gpu_frequency,
 	TP_PROTO(unsigned int gpu_freq, unsigned int gpu_id),
 	TP_ARGS(gpu_freq, gpu_id),
@@ -307,6 +308,7 @@ TRACE_EVENT(gpu_frequency,
 		(unsigned long)__entry->gpu_freq,
 		(unsigned long)__entry->gpu_id)
 );
+#endif
 
 TRACE_EVENT(kgsl_buslevel,
 

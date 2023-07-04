@@ -26,6 +26,10 @@
 #include <asm/tlbflush.h>
 #include <asm/cacheflush.h>
 #include <soc/qcom/rpm-smd.h>
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+#include "../../../mm/multi_freearea.h"
+#endif
+
 
 #define RPM_DDR_REQ 0x726464
 #define AOP_MSG_ADDR_MASK		0xffffffff
@@ -426,10 +430,17 @@ static inline void reset_page_order(struct page *page)
 static int isolate_free_page(struct page *page, unsigned int order)
 {
 	struct zone *zone;
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+    unsigned int flc = page_to_flc(page);
+#endif
 
 	zone = page_zone(page);
 	list_del(&page->lru);
+#if defined(CONFIG_PHYSICAL_ANTI_FRAGMENTATION)
+	zone->free_area[flc][order].nr_free--;
+#else
 	zone->free_area[order].nr_free--;
+#endif
 	reset_page_order(page);
 
 	return 1UL << order;

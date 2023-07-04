@@ -139,7 +139,7 @@ struct drm_file *drm_file_alloc(struct drm_minor *minor)
 	INIT_LIST_HEAD(&file->pending_event_list);
 	INIT_LIST_HEAD(&file->event_list);
 	init_waitqueue_head(&file->event_wait);
-	file->event_space = 4096; /* set aside 4k for event buffer */
+	file->event_space = 8192; /* set aside 8k for event buffer */
 
 	mutex_init(&file->event_read_lock);
 

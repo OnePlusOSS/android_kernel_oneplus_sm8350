@@ -21,5 +21,78 @@ source "drivers/soc/ux500/Kconfig"
 source "drivers/soc/versatile/Kconfig"
 source "drivers/soc/xilinx/Kconfig"
 source "drivers/soc/zte/Kconfig"
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+source "drivers/soc/oplus/oplus_wakelock/Kconfig"
+#endif /* OPLUS_FEATURE_POWERINFO_STANDBY */
+#ifdef VENDOR_EDIT
+source "drivers/soc/oplus/system/Kconfig"
+#source "drivers/soc/oplus/device_info/Kconfig"
+#endif /* VENDOR_EDIT */
 
+#ifdef OPLUS_FEATURE_TP_BASIC
+source "drivers/soc/oplus/device_info/Kconfig"
+#endif /* OPLUS_FEATURE_TP_BASIC */
+
+#ifdef OPLUS_FEATURE_SENSOR_SMEM
+source "drivers/soc/oplus/sensor/Kconfig"
+#endif /* OPLUS_FEATURE_SENSOR_SMEM */
+
+#ifdef OPLUS_FEATURE_SENSOR_CONSUMER_IR
+source "drivers/soc/oplus/oplus_consumer_ir/Kconfig"
+#endif /* OPLUS_FEATURE_SENSOR_CONSUMER_IR */
+
+#ifdef OPLUS_FEATURE_THERMAL_HORAE
+source "drivers/soc/oplus/thermal/Kconfig"
+#endif /* OPLUS_FEATURE_THERMAL_HORAE */
+
+#ifdef OPLUS_FEATURE_ESIM
+source "drivers/soc/oplus/misc/Kconfig"
+#endif /* OPLUS_FEATURE_ESIM */
+
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "drivers/soc/oplus/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 endmenu
+
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+#Add for svelte
+source "drivers/soc/oplus/svelte/Kconfig"
+#endif /* OPLUS_FEATURE_MEMLEAK_DETECT */
+
+#ifdef OPLUS_FEATURE_LOWMEM_DBG
+source "drivers/soc/oplus/lowmem_dbg/Kconfig"
+#endif /* OPLUS_FEATURE_LOWMEM_DBG */
+
+#ifdef OPLUS_FEATURE_MIDAS
+source "drivers/soc/oplus/midas/Kconfig"
+#endif
+
+#ifdef OPLUS_FEATURE_IM
+#ted.lin@optimization add for im module
+source "drivers/soc/oplus/im/Kconfig"
+#endif /* OPLUS_FEATURE_IM */
+
+#ifdef OPLUS_FEATURE_CPUFREQ_BOUNCING
+source "drivers/soc/oplus/cpufreq_bouncing/Kconfig"
+#endif
+
+#ifdef OPLUS_FEATURE_TPD
+source "drivers/soc/oplus/tpd/Kconfig"
+#endif
+
+#Add for NandSwap
+source "drivers/soc/oplus/oplus_nandswap/Kconfig"
+
+#ifdef OPLUS_FEATURE_SUGOV_POWER_EFFIENCY
+source "drivers/soc/oplus/cpufreq_effiency/Kconfig"
+#endif /* OPLUS_FEATURE_SUGOV_POWER_EFFIENCY */
+
+#ifdef OPLUS_FEATURE_OCH
+source "drivers/soc/oplus/cpufreq_health/Kconfig"
+#endif
+
+#ifdef OPLUS_FEATURE_GAME_OPT
+source "drivers/soc/oplus/game_opt/Kconfig"
+#endif /* OPLUS_FEATURE_GAME_OPT */
+
+source "drivers/soc/oplus/oplus_overload/Kconfig"

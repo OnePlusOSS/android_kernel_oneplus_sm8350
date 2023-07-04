@@ -467,6 +467,10 @@ msm_geni_serial_early_console_write(struct console *con, const char *s,
 	__msm_geni_serial_console_write(&dev->port, s, n);
 }
 
+#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+extern bool ext_boot_with_console(void);
+#endif
+
 static int __init
 msm_geni_serial_earlycon_setup(struct earlycon_device *dev,
 		const char *opt)
@@ -486,6 +490,11 @@ msm_geni_serial_earlycon_setup(struct earlycon_device *dev,
 	unsigned long clk_rate;
 	unsigned long cfg0, cfg1;
 
+	#if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
+	if(!ext_boot_with_console()){
+		return 0;
+	}
+	#endif
 	if (!uport->membase) {
 		ret = -ENOMEM;
 		goto exit_geni_serial_earlyconsetup;
@@ -564,5 +573,6 @@ msm_geni_serial_earlycon_setup(struct earlycon_device *dev,
 exit_geni_serial_earlyconsetup:
 	return ret;
 }
+
 OF_EARLYCON_DECLARE(msm_geni_serial, "qcom,msm-geni-console",
 		msm_geni_serial_earlycon_setup);

@@ -10,6 +10,10 @@
 #include "sched.h"
 #include "walt/walt.h"
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+#include <linux/task_load.h>
+#endif
+
 #ifdef CONFIG_SMP
 static int
 #ifdef CONFIG_SCHED_WALT
@@ -85,6 +89,10 @@ static void put_prev_task_stop(struct rq *rq, struct task_struct *prev)
 
 	curr->se.sum_exec_runtime += delta_exec;
 	account_group_exec_runtime(curr, delta_exec);
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_UTILS_MONITOR)
+	account_normalize_runtime(curr, delta_exec, rq);
+#endif
 
 	curr->se.exec_start = rq_clock_task(rq);
 	cgroup_account_cputime(curr, delta_exec);

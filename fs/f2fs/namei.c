@@ -22,6 +22,10 @@
 #include "acl.h"
 #include <trace/events/f2fs.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+#include <linux/acm_fs.h>
+#endif
+
 static struct inode *f2fs_new_inode(struct inode *dir, umode_t mode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
@@ -353,7 +357,19 @@ static int f2fs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	if (IS_DIRSYNC(dir))
 		f2fs_sync_fs(sbi->sb, 1);
 
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	if (__is_hpb_file(dentry->d_name.name, inode))
+		set_inode_flag(inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+
 	f2fs_balance_fs(sbi, true);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+	monitor_acm3(dentry, NULL, ACM_F2FS_CREATE);
+#endif
+
 	return 0;
 out:
 	f2fs_handle_failed_inode(inode);
@@ -537,6 +553,14 @@ static struct dentry *f2fs_lookup(struct inode *dir, struct dentry *dentry,
 		err = -EPERM;
 		goto out_iput;
 	}
+
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	if (__is_hpb_file(dentry->d_name.name, inode))
+		set_inode_flag(inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+
 out_splice:
 #ifdef CONFIG_UNICODE
 	if (!inode && IS_CASEFOLDED(dir)) {
@@ -613,6 +637,11 @@ static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
 		f2fs_sync_fs(sbi->sb, 1);
 fail:
 	trace_f2fs_unlink_exit(inode, err);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+	monitor_acm3(dentry, NULL, ACM_F2FS_UNLINK);
+#endif
+
 	return err;
 }
 
@@ -730,7 +759,7 @@ static int f2fs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	inode->i_op = &f2fs_dir_inode_operations;
 	inode->i_fop = &f2fs_dir_operations;
 	inode->i_mapping->a_ops = &f2fs_dblock_aops;
-	inode_nohighmem(inode);
+	mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
 
 	set_inode_flag(inode, FI_INC_LINK);
 	f2fs_lock_op(sbi);
@@ -905,6 +934,11 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct f2fs_dir_entry *old_entry;
 	struct f2fs_dir_entry *new_entry;
 	int err;
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	struct inode *hpb_inode;
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
 
 	if (unlikely(f2fs_cp_error(sbi)))
 		return -EIO;
@@ -1061,10 +1095,24 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 							TRANS_DIR_INO);
 	}
 
+#ifdef OPLUS_FEATURE_UFSPLUS
+#ifdef CONFIG_FS_HPB
+	hpb_inode = (new_inode)? : old_inode;
+	if (__is_hpb_file(new_dentry->d_name.name, hpb_inode))
+		set_inode_flag(hpb_inode, FI_HPB_INODE);
+	else
+		clear_inode_flag(hpb_inode, FI_HPB_INODE);
+#endif
+#endif /* OPLUS_FEATURE_UFSPLUS */
+
 	f2fs_unlock_op(sbi);
 
 	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir))
 		f2fs_sync_fs(sbi->sb, 1);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+	monitor_acm3(old_dentry, new_dentry, ACM_F2FS_RENAME);
+#endif
 
 	f2fs_update_time(sbi, REQ_TIME);
 	return 0;

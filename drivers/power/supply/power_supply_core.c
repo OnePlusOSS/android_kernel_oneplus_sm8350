@@ -32,7 +32,11 @@ EXPORT_SYMBOL_GPL(power_supply_notifier);
 
 static struct device_type power_supply_dev_type;
 
-#define POWER_SUPPLY_DEFERRED_REGISTER_TIME	msecs_to_jiffies(10)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define POWER_SUPPLY_DEFERRED_REGISTER_TIME	msecs_to_jiffies(2000)
+#else
+#define POWER_SUPPLY_DEFERRED_REGISTER_TIME     msecs_to_jiffies(10)
+#endif
 
 static bool __power_supply_is_supplied_by(struct power_supply *supplier,
 					 struct power_supply *supply)
@@ -811,6 +815,10 @@ power_supply_find_ocv2cap_table(struct power_supply_battery_info *info,
 		return NULL;
 
 	for (i = 0; i < POWER_SUPPLY_OCV_TEMP_MAX; i++) {
+		/* Out of capacity tables */
+		if (!info->ocv_table[i])
+			break;
+
 		temp_diff = abs(info->ocv_temp[i] - temp);
 
 		if (temp_diff < best_temp_diff) {

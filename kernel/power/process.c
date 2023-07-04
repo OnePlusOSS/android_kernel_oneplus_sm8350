@@ -26,8 +26,11 @@
 /*
  * Timeout for stopping processes
  */
+#if !defined(OPLUS_FEATURE_POWERINFO_STANDBY) || !defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
 unsigned int __read_mostly freeze_timeout_msecs = 20 * MSEC_PER_SEC;
-
+#else
+unsigned int __read_mostly freeze_timeout_msecs = 2 * MSEC_PER_SEC;
+#endif
 static int try_to_freeze_tasks(bool user_only)
 {
 	struct task_struct *g, *p;
@@ -137,7 +140,7 @@ int freeze_processes(void)
 	if (!pm_freezing)
 		atomic_inc(&system_freezing_cnt);
 
-	pm_wakeup_clear(true);
+	pm_wakeup_clear(0);
 	pr_info("Freezing user space processes ... ");
 	pm_freezing = true;
 	error = try_to_freeze_tasks(true);

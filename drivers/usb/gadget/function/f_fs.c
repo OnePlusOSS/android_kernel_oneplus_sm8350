@@ -1925,6 +1925,9 @@ static void ffs_data_put(struct ffs_data *ffs)
 
 static void ffs_data_closed(struct ffs_data *ffs)
 {
+	struct ffs_epfile *epfiles;
+	unsigned long flags;
+
 	ENTER();
 
 	ffs_log("state %d setup_state %d flag %lu opened %d", ffs->state,
@@ -1933,13 +1936,18 @@ static void ffs_data_closed(struct ffs_data *ffs)
 	if (atomic_dec_and_test(&ffs->opened)) {
 		if (ffs->no_disconnect) {
 			ffs->state = FFS_DEACTIVATED;
+			spin_lock_irqsave(&ffs->eps_lock, flags);
+			epfiles = ffs->epfiles;
+			ffs->epfiles = NULL;
+			spin_unlock_irqrestore(&ffs->eps_lock,
+							flags);
+
 			mutex_lock(&ffs->mutex);
-			if (ffs->epfiles) {
-				ffs_epfiles_destroy(ffs->epfiles,
-						   ffs->eps_count);
-				ffs->epfiles = NULL;
-			}
+			if (epfiles)
+				ffs_epfiles_destroy(epfiles,
+						 ffs->eps_count);
 			mutex_unlock(&ffs->mutex);
+
 			if (ffs->setup_state == FFS_SETUP_PENDING)
 				__ffs_ep0_stall(ffs);
 		} else {
@@ -1996,6 +2004,9 @@ static struct ffs_data *ffs_data_new(const char *dev_name)
 
 static void ffs_data_clear(struct ffs_data *ffs)
 {
+	struct ffs_epfile *epfiles;
+	unsigned long flags;
+
 	ENTER();
 
 	ffs_log("enter: state %d setup_state %d flag %lu", ffs->state,
@@ -2007,19 +2018,34 @@ static void ffs_data_clear(struct ffs_data *ffs)
 
 	BUG_ON(ffs->gadget);
 
+	spin_lock_irqsave(&ffs->eps_lock, flags);
+	epfiles = ffs->epfiles;
+	ffs->epfiles = NULL;
+	spin_unlock_irqrestore(&ffs->eps_lock, flags);
+
+	/*
+	 * potential race possible between ffs_func_eps_disable
+	 * & ffs_epfile_release therefore maintaining a local
+	 * copy of epfile will save us from use-after-free.
+	 */
 	mutex_lock(&ffs->mutex);
-	if (ffs->epfiles) {
-		ffs_epfiles_destroy(ffs->epfiles, ffs->eps_count);
+	if (epfiles) {
+		ffs_epfiles_destroy(epfiles, ffs->eps_count);
 		ffs->epfiles = NULL;
 	}
-	mutex_unlock(&ffs->mutex);
 
-	if (ffs->ffs_eventfd)
+	if (ffs->ffs_eventfd) {
 		eventfd_ctx_put(ffs->ffs_eventfd);
+		ffs->ffs_eventfd = NULL;
+	}
 
 	kfree(ffs->raw_descs_data);
+	ffs->raw_descs_data = NULL;
 	kfree(ffs->raw_strings);
+	ffs->raw_strings = NULL;
 	kfree(ffs->stringtabs);
+	ffs->stringtabs = NULL;
+	mutex_unlock(&ffs->mutex);
 }
 
 static void ffs_data_reset(struct ffs_data *ffs)
@@ -2031,10 +2057,7 @@ static void ffs_data_reset(struct ffs_data *ffs)
 
 	ffs_data_clear(ffs);
 
-	ffs->raw_descs_data = NULL;
 	ffs->raw_descs = NULL;
-	ffs->raw_strings = NULL;
-	ffs->stringtabs = NULL;
 
 	ffs->raw_descs_length = 0;
 	ffs->fs_descs_count = 0;
@@ -2172,7 +2195,7 @@ static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
 
 static void ffs_func_eps_disable(struct ffs_function *func)
 {
-	struct ffs_data *ffs      = func->ffs;
+	struct ffs_data *ffs = func->ffs;
 	struct ffs_ep *ep;
 	struct ffs_epfile *epfile;
 	unsigned short count;
@@ -2203,10 +2226,10 @@ static void ffs_func_eps_disable(struct ffs_function *func)
 
 static int ffs_func_eps_enable(struct ffs_function *func)
 {
-	struct ffs_data *ffs      = func->ffs;
-	struct ffs_ep *ep         = func->eps;
-	struct ffs_epfile *epfile = ffs->epfiles;
-	unsigned count            = ffs->eps_count;
+	struct ffs_data *ffs = func->ffs;
+	struct ffs_ep *ep;
+	struct ffs_epfile *epfile;
+	unsigned short count;
 	unsigned long flags;
 	int ret = 0;
 
@@ -2214,6 +2237,10 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 		func->ffs->setup_state, func->ffs->flags);
 
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
+	ffs = func->ffs;
+	ep = func->eps;
+	epfile = ffs->epfiles;
+	count = ffs->eps_count;
 	while(count--) {
 		ep->ep->driver_data = ep;
 
@@ -3589,8 +3616,6 @@ static int ffs_func_set_alt(struct usb_function *f,
 {
 	struct ffs_function *func = ffs_func_from_usb(f);
 	struct ffs_data *ffs = func->ffs;
-	struct f_fs_opts *opts =
-		container_of(f->fi, struct f_fs_opts, func_inst);
 	int ret = 0, intf;
 
 	ffs_log("enter: alt %d", (int)alt);
@@ -3604,9 +3629,6 @@ static int ffs_func_set_alt(struct usb_function *f,
 	if (ffs->func) {
 		ffs_func_eps_disable(ffs->func);
 		ffs->func = NULL;
-		/* matching put to allow LPM on disconnect */
-		if (!strcmp(opts->dev->name, "adb"))
-			usb_gadget_autopm_put_async(ffs->gadget);
 	}
 
 	if (ffs->state == FFS_DEACTIVATED) {
@@ -3627,15 +3649,8 @@ static int ffs_func_set_alt(struct usb_function *f,
 
 	ffs->func = func;
 	ret = ffs_func_eps_enable(func);
-	if (likely(ret >= 0)) {
+	if (likely(ret >= 0))
 		ffs_event_add(ffs, FUNCTIONFS_ENABLE);
-		/* Disable USB LPM later on bus_suspend for adb */
-		if (!strcmp(opts->dev->name, "adb"))
-			usb_gadget_autopm_get_async(ffs->gadget);
-	}
-
-	ffs_log("exit: ret %d", ret);
-
 	return ret;
 }
 
@@ -3646,7 +3661,6 @@ static void ffs_func_disable(struct usb_function *f)
 
 	ffs_log("enter");
 	ffs_func_set_alt(f, 0, (unsigned)-1);
-	ffs_log("exit");
 }
 
 static int ffs_func_setup(struct usb_function *f,

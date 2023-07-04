@@ -3245,11 +3245,14 @@ static void __qseecom_processing_pending_unload_app(void)
 			mutex_unlock(&unload_app_pending_list_lock);
 			mutex_lock(&app_access_lock);
 			ret = qseecom_unload_app(entry->data, true);
-			if (ret)
-				pr_err("unload app %d pending failed %d\n",
-					entry->data->client.app_id, ret);
 			mutex_unlock(&app_access_lock);
 			mutex_lock(&unload_app_pending_list_lock);
+			if (ret) {
+				pr_err("unload app %d pending failed %d\n",
+					entry->data->client.app_id, ret);
+				if (ret == -EBUSY)
+					continue;
+			}
 			__qseecom_free_tzbuf(&entry->data->sglistinfo_shm);
 			kzfree(entry->data);
 		}
@@ -3705,6 +3708,7 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 	bool found_app = false;
 	void *cmd_buf = NULL;
 	size_t cmd_len;
+	uint32_t ref_cnt = 0;
 
 	reqd_len_sb_in = req->cmd_req_len + req->resp_len;
 	/* find app_id & img_name from list */
@@ -3714,6 +3718,7 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 		if ((ptr_app->app_id == data->client.app_id) &&
 			 (!strcmp(ptr_app->app_name, data->client.app_name))) {
 			found_app = true;
+			ref_cnt = ptr_app->ref_cnt;
 			break;
 		}
 	}
@@ -3726,7 +3731,8 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 	}
 
 	if (__qseecom_find_pending_unload_app(data->client.app_id,
-						data->client.app_name)) {
+						data->client.app_name) &&
+						ref_cnt == 1) {
 		pr_err("app %d (%s) unload is pending\n",
 			data->client.app_id, data->client.app_name);
 		return -ENOENT;
@@ -7215,6 +7221,7 @@ static int __qseecom_qteec_issue_cmd(struct qseecom_dev_handle *data,
 	int ret = 0;
 	int ret2 = 0;
 	uint32_t reqd_len_sb_in = 0;
+	uint32_t ref_cnt = 0;
 	void *cmd_buf = NULL;
 	size_t cmd_len;
 	struct sglist_info *table = data->sglistinfo_ptr;
@@ -7235,6 +7242,7 @@ static int __qseecom_qteec_issue_cmd(struct qseecom_dev_handle *data,
 		if ((ptr_app->app_id == data->client.app_id) &&
 			 (!strcmp(ptr_app->app_name, data->client.app_name))) {
 			found_app = true;
+			ref_cnt = ptr_app->ref_cnt;
 			break;
 		}
 	}
@@ -7245,7 +7253,8 @@ static int __qseecom_qteec_issue_cmd(struct qseecom_dev_handle *data,
 		return -ENOENT;
 	}
 	if (__qseecom_find_pending_unload_app(data->client.app_id,
-						data->client.app_name)) {
+						data->client.app_name) &&
+						ref_cnt == 1) {
 		pr_err("app %d (%s) unload is pending\n",
 			data->client.app_id, data->client.app_name);
 		return -ENOENT;
@@ -7412,6 +7421,7 @@ static int qseecom_qteec_invoke_modfd_cmd(struct qseecom_dev_handle *data,
 	int ret = 0;
 	int i = 0;
 	uint32_t reqd_len_sb_in = 0;
+	uint32_t ref_cnt = 0;
 	void *cmd_buf = NULL;
 	size_t cmd_len;
 	struct sglist_info *table = data->sglistinfo_ptr;
@@ -7438,6 +7448,7 @@ static int qseecom_qteec_invoke_modfd_cmd(struct qseecom_dev_handle *data,
 		if ((ptr_app->app_id == data->client.app_id) &&
 			 (!strcmp(ptr_app->app_name, data->client.app_name))) {
 			found_app = true;
+			ref_cnt = ptr_app->ref_cnt;
 			break;
 		}
 	}
@@ -7448,7 +7459,8 @@ static int qseecom_qteec_invoke_modfd_cmd(struct qseecom_dev_handle *data,
 		return -ENOENT;
 	}
 	if (__qseecom_find_pending_unload_app(data->client.app_id,
-						data->client.app_name)) {
+						data->client.app_name) &&
+						ref_cnt == 1) {
 		pr_err("app %d (%s) unload is pending\n",
 			data->client.app_id, data->client.app_name);
 		return -ENOENT;
@@ -8178,8 +8190,14 @@ long qseecom_ioctl(struct file *file,
 		atomic_dec(&data->ioctl_count);
 		wake_up_all(&data->abort_wq);
 		mutex_unlock(&app_access_lock);
-		if (ret)
+		//#ifdef OPLUS_FEATURE_BOOT_SECURITY
+		/* 2020/12/16, modify for bug778753 temp qcom CR */
+		//if (ret)
+		if (ret) {
 			pr_err("failed open_session_cmd: %d\n", ret);
+			pr_err("scm_call failed: syscall returns: 0xffffffffffffffff, 0x0\n");
+		}
+		//#endif /* OPLUS_FEATURE_BOOT_SECURITY */
 		__qseecom_clean_data_sglistinfo(data);
 		break;
 	}

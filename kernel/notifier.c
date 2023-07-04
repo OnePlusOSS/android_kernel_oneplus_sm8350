@@ -82,8 +82,16 @@ static int notifier_call_chain(struct notifier_block **nl,
 {
 	int ret = NOTIFY_DONE;
 	struct notifier_block *nb, *next_nb;
+#if defined(CONFIG_QGKI) && defined(OPLUS_BUG_STABILITY)
+	int debug = 0;
+#endif
 
 	nb = rcu_dereference_raw(*nl);
+
+#if defined(CONFIG_QGKI) && defined(OPLUS_BUG_STABILITY)
+	if(nb && (!IS_ERR_OR_NULL(v)) && ((unsigned long)v >= PAGE_OFFSET))
+		debug =*((int*)(v));
+#endif
 
 	while (nb && nr_to_call) {
 		next_nb = rcu_dereference_raw(nb->next);
@@ -95,7 +103,17 @@ static int notifier_call_chain(struct notifier_block **nl,
 			continue;
 		}
 #endif
+#if defined(CONFIG_QGKI) && defined(OPLUS_BUG_STABILITY)
+		if(debug==0xaa55aa55)
+			printk(KERN_ERR"kassey before %pF", nb->notifier_call);
+#endif
+
 		ret = nb->notifier_call(nb, val, v);
+
+#if defined(CONFIG_QGKI) && defined(OPLUS_BUG_STABILITY)
+		if(debug==0xaa55aa55)
+			printk(KERN_ERR"kassey after %pF", nb->notifier_call);
+#endif
 
 		if (nr_calls)
 			(*nr_calls)++;

@@ -1,0 +1,9 @@
+config NFC_ST54_SPI
+	tristate "NFC driver solution - SPI Controller Driver"
+	depends on SPI && NFC_ST21_I2C
+	help
+	  STMicroelectronics ST54 Secure Element controller SPI interface
+	  support. ST21NFC is standalone NFC and ST54 is combined with
+	  secure element. If configures to be y, means devices supports SPI
+	  interface to ST54. If configures to be n, means devices doesn't
+	  support SPI interface (eSE still usable).

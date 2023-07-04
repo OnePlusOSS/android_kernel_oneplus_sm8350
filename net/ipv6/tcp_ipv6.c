@@ -68,6 +68,12 @@
 
 #include <trace/events/tcp.h>
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+extern void (*match_ipa_ip_wakeup)(int type, struct sk_buff *skb);
+extern void (*match_ipa_tcp_wakeup)(int type, struct sock *sk);
+extern void (*ipa_schedule_work)(void);
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 static void	tcp_v6_send_reset(const struct sock *sk, struct sk_buff *skb);
 static void	tcp_v6_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 				      struct request_sock *req);
@@ -800,7 +806,7 @@ struct request_sock_ops tcp6_request_sock_ops __read_mostly = {
 	.syn_ack_timeout =	tcp_syn_ack_timeout,
 };
 
-static const struct tcp_request_sock_ops tcp_request_sock_ipv6_ops = {
+const struct tcp_request_sock_ops tcp_request_sock_ipv6_ops = {
 	.mss_clamp	=	IPV6_MIN_MTU - sizeof(struct tcphdr) -
 				sizeof(struct ipv6hdr),
 #ifdef CONFIG_TCP_MD5SIG
@@ -1142,6 +1148,7 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 	const struct ipv6_pinfo *np = tcp_inet6_sk(sk);
 	struct ipv6_txoptions *opt;
 	struct inet_sock *newinet;
+	bool found_dup_sk = false;
 	struct tcp_sock *newtp;
 	struct sock *newsk;
 #ifdef CONFIG_TCP_MD5SIG
@@ -1308,7 +1315,8 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 		tcp_done(newsk);
 		goto out;
 	}
-	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash));
+	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
+				       &found_dup_sk);
 	if (*own_req) {
 		tcp_move_syn(newtp, req);
 
@@ -1322,6 +1330,15 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 				tcp_v6_restore_cb(newnp->pktoptions);
 				skb_set_owner_r(newnp->pktoptions, newsk);
 			}
+		}
+	} else {
+		if (!req_unhash && found_dup_sk) {
+			/* This code path should only be executed in the
+			 * syncookie case only
+			 */
+			bh_unlock_sock(newsk);
+			sock_put(newsk);
+			newsk = NULL;
 		}
 	}
 
@@ -1507,6 +1524,12 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 	int ret;
 	struct net *net = dev_net(skb->dev);
 
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_ipa_ip_wakeup != NULL) {
+		match_ipa_ip_wakeup(2, skb);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1537,6 +1560,12 @@ lookup:
 				&refcounted);
 	if (!sk)
 		goto no_tcp_socket;
+
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (match_ipa_tcp_wakeup != NULL) {
+		match_ipa_tcp_wakeup(2, sk);
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 
 process:
 	if (sk->sk_state == TCP_TIME_WAIT)
@@ -1657,6 +1686,11 @@ bad_packet:
 	}
 
 discard_it:
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	if (ipa_schedule_work != NULL) {
+		ipa_schedule_work();
+	}
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
 	kfree_skb(skb);
 	return 0;
 
