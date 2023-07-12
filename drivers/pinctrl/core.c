@@ -1055,7 +1055,7 @@ static struct pinctrl *create_pinctrl(struct device *dev,
 	/* Iterate over the pin control maps to locate the right ones */
 	for_each_maps(maps_node, i, map) {
 		/* Map must be for this device */
-		if (strcmp(map->dev_name, devname))
+		if (!map->dev_name || strcmp(map->dev_name, devname))
 			continue;
 		/*
 		 * If pctldev is not null, we are claiming hog for it,
@@ -2056,6 +2056,8 @@ int pinctrl_enable(struct pinctrl_dev *pctldev)
 	if (error) {
 		dev_err(pctldev->dev, "could not claim hogs: %i\n",
 			error);
+		pinctrl_free_pindescs(pctldev, pctldev->desc->pins,
+				      pctldev->desc->npins);
 		mutex_destroy(&pctldev->mutex);
 		kfree(pctldev);
 

@@ -656,15 +656,27 @@ TRACE_EVENT(sched_blocked_reason,
 		__field( pid_t,	pid	)
 		__field( void*, caller	)
 		__field( bool, io_wait	)
+		#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+		__array( unsigned long, backtrace, 4)
+		#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 	),
 
 	TP_fast_assign(
 		__entry->pid	= tsk->pid;
 		__entry->caller = (void *)get_wchan(tsk);
 		__entry->io_wait = tsk->in_iowait;
+		#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+		memcpy(__entry->backtrace,get_backtrace(tsk),4 * sizeof(unsigned long));
+		#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 	),
 
-	TP_printk("pid=%d iowait=%d caller=%pS", __entry->pid, __entry->io_wait, __entry->caller)
+	#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP)
+	TP_printk("pid=%d iowait=%d caller=%pS layer1=%pS layer2=%pS layer3=%pS layer4=%pS",
+	__entry->pid, __entry->io_wait, __entry->caller, __entry->backtrace[0],
+	__entry->backtrace[1], __entry->backtrace[2], __entry->backtrace[3] )
+	#else  /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
+	TP_printk("pid=%d iowait=%d caller=%pS",__entry->pid, __entry->io_wait, __entry->caller)
+	#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_CTP) */
 );
 
 /*

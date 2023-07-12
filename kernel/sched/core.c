@@ -31,7 +31,34 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_common.h>
+#include <../special_opt/special_opt.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include <linux/task_sched_info.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
+
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+#include "../../drivers/soc/oplus/game_opt/game_ctrl.h"
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_JANKINFO)
+#include <linux/cpu_jankinfo/sa_jankinfo.h>
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+#include "../tuning/frame_group.h"
+#endif
+
+#ifdef CONFIG_LOCKING_PROTECT
+#include <linux/sched_assist/sched_assist_locking.h>
+#endif
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -67,6 +94,11 @@ const_debug unsigned int sysctl_sched_features =
  * Limited because this is done with IRQs disabled.
  */
 const_debug unsigned int sysctl_sched_nr_migrate = 32;
+
+#ifdef CONFIG_OPLUS_CPUFREQ_IOWAIT_PROTECT
+unsigned int sysctl_iowait_reset_ticks = 1;
+unsigned int sysctl_iowait_apply_ticks = 0;
+#endif
 
 /*
  * period over which we measure -rt task CPU usage in us.
@@ -1364,7 +1396,7 @@ static void __init init_uclamp_rq(struct rq *rq)
 		};
 	}
 
-	rq->uclamp_flags = 0;
+	rq->uclamp_flags = UCLAMP_FLAG_IDLE;
 }
 
 static void __init init_uclamp(void)
@@ -1419,6 +1451,9 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	}
 
 	uclamp_rq_inc(rq, p);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_JANKINFO)
+	jankinfo_android_rvh_enqueue_task_handler(NULL, rq, p, flags);
+#endif
 	p->sched_class->enqueue_task(rq, p, flags);
 	walt_update_last_enqueue(p);
 	trace_sched_enq_deq_task(p, 1, cpumask_bits(&p->cpus_mask)[0]);
@@ -1554,6 +1589,18 @@ static inline void check_class_changed(struct rq *rq, struct task_struct *p,
 void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 {
 	const struct sched_class *class;
+
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#ifdef CONFIG_MMAP_LOCK_OPT
+	u64 wallclock = sched_clock();
+
+	if (sysctl_uxchain_v2 &&
+		wallclock - rq->curr->get_mmlock_ts < PREEMPT_DISABLE_RWSEM &&
+		rq->curr->get_mmlock &&
+		!(p->flags & PF_WQ_WORKER) && !task_has_rt_policy(p))
+		return;
+#endif
+#endif
 
 	if (p->sched_class == rq->curr->sched_class) {
 		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
@@ -1735,6 +1782,11 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
 	bool queued, running;
 
 	lockdep_assert_held(&p->pi_lock);
+#if defined(CONFIG_KSWAPD_UNBIND_MAX_CPU)
+	if ((kswapd_unbind_cpu != -1) && (p->flags & PF_KSWAPD) &&
+			cpumask_test_cpu(kswapd_unbind_cpu, new_mask))
+		return;
+#endif
 
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
@@ -2591,6 +2643,9 @@ out:
 
 bool cpus_share_cache(int this_cpu, int that_cpu)
 {
+	if (this_cpu == that_cpu)
+		return true;
+
 	return per_cpu(sd_llc_id, this_cpu) == per_cpu(sd_llc_id, that_cpu);
 }
 #endif /* CONFIG_SMP */
@@ -2745,6 +2800,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		success = 1;
 		cpu = task_cpu(p);
 		trace_sched_waking(p);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 		p->state = TASK_RUNNING;
 		trace_sched_wakeup(p);
 		goto out;
@@ -2762,6 +2820,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		goto unlock;
 
 	trace_sched_waking(p);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 	/* We're going to change ->state: */
 	success = 1;
@@ -2834,6 +2895,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
 
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+	g_rt_try_to_wake_up(p);
+#endif
 	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags,
 			     sibling_count_hint);
 	if (task_cpu(p) != cpu) {
@@ -3070,7 +3134,9 @@ static inline void init_schedstats(void) {}
 int sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
 	unsigned long flags;
-
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+	fbg_sched_fork_hook(NULL, p);
+#endif
 	init_new_task_load(p);
 	__sched_fork(clone_flags, p);
 	/*
@@ -3085,7 +3151,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 */
 	p->prio = current->normal_prio;
 	trace_android_rvh_prepare_prio_fork(p);
-
+#ifdef CONFIG_OPLUS_SF_BOOST
+	p->compensate_need = 0;
+#endif
 	uclamp_fork(p);
 
 	/*
@@ -3203,6 +3271,9 @@ void wake_up_new_task(struct task_struct *p)
 
 	mark_task_starting(p);
 	activate_task(rq, p, ENQUEUE_NOCLOCK);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	trace_sched_wakeup_new(p);
 	check_preempt_curr(rq, p, WF_FORK);
 #ifdef CONFIG_SMP
@@ -3489,9 +3560,14 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 		 * task and put them back on the free list.
 		 */
 		kprobe_flush_task(prev);
-
+#ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
+		g_rt_task_dead(prev);
+#endif
 		walt_task_dead(prev);
 		/* Task is done with its stack. */
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+		fbg_flush_task_hook(NULL, prev);
+#endif
 		put_task_stack(prev);
 
 		put_task_struct_rcu_user(prev);
@@ -3871,7 +3947,13 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+    if(!specopt_skip_balance()) {
+	    trigger_load_balance(rq);
+    }
+#else
 	trigger_load_balance(rq);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 #endif
 
 	rcu_read_lock();
@@ -3891,6 +3973,9 @@ void scheduler_tick(void)
 #endif
 
 	trace_android_vh_scheduler_tick(rq);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_SPREAD)
+	update_rq_nr_imbalance(cpu);
+#endif
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -4282,6 +4367,10 @@ restart:
  *
  * WARNING: must be called with preemption disabled!
  */
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+extern void ux_state_systrace_c(unsigned int cpu, struct task_struct *p);
+extern void sa_scene_systrace_c(void);
+#endif
 static void __sched notrace __schedule(bool preempt)
 {
 	struct task_struct *prev, *next;
@@ -4333,11 +4422,23 @@ static void __sched notrace __schedule(bool preempt)
 		switch_count = &prev->nvcsw;
 	}
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	prev->enqueue_time = rq->clock;
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 
 	wallclock = sched_ktime_clock();
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_JANKINFO)
+	jankinfo_android_rvh_schedule_handler(NULL, prev, next, rq);
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+	fbg_android_rvh_schedule_handler(prev, next, rq);
+#endif
+
 	if (likely(prev != next)) {
 #ifdef CONFIG_SCHED_WALT
 		if (!prev->on_rq)
@@ -4369,6 +4470,15 @@ static void __sched notrace __schedule(bool preempt)
 		++*switch_count;
 
 		trace_sched_switch(preempt, prev, next);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		ux_state_systrace_c(cpu_of(rq), next);
+		sa_scene_systrace_c();
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		update_wake_tid(prev, next, running_runnable);
+		update_running_start_time(prev, next);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
@@ -6937,6 +7047,9 @@ void __init sched_init_smp(void)
 #endif
 	sched_init_granularity();
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	ux_init_cpu_data();
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 	init_sched_rt_class();
 	init_sched_dl_class();
 
@@ -7055,6 +7168,12 @@ void __init sched_init(void)
 		init_cfs_rq(&rq->cfs);
 		init_rt_rq(&rq->rt);
 		init_dl_rq(&rq->dl);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+		ux_init_rq_data(rq);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+#ifdef CONFIG_LOCKING_PROTECT
+		locking_init_rq_data(rq);
+#endif
 #ifdef CONFIG_FAIR_GROUP_SCHED
 		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
@@ -7410,6 +7529,54 @@ static int sched_colocate_write(struct cgroup_subsys_state *css,
 	tg->wtg.colocate_update_disabled = true;
 	return 0;
 }
+
+#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+#define WINDOW_POLICY_INVALID 4
+static u64
+window_policy_read(struct cgroup_subsys_state *css,
+		struct cftype *cft)
+{
+	struct task_group *tg = css_tg(css);
+	return tg->wtg.window_policy;
+}
+
+static int
+window_policy_write(struct cgroup_subsys_state *css, struct cftype *cft,
+		u64 window_policy)
+{
+	struct task_group *tg = css_tg(css);
+
+	if (window_policy >= WINDOW_POLICY_INVALID)
+		return -EINVAL;
+
+	tg->wtg.window_policy = window_policy;
+
+	return 0;
+}
+
+#define PE_FUNC(NAME) \
+static u64 NAME##_read(struct cgroup_subsys_state *css, \
+		struct cftype *cft) \
+{ \
+	struct task_group *tg = css_tg(css); \
+	return tg->wtg.NAME; \
+} \
+ \
+static int \
+NAME##_write(struct cgroup_subsys_state *css, struct cftype *cft, \
+		u64 NAME) \
+{ \
+	struct task_group *tg = css_tg(css); \
+ \
+	tg->wtg.NAME = !!NAME; \
+ \
+	return 0; \
+}
+
+PE_FUNC(discount_wait_time)
+PE_FUNC(top_task_filter)
+PE_FUNC(ed_task_filter)
+#endif /* OPLUS_FEATURE_POWER_EFFICIENCY */
 #else
 static void walt_schedgp_attach(struct cgroup_taskset *tset) { }
 #endif /* CONFIG_SCHED_WALT */
@@ -8267,6 +8434,28 @@ static struct cftype cpu_legacy_files[] = {
 		.read_u64 = sched_colocate_read,
 		.write_u64 = sched_colocate_write,
 	},
+#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+	{
+		.name = "uclamp.window_policy",
+		.read_u64 = window_policy_read,
+		.write_u64 = window_policy_write,
+	},
+	{
+		.name = "uclamp.discount_wait_time",
+		.read_u64 = discount_wait_time_read,
+		.write_u64 = discount_wait_time_write,
+	},
+	{
+		.name = "uclamp.top_task_filter",
+		.read_u64 = top_task_filter_read,
+		.write_u64 = top_task_filter_write,
+	},
+	{
+		.name = "uclamp.ed_task_filter",
+		.read_u64 = ed_task_filter_read,
+		.write_u64 = ed_task_filter_write,
+	},
+#endif /* OPLUS_FEATURE_POWER_EFFICIENCY */
 #endif /* CONFIG_SCHED_WALT */
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
 	{ }	/* Terminate */
@@ -8468,6 +8657,28 @@ static struct cftype cpu_files[] = {
 		.read_u64 = sched_colocate_read,
 		.write_u64 = sched_colocate_write,
 	},
+#ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+	{
+		.name = "uclamp.window_policy",
+		.read_u64 = window_policy_read,
+		.write_u64 = window_policy_write,
+	},
+	{
+		.name = "uclamp.discount_wait_time",
+		.read_u64 = discount_wait_time_read,
+		.write_u64 = discount_wait_time_write,
+	},
+	{
+		.name = "uclamp.top_task_filter",
+		.read_u64 = top_task_filter_read,
+		.write_u64 = top_task_filter_write,
+	},
+	{
+		.name = "uclamp.ed_task_filter",
+		.read_u64 = ed_task_filter_read,
+		.write_u64 = ed_task_filter_write,
+	},
+#endif /* OPLUS_FEATURE_POWER_EFFICIENCY */
 #endif /* CONFIG_SCHED_WALT */
 #endif /* CONFIG_UCLAMP_TASK_GROUP */
 	{ }	/* terminate */

@@ -12,7 +12,7 @@
 #include <linux/mailbox/qmp.h>
 #include <linux/uaccess.h>
 #include <linux/mailbox_controller.h>
-
+#include <linux/proc_fs.h>
 #define MAX_MSG_SIZE 96 /* Imposed by the remote*/
 
 struct qmp_debugfs_data {
@@ -74,7 +74,8 @@ static const struct file_operations aop_msg_fops = {
 
 static int qmp_msg_probe(struct platform_device *pdev)
 {
-	struct dentry *file;
+	//struct dentry *file;
+	struct proc_dir_entry *file = NULL;
 
 	cl = devm_kzalloc(&pdev->dev, sizeof(*cl), GFP_KERNEL);
 	if (!cl)
@@ -91,8 +92,9 @@ static int qmp_msg_probe(struct platform_device *pdev)
 		return PTR_ERR(chan);
 	}
 
-	file = debugfs_create_file("aop_send_message", 0220, NULL, NULL,
-			&aop_msg_fops);
+	file = proc_create("aop_send_message",0222,NULL,&aop_msg_fops);
+	//file = debugfs_create_file("aop_send_message", 0220, NULL, NULL,
+	//		&aop_msg_fops);
 	if (!file)
 		goto err;
 	return 0;

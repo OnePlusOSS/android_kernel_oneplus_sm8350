@@ -85,7 +85,7 @@ static bool has_queried;
 static DEFINE_SPINLOCK(query_lock);
 
 #define QCOM_SCM_EBUSY_WAIT_MS 30
-#define QCOM_SCM_EBUSY_MAX_RETRY 20
+#define QCOM_SCM_EBUSY_MAX_RETRY 67
 
 #define SMCCC_FUNCNUM(s, c)	((((s) & 0xFF) << 8) | ((c) & 0xFF))
 #define SMCCC_N_REG_ARGS	4

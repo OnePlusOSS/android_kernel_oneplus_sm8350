@@ -299,7 +299,6 @@ static struct clk_alpha_pll apcs_cpu_pll = {
 	.vco_table = lucid_5lpe_vco,
 	.num_vco = ARRAY_SIZE(lucid_5lpe_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_5LPE],
-	.flags = BYPASS_LATCH,
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
 			.name = "apcs_cpu_pll",
@@ -307,7 +306,7 @@ static struct clk_alpha_pll apcs_cpu_pll = {
 				.fw_name = "bi_tcxo_ao",
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_lucid_5lpe_ops,
+			.ops = &clk_alpha_pll_lucid_5lpe_sdx_cpu_ops,
 		},
 		.vdd_data = {
 			.vdd_class = &vdd_pll,
@@ -316,9 +315,7 @@ static struct clk_alpha_pll apcs_cpu_pll = {
 				[VDD_MIN] = 615000000,
 				[VDD_LOW] = 1066000000,
 				[VDD_LOW_L1] = 1500000000,
-				[VDD_NOMINAL] = 1750000000,
-				[VDD_HIGH] = 1804800000},
-
+				[VDD_NOMINAL] = 1750000000},
 		},
 	},
 };

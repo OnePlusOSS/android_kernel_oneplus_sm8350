@@ -494,6 +494,17 @@ static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
 	int ret = 0;
 
 	mutex_lock(&host->phy_mutex);
+	if (hba->curr_dev_pwr_mode == UFS_POWERDOWN_PWR_MODE &&
+			hba->clk_gating.state != CLKS_ON) {
+		ret = -1;
+		dev_err(hba->dev, "%s: abort phy power on, clks are off %d\n",
+				__func__, ret);
+
+		mutex_unlock(&host->phy_mutex);
+
+		return ret;
+	}
+
 	if (!host->is_phy_pwr_on) {
 		ret = phy_power_on(phy);
 		if (ret) {
@@ -535,12 +546,6 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 	enum phy_mode mode = (host->limit_rate == PA_HS_MODE_B) ?
 					PHY_MODE_UFS_HS_B : PHY_MODE_UFS_HS_A;
 	int submode = host->limit_phy_submode;
-
-	/* Reset UFS Host Controller and PHY */
-	ret = ufs_qcom_host_reset(hba);
-	if (ret)
-		dev_warn(hba->dev, "%s: host reset returned %d\n",
-				  __func__, ret);
 
 	if (host->hw_ver.major < 0x4)
 		submode = UFS_QCOM_PHY_SUBMODE_NON_G4;
@@ -1601,8 +1606,11 @@ static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
 
 		writel_relaxed(temp, host->dev_ref_clk_ctrl_mmio);
 
-		/* ensure that ref_clk is enabled/disabled before we return */
-		wmb();
+		/*
+		 * Make sure the write to ref_clk reaches the destination and
+		 * not stored in a Write Buffer (WB).
+		 */
+		readl(host->dev_ref_clk_ctrl_mmio);
 
 		/*
 		 * If we call hibern8 exit after this, we need to make sure that
@@ -2253,7 +2261,13 @@ ufs_qcom_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 			__func__, err);
 		goto out_release_mem;
 	}
-
+#if defined(CONFIG_UFSFEATURE)
+	if (ufsf_check_query(ioctl_data->opcode)) {
+		err = ufsf_query_ioctl(&hba->ufsf, lun, buffer, ioctl_data,
+				       UFSFEATURE_SELECTOR);
+		goto out_release_mem;
+	}
+#endif
 	/* verify legal parameters & send query */
 	switch (ioctl_data->opcode) {
 	case UPIU_QUERY_OPCODE_READ_DESC:
@@ -2263,6 +2277,9 @@ ufs_qcom_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 		case QUERY_DESC_IDN_INTERCONNECT:
 		case QUERY_DESC_IDN_GEOMETRY:
 		case QUERY_DESC_IDN_POWER:
+#ifdef OPLUS_FEATURE_STORAGE_TOOL
+		case QUERY_DESC_IDN_HEALTH:
+#endif
 			index = 0;
 			break;
 		case QUERY_DESC_IDN_UNIT:
@@ -2307,6 +2324,9 @@ ufs_qcom_query_ioctl(struct ufs_hba *hba, u8 lun, void __user *buffer)
 		case QUERY_ATTR_IDN_EE_CONTROL:
 		case QUERY_ATTR_IDN_EE_STATUS:
 		case QUERY_ATTR_IDN_SECONDS_PASSED:
+#ifdef OPLUS_FEATURE_STORAGE_TOOL
+		case QUERY_ATTR_IDN_FFU_STATUS:
+#endif
 			index = 0;
 			break;
 		case QUERY_ATTR_IDN_DYN_CAP_NEEDED:
@@ -3465,6 +3485,13 @@ static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host)
 static void ufs_qcom_device_reset(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	int ret = 0;
+
+	/* Reset UFS Host Controller and PHY */
+	ret = ufs_qcom_host_reset(hba);
+	if (ret)
+		dev_warn(hba->dev, "%s: host reset returned %d\n",
+				  __func__, ret);
 
 	/* reset gpio is optional */
 	if (!host->device_reset)

@@ -135,7 +135,7 @@ static struct pci_driver dwc3_haps_driver = {
 	.remove		= dwc3_haps_remove,
 };
 
-MODULE_AUTHOR("Thinh Nguyen <thinhn@synopsys.com>");
+MODULE_AUTHOR("Thinh Nguyen");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Synopsys HAPS PCI Glue Layer");
 

@@ -34,6 +34,9 @@
 #include <linux/workqueue.h>
 
 #include "internal.h"
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+#include <linux/pstore_ram.h>
+#endif
 
 /*
  * We defer making "oops" entries appear in pstore - see
@@ -58,6 +61,15 @@ static const char * const pstore_type_names[] = {
 	"powerpc-common",
 	"pmsg",
 	"powerpc-opal",
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	"devinfo",
+	"dumpinfo",
+	"rsv01",
+	"rsv02",
+	"rsv03",
+	"rsv04",
+	"rsv05",
+#endif
 };
 
 static int pstore_new_entry;
@@ -505,6 +517,31 @@ static void pstore_console_write(struct console *con, const char *s, unsigned c)
 	psinfo->write(&record);
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+void  pstore_console_init(void)
+{
+	size_t size = 0;
+	struct ramoops_context *cxt = psinfo->data;
+	struct pstore_record record;
+
+	if (psinfo == NULL)
+		return;
+
+	size = cxt->console_size;
+
+	pstore_record_init(&record, psinfo);
+	record.type = PSTORE_TYPE_CONSOLE;
+	record.buf = psinfo->buf;
+	if (size > psinfo->bufsize)
+		size = psinfo->bufsize;
+	record.size = size;
+
+	memset(record.buf, ' ', size);
+
+	psinfo->write(&record);
+}
+#endif
+
 static struct console pstore_console = {
 	.name	= "pstore",
 	.write	= pstore_console_write,
@@ -514,6 +551,9 @@ static struct console pstore_console = {
 
 static void pstore_register_console(void)
 {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_DUMP_DEVICE_INFO)
+	pstore_console_init();
+#endif
 	register_console(&pstore_console);
 }
 

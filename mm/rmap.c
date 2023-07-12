@@ -308,6 +308,7 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	return -ENOMEM;
 }
 
+
 /*
  * Attach vma to its own anon_vma, as well as to the anon_vmas that
  * the corresponding VMA in the parent process is attached to.
@@ -333,7 +334,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	error = anon_vma_clone(vma, pvma);
 	if (error)
 		return error;
-
+	
 	/* An existing anon_vma has been reused, all done then. */
 	if (vma->anon_vma)
 		return 0;
@@ -532,6 +533,12 @@ struct anon_vma *page_lock_anon_vma_read(struct page *page)
 		}
 		goto out;
 	}
+#ifdef CONFIG_KSHRINK_LRUVECD
+	if (reclaim_page_trylock(page, NULL, NULL)) {
+		anon_vma = NULL;
+		goto out;
+	}
+#endif /* CONFIG_KSHRINK_LRUVECD */
 
 	/* trylock failed, we got to sleep */
 	if (!atomic_inc_not_zero(&anon_vma->refcount)) {
@@ -739,6 +746,85 @@ out:
 	return pmd;
 }
 
+#ifdef CONFIG_LOOK_AROUND
+#define LOOK_AROUND_MAX 8   // lookaroud LOOK_AROUND_MAX *2 pages per time
+static void page_referenced_look_around(struct page_vma_mapped_walk *pvmw)
+{
+	int i;
+	pte_t *pte;
+	unsigned long start;
+	unsigned long end;
+	unsigned long addr;
+	struct pglist_data *pgdat = page_pgdat(pvmw->page);
+	unsigned long bitmap[BITS_TO_LONGS(LOOK_AROUND_MAX * 2)] = {};
+
+	lockdep_assert_held(pvmw->ptl);
+	VM_BUG_ON_PAGE(PageTail(pvmw->page), pvmw->page);
+
+	start = max(pvmw->address & PMD_MASK, pvmw->vma->vm_start);
+	end = pmd_addr_end(pvmw->address, pvmw->vma->vm_end);
+
+	if (end - start > LOOK_AROUND_MAX * 2 * PAGE_SIZE) {
+		if (pvmw->address - start < LOOK_AROUND_MAX * PAGE_SIZE)
+			end = start + LOOK_AROUND_MAX * 2 * PAGE_SIZE;
+		else if (end - pvmw->address < LOOK_AROUND_MAX * PAGE_SIZE)
+			start = end - LOOK_AROUND_MAX * 2 * PAGE_SIZE;
+		else {
+			start = pvmw->address - LOOK_AROUND_MAX * PAGE_SIZE;
+			end = pvmw->address + LOOK_AROUND_MAX * PAGE_SIZE;
+		}
+	}
+
+	//printk("justin start:%lu, end :%lu look_around_size:%lu num_pages:%d\n",start,end,end-start,(end-start)/PAGE_SIZE);
+	pte = pvmw->pte - (pvmw->address - start) / PAGE_SIZE;
+
+	arch_enter_lazy_mmu_mode();
+
+	for (i = 0, addr = start; addr != end; i++, addr += PAGE_SIZE) {
+		struct page *page;
+		unsigned long pfn = pte_pfn(pte[i]);
+
+		if (!pte_present(pte[i]) || is_zero_pfn(pfn))
+			continue;
+
+		if (WARN_ON_ONCE(pte_devmap(pte[i]) || pte_special(pte[i])))
+			continue;
+
+		if (!pte_young(pte[i]))
+			continue;
+
+		VM_BUG_ON(!pfn_valid(pfn));
+		if (pfn < pgdat->node_start_pfn || pfn >= pgdat_end_pfn(pgdat))
+			continue;
+
+		page = compound_head(pfn_to_page(pfn));
+		if (page_to_nid(page) != pgdat->node_id)
+			continue;
+
+		VM_BUG_ON(addr < pvmw->vma->vm_start || addr >= pvmw->vma->vm_end);
+		if (!ptep_test_and_clear_young(pvmw->vma, addr, pte + i))
+			continue;
+
+		if (pte_dirty(pte[i]) && !PageDirty(page) &&
+		    !(PageAnon(page) && PageSwapBacked(page) && !PageSwapCache(page)))
+			__set_bit(i, bitmap);
+
+		/*
+		 * mark the neighbour pages lookaroundref so that we skip
+		 * rmap in eviction accordingly
+		 */
+		SetPageLookAroundRef(page);
+		if (pvmw->vma->vm_flags & VM_EXEC)
+			SetPageReferenced(page);
+	}
+
+	arch_leave_lazy_mmu_mode();
+
+	for_each_set_bit(i, bitmap, LOOK_AROUND_MAX * 2)
+		set_page_dirty(pte_page(pte[i]));
+}
+#endif
+
 struct page_referenced_arg {
 	int mapcount;
 	int referenced;
@@ -769,6 +855,19 @@ static bool page_referenced_one(struct page *page, struct vm_area_struct *vma,
 		}
 
 		if (pvmw.pte) {
+#ifdef CONFIG_LOOK_AROUND
+			/*
+			 * Exploit the spatial locality in the reclaim path. If a page
+			 * is young, its neighbours are likely to be young as well.
+			 */
+			if (!PageActive(page) && pte_young(*pvmw.pte) &&
+				!(vma->vm_flags & (VM_SEQ_READ | VM_RAND_READ))) {
+				page_referenced_look_around(&pvmw);
+				referenced++;
+			}
+
+
+#endif
 			if (ptep_clear_flush_young_notify(vma, address,
 						pvmw.pte)) {
 				/*
@@ -1017,7 +1116,7 @@ void page_move_anon_rmap(struct page *page, struct vm_area_struct *vma)
  * __page_set_anon_rmap - set up new anonymous rmap
  * @page:	Page or Hugepage to add to rmap
  * @vma:	VM area to add page to.
- * @address:	User virtual address of the mapping	
+ * @address:	User virtual address of the mapping
  * @exclusive:	the page is exclusively owned by the current process
  */
 static void __page_set_anon_rmap(struct page *page,
@@ -1106,9 +1205,12 @@ void do_page_add_anon_rmap(struct page *page,
 		mapcount = compound_mapcount_ptr(page);
 		first = atomic_inc_and_test(mapcount);
 	} else {
+#ifdef CONFIG_MAPPED_PROTECT
+		first = update_mapped_mul(page, true);
+#else
 		first = atomic_inc_and_test(&page->_mapcount);
+#endif
 	}
-
 	if (first) {
 		int nr = compound ? hpage_nr_pages(page) : 1;
 		/*
@@ -1198,8 +1300,13 @@ void page_add_file_rmap(struct page *page, bool compound)
 			if (PageMlocked(page))
 				clear_page_mlock(compound_head(page));
 		}
+#ifdef CONFIG_MAPPED_PROTECT
+		if (!update_mapped_mul(page, true))
+			goto out;
+#else
 		if (!atomic_inc_and_test(&page->_mapcount))
 			goto out;
+#endif
 	}
 	__mod_lruvec_page_state(page, NR_FILE_MAPPED, nr);
 out:
@@ -1233,8 +1340,13 @@ static void page_remove_file_rmap(struct page *page, bool compound)
 		else
 			__dec_node_page_state(page, NR_FILE_PMDMAPPED);
 	} else {
+#ifdef CONFIG_MAPPED_PROTECT
+		if (!update_mapped_mul(page, false))
+			goto out;
+#else
 		if (!atomic_add_negative(-1, &page->_mapcount))
 			goto out;
+#endif
 	}
 
 	/*
@@ -1303,10 +1415,14 @@ void page_remove_rmap(struct page *page, bool compound)
 	if (compound)
 		return page_remove_anon_compound_rmap(page);
 
+#ifdef CONFIG_MAPPED_PROTECT
+	if (!update_mapped_mul(page, false))
+		return;
+#else
 	/* page still mapped by someone else? */
 	if (!atomic_add_negative(-1, &page->_mapcount))
 		return;
-
+#endif
 	/*
 	 * We use the irq-unsafe __{inc|mod}_zone_page_stat because
 	 * these counters are not modified in interrupt context, and
@@ -1601,7 +1717,30 @@ static bool try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 
 			/* MADV_FREE page check */
 			if (!PageSwapBacked(page)) {
-				if (!PageDirty(page)) {
+				int ref_count, map_count;
+
+				/*
+				 * Synchronize with gup_pte_range():
+				 * - clear PTE; barrier; read refcount
+				 * - inc refcount; barrier; read PTE
+				 */
+				smp_mb();
+
+				ref_count = page_ref_count(page);
+				map_count = page_mapcount(page);
+
+				/*
+				 * Order reads for page refcount and dirty flag
+				 * (see comments in __remove_mapping()).
+				 */
+				smp_rmb();
+
+				/*
+				 * The only page refs must be one from isolation
+				 * plus the rmap(s) (dropped by discard:).
+				 */
+				if (ref_count == 1 + map_count &&
+				    !PageDirty(page)) {
 					/* Invalidate as we cleared the pte */
 					mmu_notifier_invalidate_range(mm,
 						address, address + PAGE_SIZE);
@@ -1890,6 +2029,9 @@ static void rmap_walk_file(struct page *page, struct rmap_walk_control *rwc,
 	pgoff_t pgoff_start, pgoff_end;
 	struct vm_area_struct *vma;
 	unsigned long address;
+#ifdef CONFIG_KSHRINK_LRUVECD
+	bool got_lock = false;
+#endif /* CONFIG_KSHRINK_LRUVECD */
 
 	/*
 	 * The page lock not only makes sure that page->mapping cannot
@@ -1904,8 +2046,17 @@ static void rmap_walk_file(struct page *page, struct rmap_walk_control *rwc,
 
 	pgoff_start = page_to_pgoff(page);
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
-	if (!locked)
-		i_mmap_lock_read(mapping);
+	if (!locked) {
+#ifdef CONFIG_KSHRINK_LRUVECD
+		if (reclaim_page_trylock(page, &mapping->i_mmap_rwsem, &got_lock)) {
+			if (!got_lock)
+				return;
+		} else
+#endif /* CONFIG_KSHRINK_LRUVECD */
+		{
+			i_mmap_lock_read(mapping);
+		}
+	}
 
 	if (rwc->target_vma) {
 		address = vma_address(page, rwc->target_vma);

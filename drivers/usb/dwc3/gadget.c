@@ -403,7 +403,9 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned cmd,
 	dwc3_writel(dep->regs, DWC3_DEPCMDPAR0, params->param0);
 	dwc3_writel(dep->regs, DWC3_DEPCMDPAR1, params->param1);
 	dwc3_writel(dep->regs, DWC3_DEPCMDPAR2, params->param2);
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	mb();
+#endif
 	/*
 	 * Synopsys Databook 2.60a states in section 6.3.2.5.6 of that if we're
 	 * not relying on XferNotReady, we can make use of a special "No
@@ -426,6 +428,16 @@ int dwc3_send_gadget_ep_cmd(struct dwc3_ep *dep, unsigned cmd,
 		cmd |= DWC3_DEPCMD_CMDACT;
 
 	dwc3_writel(dep->regs, DWC3_DEPCMD, cmd);
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	dbg_log_string("DEP_NUM: %d :: DEPCMD=0x%08x | DWC3_DEPCMDPAR 0|1|2 = 0x%08x | 0x%08x | 0x%08x |%x |%x |%x",
+	dep->number,dwc3_readl(dep->regs, DWC3_DEPCMD),
+	dwc3_readl(dep->regs, DWC3_DEPCMDPAR0),
+	dwc3_readl(dep->regs, DWC3_DEPCMDPAR1),
+	dwc3_readl(dep->regs, DWC3_DEPCMDPAR2),
+	params->param0, params->param1, params->param2);
+#endif
+
 	do {
 		reg = dwc3_readl(dep->regs, DWC3_DEPCMD);
 		if (!(reg & DWC3_DEPCMD_CMDACT)) {
@@ -892,15 +904,15 @@ static int __dwc3_gadget_ep_disable(struct dwc3_ep *dep)
 	reg &= ~DWC3_DALEPENA_EP(dep->number);
 	dwc3_writel(dwc->regs, DWC3_DALEPENA, reg);
 
-	dep->stream_capable = false;
-	dep->type = 0;
-	dep->flags = 0;
-
 	/* Clear out the ep descriptors for non-ep0 */
 	if (dep->number > 1) {
 		dep->endpoint.comp_desc = NULL;
 		dep->endpoint.desc = NULL;
 	}
+
+	dep->stream_capable = false;
+	dep->type = 0;
+	dep->flags = 0;
 
 	return 0;
 }
@@ -966,7 +978,6 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 	struct dwc3			*dwc;
 	unsigned long			flags;
 	int				ret;
-	bool				call_rpm_put = false;
 
 	if (!ep) {
 		pr_debug("dwc3: invalid parameters\n");
@@ -981,18 +992,13 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 					dep->name))
 		return 0;
 
-	if (atomic_read(&dwc->in_lpm)) {
-		pm_runtime_get_sync(dwc->sysdev);
-		call_rpm_put = true;
-	}
+	pm_runtime_get_sync(dwc->sysdev);
 	spin_lock_irqsave(&dwc->lock, flags);
 	ret = __dwc3_gadget_ep_disable(dep);
 	dbg_event(dep->number, "DISABLE", ret);
 	spin_unlock_irqrestore(&dwc->lock, flags);
-	if (call_rpm_put) {
-		pm_runtime_mark_last_busy(dwc->sysdev);
-		pm_runtime_put_autosuspend(dwc->sysdev);
-	}
+	pm_runtime_mark_last_busy(dwc->sysdev);
+	pm_runtime_put_autosuspend(dwc->sysdev);
 
 	return ret;
 }
@@ -1177,11 +1183,18 @@ static void __dwc3_prepare_one_trb(struct dwc3_ep *dep, struct dwc3_trb *trb,
 		trb->ctrl |= DWC3_TRB_CTRL_SID_SOFN(stream_id);
 
 	/*
-	 * Ensure that updates of buffer address and size happens
-	 * before we set the DWC3_TRB_CTRL_HWO so that core
-	 * does not process any stale TRB.
+	 * As per data book 4.2.3.2TRB Control Bit Rules section
+	 *
+	 * The controller autonomously checks the HWO field of a TRB to determine if the
+	 * entire TRB is valid. Therefore, software must ensure that the rest of the TRB
+	 * is valid before setting the HWO field to '1'. In most systems, this means that
+	 * software must update the fourth DWORD of a TRB last.
+	 *
+	 * However there is a possibility of CPU re-ordering here which can cause
+	 * controller to observe the HWO bit set prematurely.
+	 * Add a write memory barrier to prevent CPU re-ordering.
 	 */
-	mb();
+	wmb();
 	trb->ctrl |= DWC3_TRB_CTRL_HWO;
 
 	dwc3_ep_inc_enq(dep);
@@ -2076,7 +2089,6 @@ static int dwc3_gadget_remote_wakeup(struct dwc3 *dwc)
 	case DWC3_LINK_STATE_RESET:
 	case DWC3_LINK_STATE_RX_DET:	/* in HS, means Early Suspend */
 	case DWC3_LINK_STATE_U3:	/* in HS, means SUSPEND */
-	case DWC3_LINK_STATE_U2:	/* in HS, means Sleep (L1) */
 	case DWC3_LINK_STATE_RESUME:
 		break;
 	case DWC3_LINK_STATE_U1:
@@ -2632,10 +2644,6 @@ static void dwc3_gadget_enable_irq(struct dwc3 *dwc)
 	if (dwc->revision < DWC3_REVISION_230A)
 		reg |= DWC3_DEVTEN_ULSTCNGEN;
 	else
-		reg |= DWC3_DEVTEN_EOPFEN;
-
-	/* On 2.30a and above this bit enables U3/L2-L1 Suspend Events */
-	if (dwc->revision >= DWC3_REVISION_230A)
 		reg |= DWC3_DEVTEN_EOPFEN;
 
 	dwc3_writel(dwc->regs, DWC3_DEVTEN, reg);
@@ -3262,6 +3270,7 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 		struct dwc3_request *req, int status)
 {
 	struct dwc3 *dwc = dep->dwc;
+	int request_status;
 	int ret;
 
 	/*
@@ -3301,7 +3310,35 @@ static int dwc3_gadget_ep_cleanup_completed_request(struct dwc3_ep *dep,
 		req->needs_extra_trb = false;
 	}
 
-	dwc3_gadget_giveback(dep, req, status);
+	/*
+	 * The event status only reflects the status of the TRB with IOC set.
+	 * For the requests that don't set interrupt on completion, the driver
+	 * needs to check and return the status of the completed TRBs associated
+	 * with the request. Use the status of the last TRB of the request.
+	 */
+	if (req->request.no_interrupt) {
+		struct dwc3_trb *trb;
+
+		trb = dwc3_ep_prev_trb(dep, dep->trb_dequeue);
+		switch (DWC3_TRB_SIZE_TRBSTS(trb->size)) {
+		case DWC3_TRBSTS_MISSED_ISOC:
+			/* Isoc endpoint only */
+			request_status = -EXDEV;
+			break;
+		case DWC3_TRB_STS_XFER_IN_PROG:
+			/* Applicable when End Transfer with ForceRM=0 */
+		case DWC3_TRBSTS_SETUP_PENDING:
+			/* Control endpoint only */
+		case DWC3_TRBSTS_OK:
+		default:
+			request_status = 0;
+			break;
+		}
+	} else {
+		request_status = status;
+	}
+
+	dwc3_gadget_giveback(dep, req, request_status);
 
 out:
 	return ret;
@@ -4209,7 +4246,6 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 
 	dwc->bh_handled_evt_cnt[dwc->bh_dbg_index] += (evt->count / 4);
 	evt->count = 0;
-	evt->flags &= ~DWC3_EVENT_PENDING;
 	ret = IRQ_HANDLED;
 
 	/* Unmask interrupt */
@@ -4221,6 +4257,9 @@ static irqreturn_t dwc3_process_event_buf(struct dwc3_event_buffer *evt)
 		dwc3_writel(dwc->regs, DWC3_GEVNTCOUNT(0), DWC3_GEVNTCOUNT_EHB);
 		dwc3_writel(dwc->regs, DWC3_DEV_IMOD(0), dwc->imod_interval);
 	}
+
+	/* Keep the clearing of DWC3_EVENT_PENDING at the end */
+	evt->flags &= ~DWC3_EVENT_PENDING;
 
 	return ret;
 }
@@ -4244,10 +4283,12 @@ static irqreturn_t dwc3_thread_interrupt(int irq, void *_evt)
 
 	start_time = ktime_get();
 
+	local_bh_disable();
 	spin_lock_irqsave(&dwc->lock, flags);
 	dwc->bh_handled_evt_cnt[dwc->irq_dbg_index] = 0;
 	ret = dwc3_process_event_buf(evt);
 	spin_unlock_irqrestore(&dwc->lock, flags);
+	local_bh_enable();
 
 	dwc->bh_start_time[dwc->bh_dbg_index] = start_time;
 	dwc->bh_completion_time[dwc->bh_dbg_index] =
@@ -4415,7 +4456,11 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	dwc->gadget.speed		= USB_SPEED_UNKNOWN;
 	dwc->gadget.sg_supported	= true;
 	dwc->gadget.name		= "dwc3-gadget";
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	//dwc->gadget.lpm_capable		= true;
+#else
 	dwc->gadget.lpm_capable		= !dwc->usb2_gadget_lpm_disable;
+#endif
 
 	/*
 	 * FIXME We might be setting max_speed to <SUPER, however versions

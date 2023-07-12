@@ -184,6 +184,12 @@ struct sock_common {
 	struct proto		*skc_prot;
 	possible_net_t		skc_net;
 
+	#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+	u32 skc_oplus_pid;
+	u64 skc_oplus_last_rcv_stamp[2];//index 0 = last, index 1 = now
+	u64 skc_oplus_last_send_stamp[2];//index 0 = last, index 1 = now
+	#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 #if IS_ENABLED(CONFIG_IPV6)
 	struct in6_addr		skc_v6_daddr;
 	struct in6_addr		skc_v6_rcv_saddr;
@@ -363,6 +369,12 @@ struct sock {
 #define sk_flags		__sk_common.skc_flags
 #define sk_rxhash		__sk_common.skc_rxhash
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_NWPOWER)
+#define sk_oplus_pid				__sk_common.skc_oplus_pid
+#define oplus_last_rcv_stamp		__sk_common.skc_oplus_last_rcv_stamp
+#define oplus_last_send_stamp	__sk_common.skc_oplus_last_send_stamp
+#endif /* CONFIG_OPLUS_FEATURE_NWPOWER */
+
 	socket_lock_t		sk_lock;
 	atomic_t		sk_drops;
 	int			sk_rcvlowat;
@@ -472,8 +484,14 @@ struct sock {
 	u32			sk_ack_backlog;
 	u32			sk_max_ack_backlog;
 	kuid_t			sk_uid;
+#if IS_ENABLED(CONFIG_DEBUG_SPINLOCK) || IS_ENABLED(CONFIG_DEBUG_LOCK_ALLOC)
+	spinlock_t		sk_peer_lock;
+#else
+	/* sk_peer_lock is in the ANDROID_KABI_RESERVE(1) field below */
+#endif
 	struct pid		*sk_peer_pid;
 	const struct cred	*sk_peer_cred;
+
 	long			sk_rcvtimeo;
 	ktime_t			sk_stamp;
 #if BITS_PER_LONG==32
@@ -514,7 +532,11 @@ struct sock {
 #endif
 	struct rcu_head		sk_rcu;
 
+#if IS_ENABLED(CONFIG_DEBUG_SPINLOCK) || IS_ENABLED(CONFIG_DEBUG_LOCK_ALLOC)
 	ANDROID_KABI_RESERVE(1);
+#else
+	ANDROID_KABI_USE(1, spinlock_t sk_peer_lock);
+#endif
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
@@ -1411,7 +1433,7 @@ void __sk_mem_reclaim(struct sock *sk, int amount);
 /* sysctl_mem values are in pages, we convert them in SK_MEM_QUANTUM units */
 static inline long sk_prot_mem_limits(const struct sock *sk, int index)
 {
-	long val = sk->sk_prot->sysctl_mem[index];
+	long val = READ_ONCE(sk->sk_prot->sysctl_mem[index]);
 
 #if PAGE_SIZE > SK_MEM_QUANTUM
 	val <<= PAGE_SHIFT - SK_MEM_QUANTUM_SHIFT;
@@ -1968,6 +1990,9 @@ static inline void sk_dst_confirm(struct sock *sk)
 
 static inline void sock_confirm_neigh(struct sk_buff *skb, struct neighbour *n)
 {
+#if !IS_ENABLED(CONFIG_OPLUS_BUG_STABILITY)
+/* Remove for [1357567],some AP doesn't send arp when it needs to send data to DUT */
+/* We remove this code to send arp more frequently to notify our mac to AP */
 	if (skb_get_dst_pending_confirm(skb)) {
 		struct sock *sk = skb->sk;
 		unsigned long now = jiffies;
@@ -1978,6 +2003,7 @@ static inline void sock_confirm_neigh(struct sk_buff *skb, struct neighbour *n)
 		if (sk && READ_ONCE(sk->sk_dst_pending_confirm))
 			WRITE_ONCE(sk->sk_dst_pending_confirm, 0);
 	}
+#endif /* CONFIG_OPLUS_BUG_STABILITY */
 }
 
 bool sk_mc_loop(struct sock *sk);
@@ -2594,6 +2620,9 @@ extern int sysctl_optmem_max;
 extern __u32 sysctl_wmem_default;
 extern __u32 sysctl_rmem_default;
 
+
+/* On 32bit arches, an skb frag is limited to 2^15 */
+#define SKB_FRAG_PAGE_ORDER	get_order(32768)
 DECLARE_STATIC_KEY_FALSE(net_high_order_alloc_disable_key);
 
 static inline int sk_get_wmem0(const struct sock *sk, const struct proto *proto)

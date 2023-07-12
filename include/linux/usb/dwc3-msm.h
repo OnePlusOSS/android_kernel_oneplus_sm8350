@@ -172,4 +172,14 @@ static inline __maybe_unused void rmnet_gsi_update_in_buffer_mem_type(
 { }
 #endif
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#if IS_ENABLED(CONFIG_OPLUS_CHG)
+enum oplus_dwc3_notify_event {
+	DWC3_ENUM_DONE,
+};
+
+extern void oplus_dwc3_set_notifier(void (*notify)(enum oplus_dwc3_notify_event event));
+extern int oplus_dwc3_notify_event(enum oplus_dwc3_notify_event event);
+#endif
+#endif
 #endif /* __LINUX_USB_DWC3_MSM_H */

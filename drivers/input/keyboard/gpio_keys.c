@@ -1034,6 +1034,6 @@ late_initcall(gpio_keys_init);
 module_exit(gpio_keys_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Phil Blundell <pb@handhelds.org>");
+MODULE_AUTHOR("Phil Blundell");
 MODULE_DESCRIPTION("Keyboard driver for GPIOs");
 MODULE_ALIAS("platform:gpio-keys");

@@ -27,6 +27,9 @@
 #include <linux/ipc_logging.h>
 #include "nfc_i2c_drv.h"
 #include "nfc_i3c_drv.h"
+#if IS_ENABLED(CONFIG_OPLUS_NFC)
+#include "../oplus_nfc/oplus_nfc.h"
+#endif
 
 // Max device count for this driver
 #define DEV_COUNT            1

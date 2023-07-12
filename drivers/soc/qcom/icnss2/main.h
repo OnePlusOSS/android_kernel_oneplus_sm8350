@@ -28,8 +28,6 @@
 #define QCA6750_PATH_PREFIX    "qca6750/"
 #define ICNSS_MAX_FILE_NAME      35
 #define ICNSS_PCI_EP_WAKE_OFFSET 4
-#define ICNSS_DISABLE_M3_SSR 0
-#define ICNSS_ENABLE_M3_SSR 1
 
 extern uint64_t dynamic_feature_mask;
 
@@ -62,7 +60,6 @@ enum icnss_driver_event_type {
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_FREE,
 	ICNSS_DRIVER_EVENT_M3_DUMP_UPLOAD_REQ,
 	ICNSS_DRIVER_EVENT_QDSS_TRACE_REQ_DATA,
-	ICNSS_DRIVER_EVENT_SUBSYS_RESTART_LEVEL,
 	ICNSS_DRIVER_EVENT_MAX,
 };
 
@@ -190,10 +187,6 @@ enum icnss_smp2p_msg_id {
 	ICNSS_PCI_EP_POWER_SAVE_EXIT,
 };
 
-struct icnss_subsys_restart_level_data {
-	uint8_t restart_level;
-};
-
 struct icnss_stats {
 	struct {
 		uint32_t posted;
@@ -272,9 +265,6 @@ struct icnss_stats {
 	u32 soc_wake_req;
 	u32 soc_wake_resp;
 	u32 soc_wake_err;
-	u32 restart_level_req;
-	u32 restart_level_resp;
-	u32 restart_level_err;
 };
 
 #define WLFW_MAX_TIMESTAMP_LEN 32
@@ -465,7 +455,24 @@ struct icnss_priv {
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
 	u32 wlan_en_delay_ms;
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for: check fw status for switch issue
+	unsigned long loadBdfState;
+	unsigned long loadRegdbState;
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 };
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for: check fw status for switch issue
+enum cnss_load_state {
+	CNSS_LOAD_BDF_FAIL = 1,
+	CNSS_LOAD_BDF_SUCCESS,
+	CNSS_LOAD_REGDB_FAIL,
+	CNSS_LOAD_REGDB_SUCCESS,
+	CNSS_PROBE_FAIL,
+	CNSS_PROBE_SUCCESS,
+};
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 struct icnss_reg_info {
 	uint32_t mem_type;

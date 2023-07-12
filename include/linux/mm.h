@@ -15,6 +15,7 @@
 #include <linux/atomic.h>
 #include <linux/debug_locks.h>
 #include <linux/mm_types.h>
+#include <linux/mmap_lock.h>
 #include <linux/range.h>
 #include <linux/pfn.h>
 #include <linux/percpu-refcount.h>
@@ -1541,13 +1542,22 @@ int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 static inline void vm_write_begin(struct vm_area_struct *vma)
 {
-	/*
-	 * The reads never spins and preemption
-	 * disablement is not required.
-	 */
-	raw_write_seqcount_begin(&vma->vm_sequence);
+	write_seqcount_begin(&vma->vm_sequence);
+}
+static inline void vm_write_begin_nested(struct vm_area_struct *vma,
+					 int subclass)
+{
+	write_seqcount_begin_nested(&vma->vm_sequence, subclass);
 }
 static inline void vm_write_end(struct vm_area_struct *vma)
+{
+	write_seqcount_end(&vma->vm_sequence);
+}
+static inline void vm_raw_write_begin(struct vm_area_struct *vma)
+{
+	raw_write_seqcount_begin(&vma->vm_sequence);
+}
+static inline void vm_raw_write_end(struct vm_area_struct *vma)
 {
 	raw_write_seqcount_end(&vma->vm_sequence);
 }
@@ -1555,7 +1565,17 @@ static inline void vm_write_end(struct vm_area_struct *vma)
 static inline void vm_write_begin(struct vm_area_struct *vma)
 {
 }
+static inline void vm_write_begin_nested(struct vm_area_struct *vma,
+					 int subclass)
+{
+}
 static inline void vm_write_end(struct vm_area_struct *vma)
+{
+}
+static inline void vm_raw_write_begin(struct vm_area_struct *vma)
+{
+}
+static inline void vm_raw_write_end(struct vm_area_struct *vma)
 {
 }
 #endif /* CONFIG_SPECULATIVE_PAGE_FAULT */
@@ -2483,6 +2503,7 @@ extern int install_special_mapping(struct mm_struct *mm,
 				   unsigned long flags, struct page **pages);
 
 unsigned long randomize_stack_top(unsigned long stack_top);
+unsigned long randomize_page(unsigned long start, unsigned long range);
 
 extern unsigned long get_unmapped_area(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 

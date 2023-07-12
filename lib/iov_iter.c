@@ -398,6 +398,7 @@ static size_t copy_page_to_iter_pipe(struct page *page, size_t offset, size_t by
 		return 0;
 	pipe->nrbufs++;
 	buf->ops = &page_cache_pipe_buf_ops;
+	buf->flags = 0;
 	get_page(buf->page = page);
 	buf->offset = offset;
 	buf->len = bytes;
@@ -524,6 +525,7 @@ static size_t push_pipe(struct iov_iter *i, size_t size,
 			break;
 		pipe->nrbufs++;
 		pipe->bufs[idx].ops = &default_pipe_buf_ops;
+		pipe->bufs[idx].flags = 0;
 		pipe->bufs[idx].page = page;
 		pipe->bufs[idx].offset = 0;
 		if (left <= PAGE_SIZE) {
@@ -1302,7 +1304,7 @@ ssize_t iov_iter_get_pages(struct iov_iter *i,
 		res = get_user_pages_fast(addr, n,
 				iov_iter_rw(i) != WRITE ?  FOLL_WRITE : 0,
 				pages);
-		if (unlikely(res < 0))
+		if (unlikely(res <= 0))
 			return res;
 		return (res == n ? len : res * PAGE_SIZE) - *start;
 	0;}),({
@@ -1384,8 +1386,9 @@ ssize_t iov_iter_get_pages_alloc(struct iov_iter *i,
 			return -ENOMEM;
 		res = get_user_pages_fast(addr, n,
 				iov_iter_rw(i) != WRITE ?  FOLL_WRITE : 0, p);
-		if (unlikely(res < 0)) {
+		if (unlikely(res <= 0)) {
 			kvfree(p);
+			*pages = NULL;
 			return res;
 		}
 		*pages = p;

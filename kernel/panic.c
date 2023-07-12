@@ -32,6 +32,9 @@
 #include <linux/ratelimit.h>
 #include <linux/debugfs.h>
 #include <asm/sections.h>
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+#include <soc/oplus/system/dump_reason.h>
+#endif
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -172,6 +175,9 @@ void panic(const char *fmt, ...)
 	int state = 0;
 	int old_cpu, this_cpu;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+	char *function_name;
+#endif
 
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop
@@ -213,6 +219,14 @@ void panic(const char *fmt, ...)
 		buf[len - 1] = '\0';
 
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
+
+#ifdef CONFIG_OPLUS_FEATURE_DUMP_REASON
+	function_name = parse_function_builtin_return_address(
+			(unsigned long)__builtin_return_address(0));
+	if (function_name)
+		save_dump_reason_to_smem(buf, function_name);
+#endif
+
 #ifdef CONFIG_DEBUG_BUGVERBOSE
 	/*
 	 * Avoid nested stack-dumping if a panic occurs during oops processing

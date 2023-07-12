@@ -103,3 +103,17 @@ config PROC_CHILDREN
 config PROC_PID_ARCH_STATUS
 	def_bool n
 	depends on PROC_FS
+
+#ifdef OPLUS_FEATURE_TASK_CPUSTATS
+source "fs/proc/task_cpustats/Kconfig"
+#endif /* OPLUS_FEATURE_TASK_CPUSTATS */
+
+#ifdef OPLUS_FEATURE_CPU_JANKINFO
+source "fs/proc/cpu_jankinfo/Kconfig"
+#endif /* OPLUS_FEATURE_CPU_JANKINFO */
+
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "fs/proc/healthinfo/Kconfig"
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+

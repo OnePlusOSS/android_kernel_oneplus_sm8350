@@ -31,7 +31,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/alarmtimer.h>
-
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+#include "../../drivers/soc/oplus/oplus_wakelock/oplus_wakelock_profiler_qcom.h"
+#endif
 /**
  * struct alarm_base - Alarm timer bases
  * @lock:		Lock for syncrhonized access to the base
@@ -194,6 +196,9 @@ static void alarmtimer_dequeue(struct alarm_base *base, struct alarm *alarm)
 }
 
 
+#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+enum alarmtimer_restart (*net_alarm_func)(struct alarm *, ktime_t now) = NULL;
+#endif
 /**
  * alarmtimer_fired - Handles alarm hrtimer being fired.
  * @timer: pointer to hrtimer being run
@@ -217,7 +222,9 @@ static enum hrtimer_restart alarmtimer_fired(struct hrtimer *timer)
 
 	if (alarm->function)
 		restart = alarm->function(alarm, base->gettime());
-
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+	alarmtimer_wakeup_count(alarm);
+	#endif
 	spin_lock_irqsave(&base->lock, flags);
 	if (restart != ALARMTIMER_NORESTART) {
 		hrtimer_set_expires(&alarm->timer, alarm->node.expires);
@@ -262,7 +269,9 @@ static int alarmtimer_suspend(struct device *dev)
 	type = freezer_alarmtype;
 	freezer_delta = 0;
 	spin_unlock_irqrestore(&freezer_delta_lock, flags);
-
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+	alarmtimer_suspend_flag_set();
+	#endif
 	rtc = alarmtimer_get_rtcdev();
 	/* If we have no rtcdev, just return */
 	if (!rtc)
@@ -291,6 +300,10 @@ static int alarmtimer_suspend(struct device *dev)
 
 	if (ktime_to_ns(min) < 2 * NSEC_PER_SEC) {
 		__pm_wakeup_event(ws, 2 * MSEC_PER_SEC);
+		#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+		alarmtimer_suspend_flag_clear();
+		alarmtimer_busy_flag_set();
+		#endif
 		return -EBUSY;
 	}
 
@@ -312,7 +325,9 @@ static int alarmtimer_suspend(struct device *dev)
 static int alarmtimer_resume(struct device *dev)
 {
 	struct rtc_device *rtc;
-
+	#if defined(OPLUS_FEATURE_POWERINFO_STANDBY) && defined(CONFIG_OPLUS_WAKELOCK_PROFILER)
+	alarmtimer_suspend_flag_clear();
+	#endif
 	rtc = alarmtimer_get_rtcdev();
 	if (rtc)
 		rtc_timer_cancel(rtc, &rtctimer);

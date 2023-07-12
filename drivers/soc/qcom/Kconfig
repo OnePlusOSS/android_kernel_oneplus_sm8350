@@ -715,7 +715,7 @@ config MSM_PERFORMANCE_QGKI
 
 config QMP_DEBUGFS_CLIENT
 	bool "Debugfs Client to communicate with AOP using QMP protocol"
-	depends on DEBUG_FS
+#	depends on DEBUG_FS
 	help
 	  This options enables a driver which allows clients to send messages
 	  to Alway On processor using QMP transport. Users can echo a message
@@ -1131,8 +1131,13 @@ config QCOM_WDOG_BITE_EARLY_PANIC
 config QCOM_WATCHDOG_BARK_TIME
 	depends on QCOM_WDT_CORE
 	int "Qualcomm Technologies, Inc. Watchdog bark time in ms"
-	default 11000
-	range 11000 11000
+	#ifndef OPLUS_STABILITY_BUG
+	#default 11000
+	#range 11000 11000
+	#else
+	default 20000
+	range 11000 20000
+	#endif
 	help
 	  The amount of time, in milliseconds, that should elapse after
 	  a watchdog timer reset before a bark interrupt is sent from the
@@ -1277,6 +1282,11 @@ config QCOM_RTIC
 	  This option enables QCOM Real Time Integrity Check feature. This
 	  will trigger RTIC kernel MP.s (measurement parameters) generation
 	  during the kernel build.
+
+config OPLUS_FEATURE_MODEM_MINIDUMP
+        bool "Add for oplus modem minidump function"
+        help
+          Add for oplus modem minidump function.
 
 config RENAME_BLOCK_DEVICE
 	tristate "Rename block device node in /dev"

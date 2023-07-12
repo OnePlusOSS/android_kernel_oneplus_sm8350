@@ -226,3 +226,4 @@ config BLK_PM
 	def_bool BLOCK && PM
 
 source "block/Kconfig.iosched"
+source "block/healthinfo/Kconfig"

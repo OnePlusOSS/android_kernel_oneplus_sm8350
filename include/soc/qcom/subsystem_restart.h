@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
+ * Copyright (C) 2020 Oplus. All rights reserved.
  * Copyright (c) 2014-2019 2021, The Linux Foundation. All rights reserved.
  */
 
@@ -123,6 +124,9 @@ struct subsys_desc {
  * @pdev: subsystem platform device pointer
  */
 struct notif_data {
+#if defined(CONFIG_QGKI) && defined(OPLUS_BUG_STABILITY)
+	int debug;
+#endif
 	enum crash_status crashed;
 	int enable_ramdump;
 	int enable_mini_ramdumps;
@@ -131,9 +135,27 @@ struct notif_data {
 };
 
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+#define MAX_REASON_LEN 300
+#define MAX_DEVICE_NAME 16
+struct dev_crash_report_work {
+	struct work_struct  work;
+	struct device *crash_dev;
+	char   device_name[MAX_DEVICE_NAME];
+	char   crash_reason[MAX_REASON_LEN];
+};
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+extern void __wlan_subsystem_send_uevent(struct device *dev, char *reason, const char *name);
+extern void wlan_subsystem_send_uevent(struct subsys_device *dev, char *reason, const char *name);
+#endif /*OPLUS_FEATURE_WIFI_DCS_SWITCH*/
 
 extern int subsys_get_restart_level(struct subsys_device *dev);
 extern int subsystem_restart_dev(struct subsys_device *dev);
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+extern void subsystem_schedule_crash_uevent_work(struct device *dev, const char *device_name, char *reason);
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
 
@@ -167,6 +189,13 @@ static inline int subsystem_restart_dev(struct subsys_device *dev)
 {
 	return 0;
 }
+
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+static inline void subsystem_schedule_crash_uevent_work(struct device *dev, const char *device_name, char *reason)
+{
+	return;
+}
+#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 
 static inline int subsystem_restart(const char *name)
 {
