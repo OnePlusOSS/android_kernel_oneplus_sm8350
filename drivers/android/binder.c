@@ -3035,7 +3035,7 @@ static bool binder_proc_transaction(struct binder_transaction *t,
 #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
 		if (thread && thread->task) {
 			grp_leader = thread->task->group_leader;
-#if defined(CONFIG_OPLUS_UX_IM_FLAG) && defined(CONFIG_OPLUS_RELEASE_BUFFER_CALLBAACK_UX)
+#if defined(CONFIG_OPLUS_UX_IM_FLAG) && defined(CONFIG_OPLUS_RELEASE_BUFFER_CALLBACK_UX)
 			if (grp_leader && oneway && is_sf(curr)) {
 				if (is_launcher(grp_leader))
 					set_heavy_ux(thread->task);
@@ -3045,7 +3045,7 @@ static bool binder_proc_transaction(struct binder_transaction *t,
 #else
 			if (grp_leader && is_sf(curr) && test_task_ux(thread->task->group_leader) && oneway)
 				set_once_ux(thread->task);
-#endif /* defined(CONFIG_OPLUS_UX_IM_FLAG) && defined(CONFIG_OPLUS_RELEASE_BUFFER_CALLBAACK_UX) */
+#endif /* defined(CONFIG_OPLUS_UX_IM_FLAG) && defined(CONFIG_OPLUS_RELEASE_BUFFER_CALLBACK_UX) */
 		}
 #endif
 		binder_wakeup_thread_ilocked(proc, thread, !oneway /* sync */);
@@ -3369,7 +3369,7 @@ static void binder_transaction(struct binder_proc *proc,
 		t->from = thread;
 	else
 		t->from = NULL;
-	t->sender_euid = proc->cred->euid;
+	t->sender_euid = task_euid(proc->tsk);
 	t->to_proc = target_proc;
 	t->to_thread = target_thread;
 	t->code = tr->code;
@@ -3388,7 +3388,7 @@ static void binder_transaction(struct binder_proc *proc,
 		u32 secid;
 		size_t added_size;
 
-		security_task_getsecid(proc->tsk, &secid);
+		security_cred_getsecid(proc->cred, &secid);
 		ret = security_secid_to_secctx(secid, &secctx, &secctx_sz);
 		if (ret) {
 			return_error = BR_FAILED_REPLY;

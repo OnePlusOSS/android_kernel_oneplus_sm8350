@@ -37,6 +37,10 @@ source "drivers/soc/oplus/device_info/Kconfig"
 source "drivers/soc/oplus/sensor/Kconfig"
 #endif /* OPLUS_FEATURE_SENSOR_SMEM */
 
+#ifdef OPLUS_FEATURE_SENSOR_CONSUMER_IR
+source "drivers/soc/oplus/oplus_consumer_ir/Kconfig"
+#endif /* OPLUS_FEATURE_SENSOR_CONSUMER_IR */
+
 #ifdef OPLUS_FEATURE_THERMAL_HORAE
 source "drivers/soc/oplus/thermal/Kconfig"
 #endif /* OPLUS_FEATURE_THERMAL_HORAE */
@@ -90,3 +94,5 @@ source "drivers/soc/oplus/cpufreq_health/Kconfig"
 #ifdef OPLUS_FEATURE_GAME_OPT
 source "drivers/soc/oplus/game_opt/Kconfig"
 #endif /* OPLUS_FEATURE_GAME_OPT */
+
+source "drivers/soc/oplus/oplus_overload/Kconfig"

@@ -148,8 +148,13 @@ static void neigh_update_gc_list(struct neighbour *n)
 		atomic_dec(&n->tbl->gc_entries);
 	} else if (!exempt_from_gc && !on_gc_list) {
 		/* add entries to the tail; cleaning removes from the front */
-		list_add_tail(&n->gc_list, &n->tbl->gc_list);
-		atomic_inc(&n->tbl->gc_entries);
+		if(n->dead) {
+			pr_err("neigh %p is dead, but still want to be added to gc_list\n", n);
+			dump_stack();
+		} else {
+			list_add_tail(&n->gc_list, &n->tbl->gc_list);
+			atomic_inc(&n->tbl->gc_entries);
+		}
 	}
 
 out:

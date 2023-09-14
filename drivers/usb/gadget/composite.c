@@ -1747,10 +1747,10 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 			if (gadget_is_superspeed(gadget)) {
 #ifdef OPLUS_FEATURE_CHG_BASIC
 				if (gadget->speed >= USB_SPEED_SUPER) {
-					cdev->desc.bcdUSB = cpu_to_le16(0x0320);
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 					cdev->desc.bMaxPacketSize0 = 9;
 				} else if (gadget->lpm_capable || enable_l1_for_hs)  {
-					cdev->desc.bcdUSB = cpu_to_le16(0x0210);
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 				} else {
 					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 				}
@@ -1764,7 +1764,12 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 #endif
 			} else {
 				if (gadget->lpm_capable)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
+#else
 					cdev->desc.bcdUSB = cpu_to_le16(0x0201);
+#endif
+
 				else
 					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 			}

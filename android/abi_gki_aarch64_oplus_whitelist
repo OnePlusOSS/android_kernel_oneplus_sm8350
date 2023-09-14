@@ -119,6 +119,17 @@
   __kfifo_len_r
   request_firmware_direct
   __kfifo_in_r
+  wl2868c_set_ldo_value
+  wl2868c_set_en_ldo
+  wl2868c_ldo_enable
+  wl2868c_ldo_disable
+  wl2868c_check_ldo_status
+  i2c_unregister_device
+#endif
+
+#ifdef CONFIG_SND_SOC_AW882XX
+class_create_file_ns
+class_remove_file_ns
 #endif
 
 #ifdef OPLUS_FEATURE_TP_BASIC

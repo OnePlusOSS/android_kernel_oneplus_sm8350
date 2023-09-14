@@ -462,7 +462,7 @@ static struct pci_driver dwc3_pci_driver = {
 	}
 };
 
-MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
+MODULE_AUTHOR("Felipe Balbi");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 PCI Glue Layer");
 

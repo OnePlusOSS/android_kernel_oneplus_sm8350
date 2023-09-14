@@ -1220,7 +1220,7 @@ static const char *socinfo_machine(unsigned int id)
             if (is_confidential()) {
                 return fake_soc_id_name;
             } else {
-		if (get_project() == 21075 || get_project() == 21031 || get_project() == 22831) {
+		if (get_project() == 21075 || get_project() == 21031 || get_project() == 22831 || get_project() == 22055) {
 			return real_soc_id_21075_21031;
 		} else {
 			return real_soc_id_name;

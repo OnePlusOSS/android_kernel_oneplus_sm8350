@@ -460,7 +460,7 @@ pmic_get_submask(struct device_node *np, struct device *dev)
 	adc_value /= 1000;
 	dev_msg("adc value finally is %d\n", adc_value);
 
-	if (adc_value > 1750) {
+	if (adc_value > 1900) {
 		ret = -100;
 		kfree(adc_ranges);
 		return ret;

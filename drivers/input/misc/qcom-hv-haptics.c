@@ -1004,8 +1004,10 @@ static int haptics_get_status_data(struct haptics_chip *chip,
 	if (rc < 0)
 		return rc;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	dev_dbg(chip->dev, "Get status data[%x] = (%#x, %#x)\n",
 			sel, data[0], data[1]);
+#endif
 	return 0;
 }
 
@@ -2040,8 +2042,10 @@ static int haptics_module_enable(struct haptics_chip *chip, bool enable)
 	if (rc < 0)
 		return rc;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	dev_dbg(chip->dev, "haptics module %s\n",
 			enable ? "enabled" : "disabled");
+#endif
 	return 0;
 }
 
@@ -2569,7 +2573,9 @@ static int haptics_stop_fifo_play(struct haptics_chip *chip)
 	u8 val;
 
 	if (atomic_read(&chip->play.fifo_status.is_busy) == 0) {
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		dev_dbg(chip->dev, "FIFO playing is not in progress\n");
+#endif
 		return 0;
 	}
 
@@ -2599,7 +2605,9 @@ static int haptics_stop_fifo_play(struct haptics_chip *chip)
 	if (rc < 0)
 		return rc;
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	dev_dbg(chip->dev, "stopped FIFO playing successfully\n");
+#endif
 	return 0;
 }
 
@@ -4952,10 +4960,12 @@ static ssize_t lra_cal_cl_t_lra_us_store(struct class *c,
 	chip->config.cl_t_lra_us = val;
 	pr_info("store cl_t_lra_us:%d\n", val);
 
-	rc = haptics_config_openloop_lra_period(chip, chip->config.cl_t_lra_us);
-	if (rc < 0){
-		dev_err(chip->dev, "%s:rc = %d\n", __func__, rc);
-		return rc;
+	if (val != 0){
+		rc = haptics_config_openloop_lra_period(chip, chip->config.cl_t_lra_us);
+		if (rc < 0){
+			dev_err(chip->dev, "%s:rc = %d\n", __func__, rc);
+			return rc;
+		}
 	}
 
 	return count;
@@ -5801,8 +5811,10 @@ static enum hrtimer_restart haptics_disable_hbst_timer(struct hrtimer *timer)
 	rc = haptics_boost_vreg_enable(chip, false);
 	if (rc < 0)
 		dev_err(chip->dev, "disable boost vreg failed, rc=%d\n", rc);
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	else
 		dev_dbg(chip->dev, "boost vreg is disabled\n");
+#endif
 
 	return HRTIMER_NORESTART;
 }

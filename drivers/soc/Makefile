@@ -35,6 +35,10 @@ obj-y						+= oplus/sensor/
 #endif
 #endif /* VENDOR_EDIT */
 
+#ifdef CONFIG_OPLUS_SENSOR_CONSUMER_IR
+obj-$(CONFIG_OPLUS_SENSOR_CONSUMER_IR_CORE) += oplus/oplus_consumer_ir/
+#endif /* CONFIG_OPLUS_SENSOR_CONSUMER_IR */
+
 #ifdef OPLUS_FEATURE_POWERINFO_STANDBY
 obj-$(CONFIG_OPLUS_WAKELOCK_PROFILER) += oplus/oplus_wakelock/
 #endif /* OPLUS_FEATURE_POWERINFO_STANDBY */
@@ -46,6 +50,8 @@ obj-$(CONFIG_OPLUS_DEVICE_IFNO)  +=  oplus/device_info/
 #ifdef OPLUS_FEATURE_THERMAL_HORAE
 obj-$(CONFIG_HORAE_THERMAL_SHELL) += oplus/thermal/
 #endif /* OPLUS_FEATURE_THERMAL_HORAE */
+
+obj-$(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG) += oplus/oplus_overload/
 
 #ifdef OPLUS_FEATURE_ESIM
 obj-y += oplus/misc/

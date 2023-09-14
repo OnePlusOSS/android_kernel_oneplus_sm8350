@@ -25,6 +25,7 @@
 #include <trace/events/sched.h>
 #include <trace/hooks/sched.h>
 
+
 #include "walt/walt.h"
 
 #if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
@@ -49,6 +50,14 @@
 #endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 #ifdef CONFIG_OPLUS_FEATURE_GAME_OPT
 #include "../../drivers/soc/oplus/game_opt/game_ctrl.h"
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+#include <linux/uidgid.h>
+#include <linux/cred.h>
+#include <linux/cpufreq.h>
+#include <linux/reciprocal_div.h>
+#include "../../drivers/soc/oplus/oplus_overload/task_overload.h"
 #endif
 
 #ifdef CONFIG_SMP
@@ -6817,6 +6826,13 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 
 	*order_index = i;
 
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+	if (!test_task_ux(p)) {
+		if ((check_abnormal_freq(p) && check_abnormal_task_util(p) && check_abnormal_cpu_util()) || p->abnormal_flag > ABNORMAL_THRESHOLD)
+			*order_index = 0;
+	}
+#endif
+
 #ifdef CONFIG_OPLUS_FEATURE_TPD
 	if ((is_st_tpd_enable() && is_st_tpd_task(p)) ||
 			((is_dynamic_tpd_task(p) || is_tpd_task(p)) && is_tpd_enable())) {
@@ -6956,6 +6972,21 @@ static void walt_find_best_target(struct sched_domain *sd, cpumask_t *cpus,
 
 			if (!cpu_active(i) || cpu_isolated(i))
 				continue;
+
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+			if (!test_task_ux(p) && is_max_capacity_cpu(i)) {
+				if (p->abnormal_flag % ABNORMAL_TIME == 0) {
+					if (check_abnormal_task_util(p) && check_abnormal_freq(p) && check_abnormal_cpu_util() && test_task_uid(p) && p->abnormal_flag <= ABNORMAL_THRESHOLD) {
+						p->abnormal_flag++;
+					}
+				} else if (p->abnormal_flag <= ABNORMAL_THRESHOLD)
+					p->abnormal_flag++;
+				if (p->abnormal_flag == ABNORMAL_THRESHOLD)
+					set_task_state(p);
+				if (p->abnormal_flag > ABNORMAL_THRESHOLD)
+					continue;
+			}
+#endif /* #OPLUS_FEATURE_ABNORMAL_FLAG */
 
 #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
 			if (should_ux_task_skip_cpu(p, i))
@@ -8623,7 +8654,12 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 			!is_min_capacity_cpu(env->src_cpu))
 		return 0;
 #endif
-
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+	if (sysctl_abnormal_enable && !test_task_ux(p) && p->abnormal_flag > ABNORMAL_THRESHOLD) {
+		if (is_max_capacity_cpu(env->dst_cpu))
+			return 0;
+	}
+#endif
 	/* Disregard pcpu kthreads; they are where they need to be. */
 	if (kthread_is_per_cpu(p))
 		return 0;
@@ -8846,6 +8882,13 @@ redo:
 		if (!can_migrate_task(p, env))
 			goto next;
 
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+		if (sysctl_abnormal_enable && !test_task_ux(p) && is_max_capacity_cpu(env->dst_cpu)) {
+			if (p->abnormal_flag > ABNORMAL_THRESHOLD) {
+				goto next;
+			}
+		}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST*/
 #if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
 		if (should_ux_task_skip_cpu(p, env->dst_cpu))
 			goto next;

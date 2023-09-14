@@ -2472,10 +2472,10 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long ap, fp;
 	enum lru_list lru;
 
-	trace_android_vh_set_swappiness(&swappiness);
-
 	/* use vm_swappiness defaultly */
 	swappiness = vm_swappiness;
+
+	trace_android_vh_set_swappiness(&swappiness);
 
 #ifdef CONFIG_DYNAMIC_TUNNING_SWAPPINESS
 	if (current_is_kswapd()) {

@@ -16,6 +16,10 @@
 #include <linux/task_sched_info.h>
 #endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+#include "../../../drivers/soc/oplus/oplus_overload/task_overload.h"
+#endif
+
 #ifdef CONFIG_SCHED_WALT
 /* 1ms default for 20ms window size scaled to 1024 */
 unsigned int sysctl_sched_min_task_util_for_boost = 51;
@@ -223,8 +227,15 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 		rcu_read_lock();
 		new_cpu = find_energy_efficient_cpu(p, prev_cpu, 0, 1);
 		rcu_read_unlock();
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+		ret = (sysctl_abnormal_enable && (new_cpu >= 0) && (new_cpu != prev_cpu) && (capacity_orig_of(new_cpu) < capacity_orig_of(prev_cpu))
+				&& !test_task_ux(p) && is_max_capacity_cpu(prev_cpu) && (p->abnormal_flag > ABNORMAL_THRESHOLD));
+		if (ret || ((new_cpu >= 0) && (new_cpu != prev_cpu) && (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))
+				&& (!sysctl_abnormal_enable || p->abnormal_flag < ABNORMAL_THRESHOLD))) {
+#else
 		if ((new_cpu >= 0) && (new_cpu != prev_cpu) &&
 		    (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))) {
+#endif
 			active_balance = kick_active_balance(rq, p, new_cpu);
 			if (active_balance) {
 				mark_reserved(new_cpu);

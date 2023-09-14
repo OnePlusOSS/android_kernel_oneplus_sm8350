@@ -207,6 +207,7 @@ static bool get_task_name(pid_t tid, char *name) {
 	return ret;
 }
 
+#define RT_PAGE_SIZE 2048
 static int rt_info_show(struct seq_file *m, void *v)
 {
 	unsigned long flags;
@@ -215,14 +216,19 @@ static int rt_info_show(struct seq_file *m, void *v)
 	pid_t wakee1_tid, wakee2_tid;
 	struct list_head *pos, *n;
 	struct rt_waker_info_t *waker;
-	char page[2048] = {0};
+	char *page;
 	char waker_name[TASK_COMM_LEN];
 	ssize_t len = 0;
 	u64 ts = ktime_get_ns();
 
-	results1 = kmalloc(sizeof(struct rt_waker_info_t) * MAX_TID_COUNT, GFP_KERNEL);
-	if (!results1)
+	page = kzalloc(RT_PAGE_SIZE, GFP_KERNEL);
+	if (!page)
 		return -ENOMEM;
+	results1 = kmalloc(sizeof(struct rt_waker_info_t) * MAX_TID_COUNT, GFP_KERNEL);
+	if (!results1) {
+		kfree(page);
+		return -ENOMEM;
+	}
 
 	read_lock_irqsave(&rt_info_rwlock, flags);
 	if (rt_num >= 1) {
@@ -265,7 +271,7 @@ static int rt_info_show(struct seq_file *m, void *v)
 		num1 = min(num1, MAX_TASK_NR);
 		for (i = 0; i < num1; i++) {
 			if (get_task_name(results1[i].waker_tid, waker_name)) {
-				len += snprintf(page + len, sizeof(page) - len, "%d;%s;%d;%d;%d\n",
+				len += snprintf(page + len, RT_PAGE_SIZE - len, "%d;%s;%d;%d;%d\n",
 					results1[i].waker_tid, waker_name, wakee1_tid,
 					results1[i].total, results1[i].increment);
 			}
@@ -276,7 +282,7 @@ static int rt_info_show(struct seq_file *m, void *v)
 		num2 = min(num2, MAX_TASK_NR);
 		for (i = 0; i < num2; i++) {
 			if (get_task_name(results2[i].waker_tid, waker_name)) {
-				len += snprintf(page + len, sizeof(page) - len, "%d;%s;%d;%d;%d\n",
+				len += snprintf(page + len, RT_PAGE_SIZE - len, "%d;%s;%d;%d;%d\n",
 					results2[i].waker_tid, waker_name, wakee2_tid,
 					results2[i].total, results2[i].increment);
 			}
@@ -284,6 +290,9 @@ static int rt_info_show(struct seq_file *m, void *v)
 	}
 	if (len > 0)
 		seq_puts(m, page);
+
+	kfree(results1);
+	kfree(page);
 
 	return 0;
 }

@@ -1,0 +1,2 @@
+mm_hybridswap: qcom-kernel-5.4: exclude same page for zram stat
+Change-Id: Ide012cedb8d071610516813d7f37546048b3c4f5

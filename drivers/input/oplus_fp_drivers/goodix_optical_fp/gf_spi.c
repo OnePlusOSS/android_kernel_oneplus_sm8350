@@ -742,6 +742,17 @@ static int gf_probe(struct platform_device *pdev)
     /* If we can allocate a minor number, hook up this device.
      * Reusing minors is fine so long as udev or mdev is working.
      */
+	if ((FP_GOODIX_3268 != get_fpsensor_type())
+			&& (FP_GOODIX_5288 != get_fpsensor_type())
+			&& (FP_GOODIX_5228 != get_fpsensor_type())
+			&& (FP_GOODIX_5658 != get_fpsensor_type())
+			&& (FP_GOODIX_OPTICAL_95 != get_fpsensor_type())
+			&& (FP_GOODIX_3626 != get_fpsensor_type())) {
+        pr_err("%s, found not goodix sensor\n", __func__);
+        status = -EPROBE_DEFER;
+        return status;
+	}
+
     mutex_lock(&device_list_lock);
     minor = find_first_zero_bit(minors, N_SPI_MINORS);
     if (minor < N_SPI_MINORS) {
@@ -917,18 +928,6 @@ static int __init gf_init(void)
      * that will key udev/mdev to add/remove /dev nodes.  Last, register
      * the driver which manages those device numbers.
      */
-
-    if ((FP_GOODIX_3268 != get_fpsensor_type())
-            && (FP_GOODIX_5288 != get_fpsensor_type())
-            && (FP_GOODIX_5228 != get_fpsensor_type())
-            && (FP_GOODIX_5658 != get_fpsensor_type())
-            && (FP_GOODIX_OPTICAL_95 != get_fpsensor_type())
-            && (FP_GOODIX_3626 != get_fpsensor_type())) {
-        pr_err("%s, found not goodix sensor\n", __func__);
-        status = -EINVAL;
-        return status;
-    }
-
     BUILD_BUG_ON(N_SPI_MINORS > 256);
     status = register_chrdev(SPIDEV_MAJOR, CHRD_DRIVER_NAME, &gf_fops);
     if (status < 0) {
@@ -981,7 +980,7 @@ static void __exit gf_exit(void)
 }
 module_exit(gf_exit);
 
-MODULE_SOFTDEP("pre:oplus_fp_common");
+MODULE_SOFTDEP("pre: oplus_fp_common");
 MODULE_AUTHOR("Jiangtao Yi, <yijiangtao@goodix.com>");
 MODULE_AUTHOR("Jandy Gou, <gouqingsong@goodix.com>");
 MODULE_DESCRIPTION("goodix fingerprint sensor device driver");

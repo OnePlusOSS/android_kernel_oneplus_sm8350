@@ -1806,10 +1806,12 @@ static const struct msm_pingroup yupik_groups[] = {
 	[181] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1b4000, 11, 3),
 	[182] = SDC_QDSD_PINGROUP(sdc2_data, 0x1b4000, 9, 0),
 };
-
+#ifndef OPLUS_FEATURE_CHG_BASIC
+//Modify for FG,Delete gpio32 and gpio33
 static const int yupik_reserved_gpios[] = {
-	32, 33, 48, 49, 50, 51, -1
+	32, 33, -1
 };
+#endif
 static struct pinctrl_qup yupik_qup_regs[] = {
 	QUP_I3C(0, QUP_I3C_0_MODE_OFFSET),
 	QUP_I3C(1, QUP_I3C_1_MODE_OFFSET),
@@ -1846,7 +1848,9 @@ static const struct msm_pinctrl_soc_data yupik_pinctrl = {
 	.nfunctions = ARRAY_SIZE(yupik_functions),
 	.groups = yupik_groups,
 	.ngroups = ARRAY_SIZE(yupik_groups),
+#ifndef OPLUS_FEATURE_CHG_BASIC
 	.reserved_gpios = yupik_reserved_gpios,
+#endif
 	.ngpios = 176,
 	.qup_regs = yupik_qup_regs,
 	.nqup_regs = ARRAY_SIZE(yupik_qup_regs),

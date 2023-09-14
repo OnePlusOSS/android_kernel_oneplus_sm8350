@@ -1578,7 +1578,9 @@ struct task_struct {
 	ANDROID_KABI_RESERVE(6);
 	ANDROID_KABI_RESERVE(7);
 	ANDROID_KABI_RESERVE(8);
-
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+	int abnormal_flag;
+#endif
 #ifdef CONFIG_OPLUS_FEATURE_TPD
 	int tpd;
 	int dtpd; /* dynamic tpd task */

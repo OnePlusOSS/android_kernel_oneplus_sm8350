@@ -4047,6 +4047,8 @@ static void oplus_chg_set_charging_current(struct oplus_chg_chip *chip)
 		return;
 	}
 #endif
+	if(charging_current == 0)
+		charger_xlog_printk(CHG_LOG_CRTI, "set charging_current = 0\n");
 	chip->chg_ops->charging_current_write_fast(charging_current);
 }
 
@@ -4656,7 +4658,7 @@ void oplus_chg_turn_off_charging(struct oplus_chg_chip *chip)
 #endif /* OPLUS_CHG_OP_DEF */
 
 	chip->chg_ops->charging_disable();
-	/*charger_xlog_printk(CHG_LOG_CRTI, "[BATTERY] oplus_chg_turn_off_charging !!\n");*/
+	charger_xlog_printk(CHG_LOG_CRTI, "[BATTERY] oplus_chg_turn_off_charging,tbatt_status =%d !!\n", chip->tbatt_status);
 }
 /*
 static int oplus_chg_check_suspend_or_disable(struct oplus_chg_chip *chip)
@@ -5663,6 +5665,7 @@ void oplus_chg_variables_reset(struct oplus_chg_chip *chip, bool in)
 #else
 		chip->mmi_chg = 1;
 #endif
+		charger_xlog_printk(CHG_LOG_CRTI, "set mmi_chg = [%d].\n", chip->mmi_chg);
 	}
 #endif //SELL_MODE
 	chip->unwakelock_chg = 0;
@@ -6877,23 +6880,25 @@ static bool oplus_chg_soc_reduce_slow_when_1(struct oplus_chg_chip *chip)
 {
 	static int reduce_count = 0;
 	int reduce_count_limit = 0;
+	int chgr_vbatt_soc_1 = chip->vbatt_soc_1;
 
 	if (chip->batt_exist == false) {
 		return false;
 	}
 	if (chip->charger_exist) {
 		reduce_count_limit = 12;
+		chgr_vbatt_soc_1 = 3200;/*power off vbat set 3200mv when charging*/
 	} else {
 		reduce_count_limit = 4;
 	}
-	if (chip->batt_volt_min < chip->vbatt_soc_1) {
+	if (chip->batt_volt_min < chgr_vbatt_soc_1) {
 		reduce_count++;
 	} else {
 		reduce_count = 0;
 	}
 	charger_xlog_printk(CHG_LOG_CRTI,
-			"batt_vol:%d, batt_volt_min:%d, reduce_count:%d\n",
-			chip->batt_volt, chip->batt_volt_min, reduce_count);
+			"batt_vol:%d, batt_volt_min:%d, reduce_count:%d, chgr_vbatt_soc_1[%d]\n",
+			chip->batt_volt, chip->batt_volt_min, reduce_count, chgr_vbatt_soc_1);
 	if (reduce_count > reduce_count_limit) {
 		reduce_count = reduce_count_limit + 1;
 		return true;
@@ -7386,6 +7391,10 @@ static void oplus_chg_chargerid_switch_check(struct oplus_chg_chip *chip)
 
 #define RESET_MCU_DELAY_15S		3
 
+#ifdef OPLUS_CHG_OP_DEF
+extern bool oplus_get_pon_chg(void);
+extern void oplus_set_pon_chg(bool flag);
+#endif
 static void oplus_chg_qc_config(struct oplus_chg_chip *chip);
 static void oplus_chg_fast_switch_check(struct oplus_chg_chip *chip)
 {
@@ -7450,9 +7459,11 @@ static void oplus_chg_fast_switch_check(struct oplus_chg_chip *chip)
 #else
 	if (chip->charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
 #endif
-		if (true == opchg_get_mcu_update_state()) {
+		if (true == opchg_get_mcu_update_state() || true == oplus_get_pon_chg()) {
+			chg_err("mcu_update need suspend charger to reset adapter\n");
 			reset_mcu_delay = 0;
 			mcu_update = true;
+			oplus_set_pon_chg(false);
 			return;
 		}
 		if (oplus_warp_get_fastchg_started() == false

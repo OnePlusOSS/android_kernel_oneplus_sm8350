@@ -369,6 +369,10 @@ int sysctl_sched_assist_enabled = 1;
 int sysctl_sched_assist_scene = 0;
 #endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+int sysctl_abnormal_enable = 0;
+#endif
+
 #ifdef CONFIG_COMPACTION
 static int min_extfrag_threshold;
 static int max_extfrag_threshold = 1000;
@@ -1700,6 +1704,15 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0666,
 		.proc_handler   = sysctl_sched_assist_scene_handler,
 	},
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+	{
+		.procname	= "skip_goplus_enabled",
+		.data		= &sysctl_abnormal_enable,
+		.maxlen		= sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+#endif
 	{
 		.procname	= "slide_boost_enabled",
 		.data		= &sysctl_slide_boost_enabled,
