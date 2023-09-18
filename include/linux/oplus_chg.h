@@ -301,6 +301,7 @@ enum oplus_chg_mod_property {
 	OPLUS_CHG_EXTERN_PROP_VOLTAGE_NOW_CELL,
 	OPLUS_CHG_EXTERN_PROP_PATH_CURRENT,
 	OPLUS_CHG_PROP_FTM_TEST,
+	OPLUS_CHG_EXTERN_PROP_MUTUAL_CMD,
 };
 
 union oplus_chg_mod_propval {

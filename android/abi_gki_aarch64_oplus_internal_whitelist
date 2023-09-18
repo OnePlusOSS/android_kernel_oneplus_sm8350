@@ -128,6 +128,8 @@
 
 #ifdef OPLUS_FEATURE_NFC_GKI
   prj_name
+  spi_set_cs_timing
+  devm_gpiod_get
 #endif
 revert_creds
 

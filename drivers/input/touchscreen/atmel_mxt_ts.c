@@ -7,7 +7,7 @@
  * Copyright (C) 2012 Google, Inc.
  * Copyright (C) 2016 Zodiac Inflight Innovations
  *
- * Author: Joonyoung Shim <jy0922.shim@samsung.com>
+ * Author: Joonyoung Shim
  */
 
 #include <linux/acpi.h>
@@ -3846,6 +3846,6 @@ static struct i2c_driver mxt_driver = {
 module_i2c_driver(mxt_driver);
 
 /* Module information */
-MODULE_AUTHOR("Joonyoung Shim <jy0922.shim@samsung.com>");
+MODULE_AUTHOR("Joonyoung Shim");
 MODULE_DESCRIPTION("Atmel maXTouch Touchscreen driver");
 MODULE_LICENSE("GPL");

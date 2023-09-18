@@ -276,7 +276,7 @@ static int anc_fb_state_chg_callback(struct notifier_block *nb,
         switch (blank) {
             case FB_BLANK_POWERDOWN:
                     anc_data->fb_black = 1;
-                    msg = JIIOV_NET_EVENT_SCR_OFF;                 
+                    msg = JIIOV_NET_EVENT_SCR_OFF;
                     pr_err("[anc] NET SCREEN OFF!\n");
                     netlink_send_message_to_user(&msg, length);
                 break;
@@ -291,7 +291,7 @@ static int anc_fb_state_chg_callback(struct notifier_block *nb,
                 break;
         }
     }*/
-	
+
    if (evdata && evdata->data && (val == MSM_DRM_EARLY_EVENT_BLANK) && anc_data) {
         blank = *(int *)(evdata->data);
         switch (blank) {
@@ -944,6 +944,21 @@ static int anc_probe(anc_device_t *pdev)
 
     dev_info(dev, "Anc Probe\n");
 
+    if ((FP_JIIOV_0302 != get_fpsensor_type()) && (FP_JIIOV_0301 != get_fpsensor_type())) {
+        pr_err("%s, found not jiiov sensor\n", __func__);
+        rc = -EPROBE_DEFER;
+        return rc;
+    }
+
+#ifdef ANC_USE_NETLINK
+		anc_netlink_init();
+    /*Register for receiving tp touch event.
+     * Must register after get_fpsensor_type filtration as only one handler can be registered.
+    */
+		opticalfp_irq_handler_register(anc_opticalfp_tp_handler);
+		pr_info("register tp event handler");
+#endif
+
     /* Allocate device data */
     dev_data = devm_kzalloc(dev, sizeof(*dev_data), GFP_KERNEL);
     if (!dev_data) {
@@ -1132,12 +1147,6 @@ static int __init ancfp_init(void)
 {
     int rc;
 
-    if ((FP_JIIOV_0302 != get_fpsensor_type()) && (FP_JIIOV_0301 != get_fpsensor_type())) {
-        pr_err("%s, found not jiiov sensor\n", __func__);
-        rc = -EINVAL;
-        return rc;
-    }
-
 #ifdef ANC_USE_SPI
     rc = spi_register_driver(&anc_driver);
 #else
@@ -1148,16 +1157,6 @@ static int __init ancfp_init(void)
     } else {
         pr_err("%s %d\n", __func__, rc);
     }
-
-#ifdef ANC_USE_NETLINK
-    anc_netlink_init();
-    /*Register for receiving tp touch event.
-     * Must register after get_fpsensor_type filtration as only one handler can be registered.
-    */
-    opticalfp_irq_handler_register(anc_opticalfp_tp_handler);
-    pr_info("register tp event handler");
-#endif
-
     return rc;
 }
 
@@ -1177,7 +1176,7 @@ static void __exit ancfp_exit(void)
 late_initcall(ancfp_init);
 module_exit(ancfp_exit);
 
-MODULE_SOFTDEP("pre:oplus_fp_common");
+MODULE_SOFTDEP("pre: oplus_fp_common");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("JIIOV");
 MODULE_DESCRIPTION("JIIOV fingerprint sensor device driver");

@@ -29,7 +29,7 @@
  * condition.  Refer to below descriptions for the watermarks parameter for
  * this.
  */
-static bool enabled __read_mostly = false;
+static bool enabled __read_mostly = true;
 
 /*
  * Time threshold for cold memory regions identification in microseconds.
@@ -37,7 +37,7 @@ static bool enabled __read_mostly = false;
  * If a memory region is not accessed for this or longer time, DAMON_RECLAIM
  * identifies the region as cold, and reclaims.  120 seconds by default.
  */
-static unsigned long min_age __read_mostly = 120000000; //120000000
+unsigned long min_age __read_mostly = 120000000;
 module_param(min_age, ulong, 0664);
 
 /*
@@ -50,7 +50,7 @@ module_param(min_age, ulong, 0664);
  *
  * 10 ms by default.
  */
-static unsigned long quota_ms __read_mostly = 10; //10
+unsigned long quota_ms __read_mostly = 10;
 module_param(quota_ms, ulong, 0664);
 
 /*
@@ -63,7 +63,7 @@ module_param(quota_ms, ulong, 0664);
  *
  * 128 MiB by default.
  */
-static unsigned long quota_sz __read_mostly = 128 * 1024 * 1024; //128 * 1024 * 1024
+unsigned long quota_sz __read_mostly = 128 * 1024 * 1024;
 module_param(quota_sz, ulong, 0664);
 
 /*
@@ -76,16 +76,17 @@ module_param(quota_sz, ulong, 0664);
  *
  * 1 second by default.
  */
-static unsigned long quota_reset_interval_ms __read_mostly = 1000;
+unsigned long quota_reset_interval_ms __read_mostly = 1000;
 module_param(quota_reset_interval_ms, ulong, 0664);
 
 /*
  * The watermarks metric
- * 0 = DAMOS_WMARK_NONE,
- * 1 = DAMOS_WMARK_FREE_MEM_RATE,
- * 2 = DAMOS_WMARK_AVAI_MEM_RATE,
+ * 0 = DAMOS_WMARK_NONE           // always
+ * 1 = DAMOS_WMARK_FREE_MEM_RATE  // usually
+ * 2 = DAMOS_WMARK_OPLUS          // often
+ * 3 = DAMOS_WMARK_SLEEP          // never
  */
-int wmarks_metric __read_mostly = 1;
+int wmarks_metric __read_mostly = 2;
 module_param(wmarks_metric, int, 0664);
 
 /*
@@ -94,7 +95,7 @@ module_param(wmarks_metric, int, 0664);
  * Minimal time to wait before checking the watermarks, when DAMON_RECLAIM is
  * enabled but inactive due to its watermarks rule.  5 seconds by default.
  */
-static unsigned long wmarks_interval __read_mostly = 5000000;
+unsigned long wmarks_interval __read_mostly = 5000000;
 module_param(wmarks_interval, ulong, 0664);
 
 /*
@@ -104,7 +105,7 @@ module_param(wmarks_interval, ulong, 0664);
  * this, DAMON_RECLAIM becomes inactive, so it does nothing but periodically
  * checks the watermarks.  500 (50%) by default.
  */
-static unsigned long wmarks_high __read_mostly = 600; //500
+unsigned long wmarks_high __read_mostly = 500;
 module_param(wmarks_high, ulong, 0664);
 
 /*
@@ -114,7 +115,7 @@ module_param(wmarks_high, ulong, 0664);
  * the low watermark, DAMON_RECLAIM becomes active, so starts the monitoring
  * and the reclaiming.  400 (40%) by default.
  */
-static unsigned long wmarks_mid __read_mostly = 500; //400
+unsigned long wmarks_mid __read_mostly = 400;
 module_param(wmarks_mid, ulong, 0664);
 
 /*
@@ -125,7 +126,7 @@ module_param(wmarks_mid, ulong, 0664);
  * the watermarks.  In the case, the system falls back to the LRU-based page
  * granularity reclamation logic.  200 (20%) by default.
  */
-static unsigned long wmarks_low __read_mostly = 40; //200
+unsigned long wmarks_low __read_mostly = 40;
 module_param(wmarks_low, ulong, 0664);
 
 /*
@@ -134,7 +135,7 @@ module_param(wmarks_low, ulong, 0664);
  * The sampling interval of DAMON for the cold memory monitoring.  Please refer
  * to the DAMON documentation for more detail.  5 ms by default.
  */
-static unsigned long sample_interval __read_mostly = 10000; //5000
+unsigned long sample_interval __read_mostly = 500000; // 500ms
 module_param(sample_interval, ulong, 0664);
 
 /*
@@ -143,7 +144,7 @@ module_param(sample_interval, ulong, 0664);
  * The aggregation interval of DAMON for the cold memory monitoring.  Please
  * refer to the DAMON documentation for more detail.  100 ms by default.
  */
-static unsigned long aggr_interval __read_mostly = 200000; //100000
+unsigned long aggr_interval __read_mostly = 5000000; // 5 sec
 module_param(aggr_interval, ulong, 0664);
 
 /*
@@ -154,7 +155,7 @@ module_param(aggr_interval, ulong, 0664);
  * But, setting this too high could result in increased monitoring overhead.
  * Please refer to the DAMON documentation for more detail.  10 by default.
  */
-static unsigned long min_nr_regions __read_mostly = 10;
+unsigned long min_nr_regions __read_mostly = 10;
 module_param(min_nr_regions, ulong, 0664);
 
 /*
@@ -165,7 +166,7 @@ module_param(min_nr_regions, ulong, 0664);
  * However, setting this too low could result in bad monitoring quality.
  * Please refer to the DAMON documentation for more detail.  1000 by default.
  */
-static unsigned long max_nr_regions __read_mostly = 1000;
+unsigned long max_nr_regions __read_mostly = 1000;
 module_param(max_nr_regions, ulong, 0664);
 
 /*
@@ -238,6 +239,9 @@ module_param(nr_reclaim_time, ulong, 0400);
 
 unsigned long nr_reclaim_page __read_mostly;
 module_param(nr_reclaim_page, ulong, 0400);
+
+unsigned long nr_damon_region __read_mostly;
+module_param(nr_damon_region, ulong, 0400);
 
 static int walk_system_ram(struct resource *res, void *arg)
 {

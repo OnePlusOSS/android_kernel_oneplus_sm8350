@@ -22,6 +22,10 @@
 #include "acl.h"
 #include <trace/events/f2fs.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+#include <linux/acm_fs.h>
+#endif
+
 static struct inode *f2fs_new_inode(struct inode *dir, umode_t mode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
@@ -361,6 +365,11 @@ static int f2fs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 #endif /* OPLUS_FEATURE_UFSPLUS */
 
 	f2fs_balance_fs(sbi, true);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+	monitor_acm3(dentry, NULL, ACM_F2FS_CREATE);
+#endif
+
 	return 0;
 out:
 	f2fs_handle_failed_inode(inode);
@@ -628,6 +637,11 @@ static int f2fs_unlink(struct inode *dir, struct dentry *dentry)
 		f2fs_sync_fs(sbi->sb, 1);
 fail:
 	trace_f2fs_unlink_exit(inode, err);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+	monitor_acm3(dentry, NULL, ACM_F2FS_UNLINK);
+#endif
+
 	return err;
 }
 
@@ -1095,6 +1109,10 @@ static int f2fs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (IS_DIRSYNC(old_dir) || IS_DIRSYNC(new_dir))
 		f2fs_sync_fs(sbi->sb, 1);
+
+#ifdef CONFIG_OPLUS_FEATURE_ACM3
+	monitor_acm3(old_dentry, new_dentry, ACM_F2FS_RENAME);
+#endif
 
 	f2fs_update_time(sbi, REQ_TIME);
 	return 0;

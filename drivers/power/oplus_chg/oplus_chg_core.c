@@ -618,5 +618,5 @@ subsys_initcall(oplus_chg_class_init);
 module_exit(oplus_chg_class_exit);
 
 MODULE_DESCRIPTION("oplus charge management subsystem");
-MODULE_AUTHOR("Nick Hu <nick.hu@oneplus.com>");
+MODULE_AUTHOR("Nick Hu");
 MODULE_LICENSE("GPL");

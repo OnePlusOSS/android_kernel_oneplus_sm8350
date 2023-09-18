@@ -319,6 +319,6 @@ static struct platform_driver usb_extcon_driver = {
 
 module_platform_driver(usb_extcon_driver);
 
-MODULE_AUTHOR("Roger Quadros <rogerq@ti.com>");
+MODULE_AUTHOR("Roger Quadros");
 MODULE_DESCRIPTION("USB GPIO extcon driver");
 MODULE_LICENSE("GPL v2");

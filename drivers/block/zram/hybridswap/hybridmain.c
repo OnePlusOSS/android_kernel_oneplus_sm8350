@@ -14,21 +14,23 @@
 
 #include "../zram_drv.h"
 #include "../zram_drv_internal.h"
-#include "hybridswap_internal.h"
+#include "internal.h"
 #include "hybridswap.h"
 
 static const char *swapd_text[NR_EVENT_ITEMS] = {
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
 	"swapd_wakeup",
-	"swapd_hit_pagefaults",
-	"swapd_memcg_scale_skip",
-	"swapd_memcg_pagefault_skip",
+	"swapd_hit_refaults",
+	"swapd_medium_press",
+	"swapd_critical_press",
+	"swapd_memcg_ratio_skip",
+	"swapd_memcg_refault_skip",
 	"swapd_shrink_anon",
 	"swapd_swapout",
 	"swapd_skip_swapout",
-	"swapd_nothing_ignore",
+	"swapd_empty_round",
 	"swapd_over_min_buffer_skip_times",
-	"swapd_nothing_ignore_skip_times",
+	"swapd_empty_round_skip_times",
 	"swapd_snapshot_times",
 	"swapd_skip_shrink_of_window",
 	"swapd_manual_pause",
@@ -36,9 +38,6 @@ static const char *swapd_text[NR_EVENT_ITEMS] = {
 	"swapd_cpu_busy_skip_times",
 	"swapd_cpu_busy_break_times",
 #endif
-#endif
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	"akcompressd_running",
 #endif
 };
 
@@ -51,8 +50,8 @@ enum scan_balance {
 
 static int log_level = HYB_MAX;
 static struct kmem_cache *hybridswap_cache;
-static struct list_head grade_head;
-static DEFINE_SPINLOCK(grade_list_lock);
+static struct list_head score_head;
+static DEFINE_SPINLOCK(score_list_lock);
 static DEFINE_MUTEX(hybridswap_enable_lock);
 static bool hybridswap_enabled = false;
 
@@ -63,6 +62,7 @@ extern unsigned long try_to_free_mem_cgroup_pages(struct mem_cgroup *memcg,
 		unsigned long nr_pages,
 		gfp_t gfp_mask,
 		bool may_swap);
+
 
 void hybridswap_loglevel_set(int level)
 {
@@ -76,19 +76,6 @@ int hybridswap_loglevel(void)
 
 void __put_memcg_cache(memcg_hybs_t *hybs)
 {
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	if (hybs->cache.id > 0) {
-		spin_lock(&cached_idr_lock);
-		idr_replace(&cached_idr, NULL, hybs->cache.id);
-		idr_remove(&cached_idr, hybs->cache.id);
-		spin_unlock(&cached_idr_lock);
-	}
-
-	spin_lock(&hybs->cache.lock);
-	if (hybs->cache.dead != 1)
-		BUG();
-	spin_unlock(&hybs->cache.lock);
-#endif
 	kmem_cache_free(hybridswap_cache, (void *)hybs);
 }
 
@@ -129,9 +116,9 @@ ssize_t hybridswap_vmstat_show(struct device *dev,
 
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
 	len += snprintf(buf + len, PAGE_SIZE - len, "%-32s %12lu\n",
-			"page_fault_pause", atomic_long_read(&page_fault_pause));
+			"fault_out_pause", atomic_long_read(&fault_out_pause));
 	len += snprintf(buf + len, PAGE_SIZE - len, "%-32s %12lu\n",
-			"page_fault_pause_cnt", atomic_long_read(&page_fault_pause_cnt));
+			"fault_out_pause_cnt", atomic_long_read(&fault_out_pause_cnt));
 #endif
 
 	for (;i < NR_EVENT_ITEMS; i++) {
@@ -156,7 +143,7 @@ ssize_t hybridswap_loglevel_store(struct device *dev,
 		return -EINVAL;
 
 	if (val >= HYB_MAX) {
-		hybp(HYB_ERR, "val %lu is not valid\n", val);
+		log_err("val %lu is not valid\n", val);
 		return -EINVAL;
 	}
 	hybridswap_loglevel_set((int)val);
@@ -192,42 +179,22 @@ memcg_hybs_t *hybridswap_cache_alloc(struct mem_cgroup *memcg, bool atomic)
 	if (!hybs)
 		return NULL;
 
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	spin_lock_init(&hybs->cache.lock);
-	INIT_LIST_HEAD(&hybs->cache.head);
-	hybs->cache.cnt = 0;
-	hybs->cache.compressing = 0;
-	hybs->cache.dead = 0;
-	spin_lock(&cached_idr_lock);
-	hybs->cache.id = idr_alloc(&cached_idr, NULL, 1, MEM_CGROUP_ID_MAX,
-			GFP_KERNEL);
-	if (hybs->cache.id < 0) {
-		spin_unlock(&cached_idr_lock);
-		kmem_cache_free(hybridswap_cache, (void*)hybs);
-		return NULL;
-	}
-	idr_replace(&cached_idr, &hybs->cache, hybs->cache.id);
-	spin_unlock(&cached_idr_lock);
-#endif
-	INIT_LIST_HEAD(&hybs->grade_node);
+	INIT_LIST_HEAD(&hybs->score_node);
 #ifdef CONFIG_HYBRIDSWAP_CORE
 	spin_lock_init(&hybs->zram_init_lock);
 #endif
-	atomic64_set(&hybs->app_grade, 300);
-	atomic64_set(&hybs->ufs2zram_scale, 100);
+	atomic64_set(&hybs->app_score, 300);
+	atomic64_set(&hybs->ub_ufs2zram_ratio, 100);
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
-	atomic_set(&hybs->mem2zram_scale, 80);
-	atomic_set(&hybs->zram2ufs_scale, 50);
-	atomic_set(&hybs->pagefault_level, 50);
+	atomic_set(&hybs->ub_mem2zram_ratio, 80);
+	atomic_set(&hybs->ub_zram2ufs_ratio, 50);
+	atomic_set(&hybs->refault_threshold, 50);
 #endif
 	hybs->memcg = memcg;
 	refcount_set(&hybs->usage, 1);
 
 	ret = atomic64_cmpxchg((atomic64_t *)&memcg->android_oem_data1, 0, (u64)hybs);
 	if (ret != 0) {
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-		hybs->cache.dead = 1;
-#endif
 		put_memcg_cache(hybs);
 		return (memcg_hybs_t *)ret;
 	}
@@ -274,36 +241,33 @@ static void mem_cgroup_free_hook(void *data, struct mem_cgroup *memcg)
 
 	hybs = (memcg_hybs_t *)memcg->android_oem_data1;
 	memcg->android_oem_data1 = 0;
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	clear_page_memcg(&hybs->cache);
-#endif
 	put_memcg_cache(hybs);
 }
 
-void memcg_app_grade_update(struct mem_cgroup *tarfetch)
+void memcg_app_score_update(struct mem_cgroup *target)
 {
 	struct list_head *pos = NULL;
 	unsigned long flags;
 
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
-	update_swapd_mcg_setup(tarfetch);
+	update_swapd_memcg_param(target);
 #endif
-	spin_lock_irqsave(&grade_list_lock, flags);
-	list_for_each(pos, &grade_head) {
-		memcg_hybs_t *hybs = list_entry(pos, memcg_hybs_t, grade_node);
-		if (atomic64_read(&hybs->app_grade) <
-				atomic64_read(&MEMCGRP_ITEM(tarfetch, app_grade)))
+	spin_lock_irqsave(&score_list_lock, flags);
+	list_for_each(pos, &score_head) {
+		memcg_hybs_t *hybs = list_entry(pos, memcg_hybs_t, score_node);
+		if (atomic64_read(&hybs->app_score) <
+				atomic64_read(&MEMCGRP_ITEM(target, app_score)))
 			break;
 	}
-	list_move_tail(&MEMCGRP_ITEM(tarfetch, grade_node), pos);
-	spin_unlock_irqrestore(&grade_list_lock, flags);
+	list_move_tail(&MEMCGRP_ITEM(target, score_node), pos);
+	spin_unlock_irqrestore(&score_list_lock, flags);
 }
 
 static void mem_cgroup_css_online_hook(void *data,
 		struct cgroup_subsys_state *css, struct mem_cgroup *memcg)
 {
 	if (memcg->android_oem_data1)
-		memcg_app_grade_update(memcg);
+		memcg_app_score_update(memcg);
 
 	css_get(css);
 }
@@ -314,9 +278,9 @@ static void mem_cgroup_css_offline_hook(void *data,
 	unsigned long flags;
 
 	if (memcg->android_oem_data1) {
-		spin_lock_irqsave(&grade_list_lock, flags);
-		list_del_init(&MEMCGRP_ITEM(memcg, grade_node));
-		spin_unlock_irqrestore(&grade_list_lock, flags);
+		spin_lock_irqsave(&score_list_lock, flags);
+		list_del_init(&MEMCGRP_ITEM(memcg, score_node));
+		spin_unlock_irqrestore(&score_list_lock, flags);
 	}
 
 	css_put(css);
@@ -325,7 +289,7 @@ static void mem_cgroup_css_offline_hook(void *data,
 #define REGISTER_HOOK(name) do {\
 	rc = register_trace_android_vh_##name(name##_hook, NULL);\
 	if (rc) {\
-		hybp(HYB_ERR, "%s:%d register hook %s failed", __FILE__, __LINE__, #name);\
+		log_err("%s:%d register hook %s failed", __FILE__, __LINE__, #name);\
 		goto err_out_##name;\
 	}\
 } while (0)
@@ -408,13 +372,13 @@ unsigned long memcg_anon_pages(struct mem_cgroup *memcg)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 	mz = mem_cgroup_nodeinfo(memcg, 0);
 	if (!mz) {
-		fetch_next_memcg_break(memcg);
+		get_next_memcg_break(memcg);
 		return 0;
 	}
 
 	lruvec = &mz->lruvec;
 	if (!lruvec) {
-		fetch_next_memcg_break(memcg);
+		get_next_memcg_break(memcg);
 		return 0;
 	}
 
@@ -444,13 +408,13 @@ static unsigned long memcg_inactive_anon_pages(struct mem_cgroup *memcg)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 	mz = mem_cgroup_nodeinfo(memcg, 0);
 	if (!mz) {
-		fetch_next_memcg_break(memcg);
+		get_next_memcg_break(memcg);
 		return 0;
 	}
 
 	lruvec = &mz->lruvec;
 	if (!lruvec) {
-		fetch_next_memcg_break(memcg);
+		get_next_memcg_break(memcg);
 		return 0;
 	}
 
@@ -474,7 +438,7 @@ static ssize_t mem_cgroup_force_shrink_anon(struct kernfs_open_file *of,
 	buf = strstrip(buf);
 	ret = kstrtoul(buf, 0, &reclaim_total);
 	if (unlikely(ret)) {
-		hybp(HYB_ERR, "reclaim_total %s value is error!\n",  buf);
+		log_err("reclaim_total %s value is error!\n",  buf);
 		return -EINVAL;
 	}
 
@@ -503,18 +467,18 @@ static int memcg_total_info_per_app_show(struct seq_file *m, void *v)
 	seq_printf(m, "%-8s %-8s %-8s %-8s %-8s %s \n",
 			"anon", "zram_c", "zram_p", "eswap_c", "eswap_p",
 			"memcg_n");
-	while ((memcg = fetch_next_memcg(memcg))) {
+	while ((memcg = get_next_memcg(memcg))) {
 		if (!MEMCGRP_ITEM_DATA(memcg))
 			continue;
 
 		anon_size = memcg_anon_pages(memcg);
-		zram_compress_size = hybridswap_read_mcg_stats(memcg,
+		zram_compress_size = hybridswap_read_memcg_stats(memcg,
 				MCG_ZRAM_STORED_SZ);
-		eswap_compress_size = hybridswap_read_mcg_stats(memcg,
+		eswap_compress_size = hybridswap_read_memcg_stats(memcg,
 				MCG_DISK_STORED_SZ);
-		zram_page_size = hybridswap_read_mcg_stats(memcg,
+		zram_page_size = hybridswap_read_memcg_stats(memcg,
 				MCG_ZRAM_STORED_PG_SZ);
-		eswap_page_size = hybridswap_read_mcg_stats(memcg,
+		eswap_page_size = hybridswap_read_memcg_stats(memcg,
 				MCG_DISK_STORED_PG_SZ);
 
 		anon_size *= PAGE_SIZE / SZ_1K;
@@ -547,18 +511,18 @@ static int memcg_swap_stat_show(struct seq_file *m, void *v)
 
 	memcg = mem_cgroup_from_css(seq_css(m));
 
-	zram_compress_size = hybridswap_read_mcg_stats(memcg, MCG_ZRAM_STORED_SZ);
-	zram_page_size = hybridswap_read_mcg_stats(memcg, MCG_ZRAM_STORED_PG_SZ);
-	eswap_compress_size = hybridswap_read_mcg_stats(memcg, MCG_DISK_STORED_SZ);
-	eswap_page_size = hybridswap_read_mcg_stats(memcg, MCG_DISK_STORED_PG_SZ);
+	zram_compress_size = hybridswap_read_memcg_stats(memcg, MCG_ZRAM_STORED_SZ);
+	zram_page_size = hybridswap_read_memcg_stats(memcg, MCG_ZRAM_STORED_PG_SZ);
+	eswap_compress_size = hybridswap_read_memcg_stats(memcg, MCG_DISK_STORED_SZ);
+	eswap_page_size = hybridswap_read_memcg_stats(memcg, MCG_DISK_STORED_PG_SZ);
 
-	eswap_out_cnt = hybridswap_read_mcg_stats(memcg, MCG_ESWAPOUT_CNT);
-	eswap_out_size = hybridswap_read_mcg_stats(memcg, MCG_ESWAPOUT_SZ);
-	eswap_in_size = hybridswap_read_mcg_stats(memcg, MCG_ESWAPIN_SZ);
-	eswap_in_cnt = hybridswap_read_mcg_stats(memcg, MCG_ESWAPIN_CNT);
-	page_fault_cnt = hybridswap_read_mcg_stats(memcg, MCG_DISK_FAULT_CNT);
-	cur_eswap_size = hybridswap_read_mcg_stats(memcg, MCG_DISK_SPACE);
-	max_eswap_size = hybridswap_read_mcg_stats(memcg, MCG_DISK_SPACE_PEAK);
+	eswap_out_cnt = hybridswap_read_memcg_stats(memcg, MCG_ESWAPOUT_CNT);
+	eswap_out_size = hybridswap_read_memcg_stats(memcg, MCG_ESWAPOUT_SZ);
+	eswap_in_size = hybridswap_read_memcg_stats(memcg, MCG_ESWAPIN_SZ);
+	eswap_in_cnt = hybridswap_read_memcg_stats(memcg, MCG_ESWAPIN_CNT);
+	page_fault_cnt = hybridswap_read_memcg_stats(memcg, MCG_DISK_FAULT_CNT);
+	cur_eswap_size = hybridswap_read_memcg_stats(memcg, MCG_DISK_SPACE);
+	max_eswap_size = hybridswap_read_memcg_stats(memcg, MCG_DISK_SPACE_PEAK);
 
 	seq_printf(m, "%-32s %12lu KB\n", "zramCompressedSize:",
 			zram_compress_size / SZ_1K);
@@ -613,13 +577,13 @@ static int mem_cgroup_name_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-static int mem_cgroup_app_grade_write(struct cgroup_subsys_state *css,
+static int mem_cgroup_app_score_write(struct cgroup_subsys_state *css,
 		struct cftype *cft, s64 val)
 {
 	struct mem_cgroup *memcg;
 	memcg_hybs_t *hybs;
 
-	if (val > MAX_APP_GRADE || val < 0)
+	if (val > MAX_APP_SCORE || val < 0)
 		return -EINVAL;
 
 	memcg = mem_cgroup_from_css(css);
@@ -630,14 +594,14 @@ static int mem_cgroup_app_grade_write(struct cgroup_subsys_state *css,
 			return -EINVAL;
 	}
 
-	if (atomic64_read(&MEMCGRP_ITEM(memcg, app_grade)) != val)
-		atomic64_set(&MEMCGRP_ITEM(memcg, app_grade), val);
-	memcg_app_grade_update(memcg);
+	if (atomic64_read(&MEMCGRP_ITEM(memcg, app_score)) != val)
+		atomic64_set(&MEMCGRP_ITEM(memcg, app_score), val);
+	memcg_app_score_update(memcg);
 
 	return 0;
 }
 
-static s64 mem_cgroup_app_grade_read(struct cgroup_subsys_state *css,
+static s64 mem_cgroup_app_score_read(struct cgroup_subsys_state *css,
 		struct cftype *cft)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
@@ -645,7 +609,7 @@ static s64 mem_cgroup_app_grade_read(struct cgroup_subsys_state *css,
 	if (!MEMCGRP_ITEM_DATA(memcg))
 		return -EPERM;
 
-	return atomic64_read(&MEMCGRP_ITEM(memcg, app_grade));
+	return atomic64_read(&MEMCGRP_ITEM(memcg, app_score));
 }
 
 int mem_cgroup_app_uid_write(struct cgroup_subsys_state *css,
@@ -679,7 +643,7 @@ static s64 mem_cgroup_app_uid_read(struct cgroup_subsys_state *css, struct cftyp
 	return atomic64_read(&MEMCGRP_ITEM(memcg, app_uid));
 }
 
-static int mem_cgroup_ufs2zram_scale_write(struct cgroup_subsys_state *css,
+static int mem_cgroup_ub_ufs2zram_ratio_write(struct cgroup_subsys_state *css,
 		struct cftype *cft, s64 val)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
@@ -690,12 +654,12 @@ static int mem_cgroup_ufs2zram_scale_write(struct cgroup_subsys_state *css,
 	if (val > MAX_RATIO || val < MIN_RATIO)
 		return -EINVAL;
 
-	atomic64_set(&MEMCGRP_ITEM(memcg, ufs2zram_scale), val);
+	atomic64_set(&MEMCGRP_ITEM(memcg, ub_ufs2zram_ratio), val);
 
 	return 0;
 }
 
-static s64 mem_cgroup_ufs2zram_scale_read(struct cgroup_subsys_state *css,
+static s64 mem_cgroup_ub_ufs2zram_ratio_read(struct cgroup_subsys_state *css,
 		struct cftype *cft)
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
@@ -703,7 +667,7 @@ static s64 mem_cgroup_ufs2zram_scale_read(struct cgroup_subsys_state *css,
 	if (!MEMCGRP_ITEM_DATA(memcg))
 		return -EPERM;
 
-	return atomic64_read(&MEMCGRP_ITEM(memcg, ufs2zram_scale));
+	return atomic64_read(&MEMCGRP_ITEM(memcg, ub_ufs2zram_ratio));
 }
 
 static int mem_cgroup_force_swapin_write(struct cgroup_subsys_state *css,
@@ -712,7 +676,7 @@ static int mem_cgroup_force_swapin_write(struct cgroup_subsys_state *css,
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 	memcg_hybs_t *hybs;
 	unsigned long size = 0;
-	const unsigned int scale = 100;
+	const unsigned int ratio = 100;
 
 	hybs = MEMCGRP_ITEM_DATA(memcg);
 	if (!hybs)
@@ -721,11 +685,11 @@ static int mem_cgroup_force_swapin_write(struct cgroup_subsys_state *css,
 #ifdef	CONFIG_HYBRIDSWAP_CORE
 	size = atomic64_read(&hybs->hybridswap_stored_size);
 #endif
-	size = atomic64_read(&hybs->ufs2zram_scale) * size / scale;
-	size = ESWAP_ALIGN_UP(size);
+	size = atomic64_read(&hybs->ub_ufs2zram_ratio) * size / ratio;
+	size = EXTENT_ALIGN_UP(size);
 
 #ifdef CONFIG_HYBRIDSWAP_CORE
-	hybridswap_batches(memcg, size, val ? true : false);
+	hybridswap_batch_out(memcg, size, val ? true : false);
 #endif
 
 	return 0;
@@ -740,7 +704,7 @@ static int mem_cgroup_force_swapout_write(struct cgroup_subsys_state *css,
 	return 0;
 }
 
-struct mem_cgroup *fetch_next_memcg(struct mem_cgroup *prev)
+struct mem_cgroup *get_next_memcg(struct mem_cgroup *prev)
 {
 	memcg_hybs_t *hybs = NULL;
 	struct mem_cgroup *memcg = NULL;
@@ -748,20 +712,20 @@ struct mem_cgroup *fetch_next_memcg(struct mem_cgroup *prev)
 	unsigned long flags;
 	bool prev_got = true;
 
-	spin_lock_irqsave(&grade_list_lock, flags);
+	spin_lock_irqsave(&score_list_lock, flags);
 find_again:
 	if (unlikely(!prev))
-		pos = &grade_head;
+		pos = &score_head;
 	else
-		pos = &MEMCGRP_ITEM(prev, grade_node);
+		pos = &MEMCGRP_ITEM(prev, score_node);
 
 	if (list_empty(pos)) /* deleted node */
 		goto unlock;
 
-	if (pos->next == &grade_head)
+	if (pos->next == &score_head)
 		goto unlock;
 
-	hybs = list_entry(pos->next, struct mem_cgroup_hybridswap, grade_node);
+	hybs = list_entry(pos->next, struct mem_cgroup_hybridswap, score_node);
 	memcg = hybs->memcg;
 	if (unlikely(!memcg))
 		goto unlock;
@@ -775,14 +739,14 @@ find_again:
 	}
 
 unlock:
-	spin_unlock_irqrestore(&grade_list_lock, flags);
+	spin_unlock_irqrestore(&score_list_lock, flags);
 	if (prev && prev_got)
 		css_put(&prev->css);
 
 	return memcg;
 }
 
-void fetch_next_memcg_break(struct mem_cgroup *memcg)
+void get_next_memcg_break(struct mem_cgroup *memcg)
 {
 	if (memcg)
 		css_put(&memcg->css);
@@ -809,8 +773,8 @@ static struct cftype mem_cgroup_hybridswap_legacy_files[] = {
 	},
 	{
 		.name = "app_score",
-		.write_s64 = mem_cgroup_app_grade_write,
-		.read_s64 = mem_cgroup_app_grade_read,
+		.write_s64 = mem_cgroup_app_score_write,
+		.read_s64 = mem_cgroup_app_score_read,
 	},
 	{
 		.name = "app_uid",
@@ -819,8 +783,8 @@ static struct cftype mem_cgroup_hybridswap_legacy_files[] = {
 	},
 	{
 		.name = "ub_ufs2zram_ratio",
-		.write_s64 = mem_cgroup_ufs2zram_scale_write,
-		.read_s64 = mem_cgroup_ufs2zram_scale_read,
+		.write_s64 = mem_cgroup_ub_ufs2zram_ratio_write,
+		.read_s64 = mem_cgroup_ub_ufs2zram_ratio_read,
 	},
 	{
 		.name = "force_swapin",
@@ -839,8 +803,8 @@ static struct cftype mem_cgroup_hybridswap_legacy_files[] = {
 	{
 		.name = "stored_wm_ratio",
 		.flags = CFTYPE_ONLY_ON_ROOT,
-		.write_s64 = mem_cgroup_stored_wm_scale_write,
-		.read_s64 = mem_cgroup_stored_wm_scale_read,
+		.write_s64 = mem_cgroup_stored_wm_ratio_write,
+		.read_s64 = mem_cgroup_stored_wm_ratio_read,
 	},
 #endif
 	{ }, /* terminate */
@@ -851,7 +815,7 @@ static int hybridswap_enable(struct zram *zram)
 	int ret = 0;
 
 	if (hybridswap_enabled) {
-		hybp(HYB_WARN, "hybridswap_enabled is true\n");
+		log_warn("enabled is true\n");
 		return ret;
 	}
 
@@ -861,11 +825,6 @@ static int hybridswap_enable(struct zram *zram)
 		return ret;
 #endif
 
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	ret = create_akcompressd_task(zram);
-	if (ret)
-		goto create_akcompressd_task_fail;
-#endif
 
 #ifdef CONFIG_HYBRIDSWAP_CORE
 	ret = hybridswap_core_enable();
@@ -879,10 +838,6 @@ static int hybridswap_enable(struct zram *zram)
 #ifdef CONFIG_HYBRIDSWAP_CORE
 hybridswap_core_enable_fail:
 #endif
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	destroy_akcompressd_task(zram);
-create_akcompressd_task_fail:
-#endif
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
 	swapd_exit();
 #endif
@@ -892,16 +847,12 @@ create_akcompressd_task_fail:
 static void hybridswap_disable(struct zram * zram)
 {
 	if (!hybridswap_enabled) {
-		hybp(HYB_WARN, "hybridswap_enabled is false\n");
+		log_warn("enabled is false\n");
 		return;
 	}
 
 #ifdef CONFIG_HYBRIDSWAP_CORE
 	hybridswap_core_disable();
-#endif
-
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	destroy_akcompressd_task(zram);
 #endif
 
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
@@ -913,9 +864,9 @@ static void hybridswap_disable(struct zram * zram)
 ssize_t hybridswap_enable_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	int len = snprintf(buf, PAGE_SIZE, "hybridswap %s out_to_eswap %s swapd %s\n",
+	int len = snprintf(buf, PAGE_SIZE, "hybridswap %s reclaim_in %s swapd %s\n",
 			hybridswap_core_enabled() ? "enable" : "disable",
-			hybridswap_out_to_eswap_enable() ? "enable" : "disable",
+			hybridswap_reclaim_in_enable() ? "enable" : "disable",
 			hybridswap_swapd_enabled() ? "enable" : "disable");
 
 	return len;
@@ -932,7 +883,7 @@ ssize_t hybridswap_enable_store(struct device *dev,
 	kbuf = strstrip((char *)buf);
 	ret = kstrtoul(kbuf, 0, &val);
 	if (unlikely(ret)) {
-		hybp(HYB_ERR, "val %s is invalid!\n", kbuf);
+		log_err("val %s is invalid!\n", kbuf);
 
 		return -EINVAL;
 	}
@@ -954,14 +905,14 @@ int __init hybridswap_pre_init(void)
 {
 	int ret;
 
-	INIT_LIST_HEAD(&grade_head);
-	log_level = HYB_INFO;
+	INIT_LIST_HEAD(&score_head);
+	log_level = HS_LOG_INFO;
 
 	hybridswap_cache = kmem_cache_create("mem_cgroup_hybridswap",
 			sizeof(struct mem_cgroup_hybridswap),
 			0, SLAB_PANIC, NULL);
 	if (!hybridswap_cache) {
-		hybp(HYB_ERR, "create hybridswap_cache failed\n");
+		log_err("create hybridswap_cache failed\n");
 		ret = -ENOMEM;
 		return ret;
 	}
@@ -969,7 +920,7 @@ int __init hybridswap_pre_init(void)
 	ret = cgroup_add_legacy_cftypes(&memory_cgrp_subsys,
 			mem_cgroup_hybridswap_legacy_files);
 	if (ret) {
-		hybp(HYB_INFO, "add mem_cgroup_hybridswap_legacy_files failed\n");
+		log_info("add mem_cgroup_hybridswap_legacy_files failed\n");
 		goto error_out;
 	}
 
@@ -977,13 +928,9 @@ int __init hybridswap_pre_init(void)
 	ret = cgroup_add_legacy_cftypes(&memory_cgrp_subsys,
 			mem_cgroup_swapd_legacy_files);
 	if (ret) {
-		hybp(HYB_INFO, "add mem_cgroup_swapd_legacy_files failed!\n");
+		log_info("add mem_cgroup_swapd_legacy_files failed!\n");
 		goto error_out;
 	}
-#endif
-
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	akcompressd_pre_init();
 #endif
 
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
@@ -993,15 +940,12 @@ int __init hybridswap_pre_init(void)
 	if (ret)
 		goto fail_out;
 
-	hybp(HYB_INFO, "hybridswap inited success!\n");
+	log_info("Hybridswap inited success!\n");
 	return 0;
 
 fail_out:
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
 	swapd_pre_deinit();
-#endif
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	akcompressd_pre_deinit();
 #endif
 error_out:
 	if (hybridswap_cache) {
@@ -1017,9 +961,6 @@ void __exit hybridswap_exit(void)
 
 #ifdef CONFIG_HYBRIDSWAP_SWAPD
 	swapd_pre_deinit();
-#endif
-#ifdef CONFIG_HYBRIDSWAP_ASYNC_COMPRESS
-	akcompressd_pre_deinit();
 #endif
 
 	if (hybridswap_cache) {

@@ -1,0 +1,6 @@
+config NFC_ST21_I2C
+	tristate "ST Microelectronics ST21NFC NFC Controller Driver"
+	depends on I2C
+	---help---
+     ST Microelectronics ST21NFC Near Field Communication controller
+     support.

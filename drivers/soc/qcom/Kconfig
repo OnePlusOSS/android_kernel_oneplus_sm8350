@@ -715,7 +715,7 @@ config MSM_PERFORMANCE_QGKI
 
 config QMP_DEBUGFS_CLIENT
 	bool "Debugfs Client to communicate with AOP using QMP protocol"
-	depends on DEBUG_FS
+#	depends on DEBUG_FS
 	help
 	  This options enables a driver which allows clients to send messages
 	  to Alway On processor using QMP transport. Users can echo a message

@@ -31,6 +31,7 @@ static bool usb_online;
 static bool usb_present;
 static bool wls_online;
 static bool probe_done;
+static bool pon_by_chg = false;
 static bool disable_usb_chg;
 
 struct oplus_chg_chip *g_oplus_chip = NULL;
@@ -303,6 +304,17 @@ static int oplus_vbus_regulator_enable(struct battery_chg_dev *bcdev, bool enabl
 	}
 
 	return rc;
+}
+
+bool oplus_get_pon_chg(void)
+{
+	return pon_by_chg;
+}
+
+void oplus_set_pon_chg(bool flag)
+{
+	pr_err("oplus_set_pon_chg set to[%d]!\n", flag);
+	pon_by_chg = flag;
 }
 
 static bool oplus_set_otg_switch_status(bool enable)
@@ -1169,8 +1181,10 @@ static void oplus_charge_status_check_work(struct work_struct *work)
 			usb_present = !!pval.intval;
 	}
 
-	if (usb_present && !chip->mmi_chg)
+	if (usb_present && !chip->mmi_chg) {
+		pr_err("mmi_chg disable charge\n");
 		smbchg_charging_disable();
+	}
 }
 
 static void battery_chg_subsys_up_work(struct work_struct *work)
@@ -1805,7 +1819,7 @@ static int smbchg_set_fastchg_current_raw(int current_ma)
 	pst = &bcdev->ocm_list[OCM_TYPE_BATTERY];
 
 	if (chip->mmi_chg == 0) {
-		pr_info("mmi_chg, set fcc to 0\n");
+		pr_err("mmi_chg, set fcc to 0\n");
 		current_ma = 0;
 	}
 
@@ -2445,7 +2459,6 @@ static int oplus_chg_hw_init(void)
 		smbchg_usb_suspend_enable();
 	}
 
-	oplus_chg_set_input_current_with_no_aicl(500);
 	smbchg_charging_enable();
 
 	return 0;
@@ -2746,7 +2759,9 @@ static bool oplus_chg_is_usb_present(void)
 		return false;
 	}
 	vbus_rising = pst->prop[prop_id];
-
+	if (true == oplus_get_pon_chg() && false == vbus_rising) {
+		oplus_set_pon_chg(false);
+	}
 	if (!vbus_rising && oplus_warp_get_fastchg_started()) {
 		if (qpnp_get_prop_charger_voltage_now() > 2000 || chip->vbatt_num == 2) {
 			pr_err("USBIN_PLUGIN_RT_STS_BIT low but fastchg started true and (chg vol > 2V or SWARP)\n");
@@ -3993,6 +4008,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 #ifdef OPLUS_CHG_OP_DEF
 	msm_vreg_ldo_enable(bcdev);
 #endif
+	pon_by_chg = oplus_chg_is_usb_present();
 	pr_err("probe success\n");
 
 	return 0;

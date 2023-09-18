@@ -34,6 +34,12 @@ static int netlink_send_message(const char *p_buffer, uint16_t length)
     struct sk_buff *p_sk_buff = NULL;
     struct nlmsghdr *p_nlmsghdr = NULL;
 
+	if(!gp_netlink_sock)
+	{
+		printk("%s invalid gp_netlink_sock\n", __func__);
+		return -1;
+	}
+
     /* 创建sk_buff 空间 */
     p_sk_buff = nlmsg_new(length, GFP_ATOMIC);
     if(NULL == p_sk_buff)

@@ -1016,11 +1016,7 @@ static void oom_kill_process(struct oom_control *oc, const char *message)
 	}
 	task_unlock(victim);
 
-	if (__ratelimit(&oom_rs)
-#ifdef CONFIG_PRIORITIZE_OOM_TASKS
-	    && oc->min_kill_adj < CONFIG_OOM_TASK_PRIORITY_ADJ_LIMIT
-#endif
-	   )
+	if (__ratelimit(&oom_rs))
 		dump_header(oc, victim);
 
 	/*

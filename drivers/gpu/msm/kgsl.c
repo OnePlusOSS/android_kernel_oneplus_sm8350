@@ -21,6 +21,11 @@
 #include <linux/security.h>
 #include <linux/sort.h>
 #include <soc/qcom/boot_stats.h>
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+#include <linux/proc_fs.h>
+#include "sys-memstat.h"
+#include "common.h"
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 
 #include "kgsl_compat.h"
 #include "kgsl_debugfs.h"
@@ -602,6 +607,93 @@ static void kgsl_context_debug_info(struct kgsl_device *device)
 {
 }
 #endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+#define DEFINE_PROC_SHOW_ATTRIBUTE(__name)                              \
+static int __name ## _open(struct inode *inode, struct file *file)      \
+{                                                                       \
+	return single_open(file, __name ## _show, PDE_DATA(inode));     \
+}                                                                       \
+                                                                        \
+static const struct file_operations __name ## _proc_ops = {             \
+	.open           = __name ## _open,                              \
+	.read           = seq_read,                                     \
+	.llseek         = seq_lseek,                                    \
+	.release        = single_release,                               \
+}
+
+static int kgsl_procinfo_show(struct seq_file *s, void *unused)
+{
+	struct kgsl_process_private *p;
+	int type = KGSL_MEM_ENTRY_KERNEL;
+
+	seq_printf(s, "%-5s %-8s %-8s %-8s\n",
+		   "pid", "size", "mapped", "comm");
+
+	read_lock(&kgsl_driver.proclist_lock);
+	list_for_each_entry(p, &kgsl_driver.process_list, list) {
+		seq_printf(s, "%-5d %-8lu %-8lu %-16s\n", pid_nr(p->pid),
+			   atomic64_read(&p->stats[type].cur) / SZ_1K,
+			   atomic64_read(&p->gpumem_mapped) / SZ_1K, p->comm);
+	}
+	read_unlock(&kgsl_driver.proclist_lock);
+
+	seq_printf(s, "\nTotal %zu kB\n",
+		   atomic_long_read(&kgsl_driver.stats.page_alloc) / SZ_1K);
+	return 0;
+}
+DEFINE_PROC_SHOW_ATTRIBUTE(kgsl_procinfo);
+
+long read_kgsl_mem_usage(enum mtrack_subtype type)
+{
+	if (type == MTRACK_GPU_TOTAL)
+		return atomic_long_read(&kgsl_driver.stats.page_alloc) >> PAGE_SHIFT;
+
+	return 0;
+}
+
+void dump_kgsl_usage_stat(bool verbose)
+{
+	struct kgsl_process_private *p;
+	int type = KGSL_MEM_ENTRY_KERNEL;
+
+	osvelte_info("======= %s\n", __func__);
+	osvelte_info("%-16s %-5s size\n", "comm", "pid");
+
+	read_lock(&kgsl_driver.proclist_lock);
+	list_for_each_entry(p, &kgsl_driver.process_list, list) {
+		osvelte_info("%-16s %-5d %zu\n", p->comm, pid_nr(p->pid),
+			     atomic64_read(&p->stats[type].cur) / SZ_1K);
+	}
+	read_unlock(&kgsl_driver.proclist_lock);
+}
+
+long read_pid_kgsl_mem_usage(enum mtrack_subtype mtype, pid_t pid)
+{
+	struct kgsl_process_private *p;
+	int type = KGSL_MEM_ENTRY_KERNEL;
+	unsigned long sz = 0;
+
+	if (unlikely(mtype != MTRACK_GPU_PROC_KERNEL))
+		return 0;
+
+	read_lock(&kgsl_driver.proclist_lock);
+	list_for_each_entry(p, &kgsl_driver.process_list, list) {
+		if (pid_nr(p->pid) == pid) {
+			sz = atomic64_read(&p->stats[type].cur) >> PAGE_SHIFT;
+			break;
+		}
+	}
+	read_unlock(&kgsl_driver.proclist_lock);
+	return sz;
+}
+
+static struct mtrack_debugger kgsl_mtrack_debugger = {
+	.mem_usage = read_kgsl_mem_usage,
+	.pid_mem_usage = read_pid_kgsl_mem_usage,
+	.dump_usage_stat = dump_kgsl_usage_stat,
+};
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 
 /**
  * kgsl_context_dump() - dump information about a draw context
@@ -1307,9 +1399,9 @@ kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr)
 	if (!private)
 		return NULL;
 
-	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr) &&
+	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr, 0) &&
 		!kgsl_mmu_gpuaddr_in_range(
-			private->pagetable->mmu->securepagetable, gpuaddr))
+			private->pagetable->mmu->securepagetable, gpuaddr, 0))
 		return NULL;
 
 	spin_lock(&private->mem_lock);
@@ -2579,15 +2671,6 @@ static int kgsl_setup_anon_useraddr(struct kgsl_pagetable *pagetable,
 }
 
 #ifdef CONFIG_DMA_SHARED_BUFFER
-static int match_file(const void *p, struct file *file, unsigned int fd)
-{
-	/*
-	 * We must return fd + 1 because iterate_fd stops searching on
-	 * non-zero return, but 0 is a valid fd.
-	 */
-	return (p == file) ? (fd + 1) : 0;
-}
-
 static void _setup_cache_mode(struct kgsl_mem_entry *entry,
 		struct vm_area_struct *vma)
 {
@@ -2624,8 +2707,6 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 	vma = find_vma(current->mm, hostptr);
 
 	if (vma && vma->vm_file) {
-		int fd;
-
 		ret = check_vma_flags(vma, entry->memdesc.flags);
 		if (ret) {
 			up_read(&current->mm->mmap_sem);
@@ -2641,15 +2722,10 @@ static int kgsl_setup_dmabuf_useraddr(struct kgsl_device *device,
 			return -EFAULT;
 		}
 
-		/* Look for the fd that matches this the vma file */
-		fd = iterate_fd(current->files, 0, match_file, vma->vm_file);
-		if (fd != 0) {
-			dmabuf = dma_buf_get(fd - 1);
-			if (IS_ERR(dmabuf)) {
-				up_read(&current->mm->mmap_sem);
-				return PTR_ERR(dmabuf);
-			}
-		}
+		/* Take a refcount because dma_buf_put() decrements the refcount */
+		get_file(vma->vm_file);
+
+		dmabuf = vma->vm_file->private_data;
 	}
 
 	if (!dmabuf) {
@@ -4172,11 +4248,8 @@ kgsl_get_unmapped_area(struct file *file, unsigned long addr,
 					       pid_nr(private->pid), addr, pgoff, len,
 					       (int) val);
 	}
-#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
-	update_oom_pid_and_time(len, val, flags);
-#endif
 
-	kgsl_mem_entry_put(entry);
+        kgsl_mem_entry_put(entry);
 	return val;
 }
 
@@ -4625,6 +4698,10 @@ void kgsl_core_exit(void)
 
 	unregister_chrdev_region(kgsl_driver.major,
 		ARRAY_SIZE(kgsl_driver.devp));
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	unregister_mtrack_debugger(MTRACK_GPU, &kgsl_mtrack_debugger);
+	unregister_mtrack_procfs(MTRACK_GPU, "procinfo");
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 }
 
 int __init kgsl_core_init(void)
@@ -4738,6 +4815,11 @@ int __init kgsl_core_init(void)
 
 	place_marker("M - DRIVER KGSL Ready");
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	register_mtrack_debugger(MTRACK_GPU, &kgsl_mtrack_debugger);
+	register_mtrack_procfs(MTRACK_GPU, "procinfo", 0444,
+			       &kgsl_procinfo_proc_ops, NULL);
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 	return 0;
 
 err:

@@ -13,6 +13,8 @@
 #define BATT_NON_TEMP			(-400)
 #define BATT_TEMP_HYST			20
 #define HEARTBEAT_INTERVAL_MS		5000
+#define CHG_CMD_DATA_LEN		256
+#define CHG_CMD_TIME_MS			3000
 
 enum oplus_chg_temp_region {
 	BATT_TEMP_COLD = 0,
@@ -63,6 +65,27 @@ enum oplus_chg_charge_mode {
 	CHG_MODE_MAX,
 };
 
+struct oplus_chg_cmd {
+	unsigned int cmd;
+	unsigned int data_size;
+	unsigned char data_buf[CHG_CMD_DATA_LEN];
+};
+
+enum oplus_chg_cmd_type {
+	CMD_WLS_THIRD_PART_AUTH,
+	CMD_UPDATE_UI_SOH,
+	CMD_INIT_UI_SOH,
+};
+
+enum oplus_chg_cmd_error{
+	CMD_ACK_OK,
+	CMD_ERROR_CHIP_NULL,
+	CMD_ERROR_DATA_NULL,
+	CMD_ERROR_DATA_INVALID,
+	CMD_ERROR_HIDL_NOT_READY,
+	CMD_ERROR_TIME_OUT,
+};
+
 struct oplus_chg_comm_config {
 	uint8_t check_batt_full_by_sw;
 
@@ -110,5 +133,13 @@ void oplus_chg_comm_update_config(struct oplus_chg_mod *comm_ocm);
 bool oplus_chg_comm_batt_vol_over_cl_thr(struct oplus_chg_mod *comm_ocm);
 int oplus_chg_comm_get_batt_health(struct oplus_chg_mod *comm_ocm);
 int oplus_chg_comm_get_batt_status(struct oplus_chg_mod *comm_ocm);
-
+int oplus_chg_comm_reg_mutual_notifier(struct notifier_block *nb);
+int oplus_chg_comm_unreg_mutual_notifier(struct notifier_block *nb);
+ssize_t oplus_chg_comm_send_mutual_cmd(
+			struct oplus_chg_mod *comm_ocm, char *buf);
+ssize_t oplus_chg_comm_response_mutual_cmd(
+			struct oplus_chg_mod *comm_ocm, const char *buf, size_t count);
+int oplus_chg_common_set_mutual_cmd(
+			struct oplus_chg_mod *comm_ocm,
+			u32 cmd, u32 data_size, const void *data_buf);
 #endif

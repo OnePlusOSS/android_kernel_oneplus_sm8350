@@ -51,31 +51,30 @@ bool is_support_chip(chip_type chip)
 	}
 
 	switch(chip) {
-		case NQ330:
-			target_chipset = "NQ330";
-			break;
-		case SN100T:
-			target_chipset = "SN100T";
-			break;
-		case SN100F:
-			target_chipset = "SN100F";
-			break;
-		case ST21H:
-			target_chipset = "ST21H";
-			break;
-		case ST54H:
-			target_chipset = "ST54H";
-			break;
-		case PN557:
-			target_chipset = "PN557";
-			break;
-		default:
-			target_chipset = "UNKNOWN";
-			break;
+	case NQ330:
+		target_chipset = "NQ330";
+		break;
+	case SN100T:
+		target_chipset = "SN100T|SN110T";
+		break;
+	case SN100F:
+		target_chipset = "SN100F";
+		break;
+	case ST21H:
+		target_chipset = "ST21H|ST54H";
+		break;
+	case ST54H:
+		target_chipset = "ST54H";
+		break;
+	case PN557:
+		target_chipset = "PN557";
+		break;
+	default:
+		target_chipset = "UNKNOWN";
+		break;
 	}
 
-	if (strcmp(target_chipset, current_chipset) == 0)
-	{
+	if (strstr(target_chipset, current_chipset) != NULL) {
 		ret = true;
 	}
 

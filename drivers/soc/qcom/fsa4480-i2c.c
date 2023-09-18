@@ -31,6 +31,7 @@
 #ifdef OPLUS_ARCH_EXTENDS
 #define HL5280_DEVICE_REG_VALUE 0x49
 #define DIO4480_DEVICE_REG_VALUE 0xF1
+#define INVALID_DEVICE_REG_VALUE 0x00
 
 #define FSA4480_DEVICE_ID       0x00
 #endif /* OPLUS_ARCH_EXTENDS */
@@ -74,6 +75,7 @@ enum switch_vendor {
     HL5280,
     DIO4480
 };
+static int chipid_read_retry = 0;
 #endif /* OPLUS_ARCH_EXTENDS */
 
 struct fsa4480_priv {
@@ -767,6 +769,12 @@ static int fsa4480_probe(struct i2c_client *i2c,
 	} else if (reg_value == DIO4480_DEVICE_REG_VALUE) {
 		dev_info(fsa_priv->dev, "%s: switch chip is DIO4480\n", __func__);
 		fsa_priv->vendor = DIO4480;
+	} else if (reg_value == INVALID_DEVICE_REG_VALUE && chipid_read_retry < 5) {
+		dev_info(fsa_priv->dev, "%s: incorrect chip ID [0x%x]\n", __func__, reg_value);
+		chipid_read_retry++;
+		usleep_range(1*1000, 1*1005);
+		rc = -EPROBE_DEFER;
+		goto err_data;
 	} else {
 		dev_info(fsa_priv->dev, "%s: switch chip is FSA4480\n", __func__);
 		fsa_priv->vendor = FSA4480;

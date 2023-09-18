@@ -1095,7 +1095,7 @@ static int __send_signal(int sig, struct kernel_siginfo *info, struct task_struc
         if(1) {
                 /*add the SIGKILL print log for some debug*/
                 if((sig == SIGHUP || sig == 33 || sig == SIGKILL || sig == SIGSTOP || sig == SIGABRT || sig == SIGTERM || sig == SIGCONT) && is_key_process(t)) {
-                        printk("Some other process %d:%s want to send sig:%d to pid:%d tgid:%d comm:%s\n", current->pid, current->comm,sig, t->pid, t->tgid, t->comm);
+                       printk("Some other process %d:%s parent %d:%s want to send sig:%d to pid:%d tgid:%d comm:%s\n", current->pid, current->comm, current->real_parent->pid, current->real_parent->comm, sig, t->pid, t->tgid, t->comm);
                 }
         }
         #endif

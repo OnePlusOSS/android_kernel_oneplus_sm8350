@@ -150,5 +150,6 @@ obj-$(CONFIG_REGULATOR_REFGEN) += refgen.o
 obj-$(CONFIG_REGULATOR_RPMH) += rpmh-regulator.o
 obj-$(CONFIG_REGULATOR_STUB) += stub-regulator.o
 obj-$(CONFIG_VIRTIO_REGULATOR) += virtio_regulator.o
+obj-$(CONFIG_REGULATOR_OPLUS_WL2868C) +=  oplus_camera_wl2868c.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
