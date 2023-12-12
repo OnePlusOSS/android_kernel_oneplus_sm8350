@@ -10,12 +10,16 @@
 
 #include <linux/sched/sysctl.h>
 #include <linux/sched/core_ctl.h>
+#include <linux/cpumask.h>
+#include "../sched.h"
 
 #define EXITING_TASK_MARKER	0xdeaddead
 
 extern unsigned int walt_rotation_enabled;
 extern int __read_mostly num_sched_clusters;
 extern cpumask_t __read_mostly **cpu_array;
+struct walt_sched_stats;
+struct rq;
 extern void
 walt_update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime);

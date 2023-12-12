@@ -73,6 +73,13 @@
 
 #include <trace/events/sched.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_IM
+#include <linux/im/im.h>
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+#include "../include/linux/tuning/frame_group.h"
+#endif
+
 int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
@@ -454,6 +461,9 @@ static int prepare_arg_pages(struct linux_binprm *bprm,
 	unsigned long limit, ptr_size;
 
 	bprm->argc = count(argv, MAX_ARG_STRINGS);
+	if (bprm->argc == 0)
+		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
+			     current->comm, bprm->filename);
 	if (bprm->argc < 0)
 		return bprm->argc;
 
@@ -482,8 +492,14 @@ static int prepare_arg_pages(struct linux_binprm *bprm,
 	 * the stack. They aren't stored until much later when we can't
 	 * signal to the parent that the child has run out of stack space.
 	 * Instead, calculate it here so it's possible to fail gracefully.
+	 *
+	 * In the case of argc = 0, make sure there is space for adding a
+	 * empty string (which will bump argc to 1), to ensure confused
+	 * userspace programs don't start processing from argv[1], thinking
+	 * argc can never be 0, to keep them from walking envp by accident.
+	 * See do_execveat_common().
 	 */
-	ptr_size = (bprm->argc + bprm->envc) * sizeof(void *);
+	ptr_size = (max(bprm->argc, 1) + bprm->envc) * sizeof(void *);
 	if (limit <= ptr_size)
 		return -E2BIG;
 	limit -= ptr_size;
@@ -988,7 +1004,7 @@ int kernel_read_file_from_fd(int fd, void **buf, loff_t *size, loff_t max_size,
 	struct fd f = fdget(fd);
 	int ret = -EBADF;
 
-	if (!f.file)
+	if (!f.file || !(f.file->f_mode & FMODE_READ))
 		goto out;
 
 	ret = kernel_read_file(f.file, buf, size, max_size, id);
@@ -1252,12 +1268,30 @@ EXPORT_SYMBOL_GPL(__get_task_comm);
  * These functions flushes out all traces of the currently running executable
  * so that a new one can be started
  */
+#ifdef CONFIG_OPLUS_FEATURE_SCHED_ASSIST
+extern void sched_assist_target_comm(struct task_struct *task);
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
 
+#ifdef CONFIG_LOCKING_PROTECT
+extern void sched_locking_target_comm(struct task_struct *p);
+#endif
 void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 {
 	task_lock(tsk);
 	trace_task_rename(tsk, buf);
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+	task_rename_hook(NULL, tsk, buf);
+#endif
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
+#ifdef CONFIG_OPLUS_FEATURE_SCHED_ASSIST
+	sched_assist_target_comm(tsk);
+#endif
+#ifdef CONFIG_OPLUS_FEATURE_IM
+	im_wmi(tsk);
+#endif
+#ifdef CONFIG_LOCKING_PROTECT
+	sched_locking_target_comm(tsk);
+#endif
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
 }
@@ -1721,10 +1755,16 @@ static int exec_binprm(struct linux_binprm *bprm)
 		ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
 		proc_exec_connector(current);
 	}
+#ifdef CONFIG_OPLUS_SF_BOOST
+	if (strcmp(current->comm, "surfaceflinger") == 0)
+		current->compensate_need = 2;
+#endif
 
 	return ret;
 }
-
+#ifdef CONFIG_OPLUS_KERNEL_SECURE_GUARD
+extern int oplus_exec_block(struct file *file);
+#endif /* CONFIG_OPLUS_KERNEL_SECURE_GUARD */
 /*
  * sys_execve() executes a new program.
  */
@@ -1778,7 +1818,13 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out_unmark;
-
+#ifdef CONFIG_OPLUS_KERNEL_SECURE_GUARD
+    retval = oplus_exec_block(file);
+	if (retval){
+		fput(file);
+		goto out_unmark;
+	}
+#endif /* CONFIG_OPLUS_KERNEL_SECURE_GUARD */
 	sched_exec();
 
 	bprm->file = file;
@@ -1831,6 +1877,20 @@ static int __do_execve_file(int fd, struct filename *filename,
 	retval = copy_strings(bprm->argc, argv, bprm);
 	if (retval < 0)
 		goto out;
+
+	/*
+	 * When argv is empty, add an empty string ("") as argv[0] to
+	 * ensure confused userspace programs that start processing
+	 * from argv[1] won't end up walking envp. See also
+	 * bprm_stack_limits().
+	 */
+	if (bprm->argc == 0) {
+		const char *argv[] = { "", NULL };
+		retval = copy_strings_kernel(1, argv, bprm);
+		if (retval < 0)
+			goto out;
+		bprm->argc = 1;
+	}
 
 	retval = exec_binprm(bprm);
 	if (retval < 0)

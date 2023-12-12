@@ -4,6 +4,7 @@
 
 #include <linux/sched/coredump.h>
 #include <linux/mm_types.h>
+#include <asm/pgtable.h>
 
 #include <linux/fs.h> /* only for vma_is_dax() */
 
@@ -91,21 +92,35 @@ extern bool is_vma_temporary_stack(struct vm_area_struct *vma);
 
 extern unsigned long transparent_hugepage_flags;
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+static inline bool transhuge_vma_enabled(struct vm_area_struct *vma,
+					unsigned long vm_flags)
+{
+	/* Explicitly disabled through madvise. */
+	if ((vm_flags & VM_NOHUGEPAGE) ||
+			test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags))
+		return false;
+	return true;
+}
+#endif
 /*
  * to be used on vmas which are known to support THP.
  * Use transparent_hugepage_enabled otherwise
  */
 static inline bool __transparent_hugepage_enabled(struct vm_area_struct *vma)
 {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (!transhuge_vma_enabled(vma, vma->vm_flags))
+		return false;
+#else
 	if (vma->vm_flags & VM_NOHUGEPAGE)
 		return false;
+#endif
 
 	if (is_vma_temporary_stack(vma))
 		return false;
 
-	if (test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags))
-		return false;
-
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	if (transparent_hugepage_flags & (1 << TRANSPARENT_HUGEPAGE_FLAG))
 		return true;
 	/*
@@ -122,6 +137,13 @@ static inline bool __transparent_hugepage_enabled(struct vm_area_struct *vma)
 		return !!(vma->vm_flags & VM_HUGEPAGE);
 
 	return false;
+#else
+	/* we don't support dax 64KB hugepage yet */
+	if (vma_is_dax(vma))
+		return false;
+
+	return true;
+#endif
 }
 
 bool transparent_hugepage_enabled(struct vm_area_struct *vma);
@@ -146,6 +168,7 @@ static inline bool transhuge_vma_suitable(struct vm_area_struct *vma,
 #define transparent_hugepage_use_zero_page()				\
 	(transparent_hugepage_flags &					\
 	 (1<<TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG))
+
 #ifdef CONFIG_DEBUG_VM
 #define transparent_hugepage_debug_cow()				\
 	(transparent_hugepage_flags &					\
@@ -160,6 +183,7 @@ extern unsigned long thp_get_unmapped_area(struct file *filp,
 
 extern void prep_transhuge_page(struct page *page);
 extern void free_transhuge_page(struct page *page);
+extern bool is_transparent_hugepage(struct page *page);
 
 bool can_split_huge_page(struct page *page, int *pextra_pins);
 int split_huge_page_to_list(struct page *page, struct list_head *list);
@@ -240,14 +264,14 @@ static inline unsigned int thp_order(struct page *page)
 {
 	VM_BUG_ON_PGFLAGS(PageTail(page), page);
 	if (PageHead(page))
-		return HPAGE_PMD_ORDER;
+		return page[1].compound_order;
 	return 0;
 }
 
 static inline int hpage_nr_pages(struct page *page)
 {
 	if (unlikely(PageTransHuge(page)))
-		return HPAGE_PMD_NR;
+		return compound_nr(page);
 	return 1;
 }
 
@@ -281,10 +305,31 @@ void mm_put_huge_zero_page(struct mm_struct *mm);
 
 #define mk_huge_pmd(page, prot) pmd_mkhuge(mk_pmd(page, prot))
 
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 static inline bool thp_migration_supported(void)
 {
 	return IS_ENABLED(CONFIG_ARCH_ENABLE_THP_MIGRATION);
 }
+
+static inline void vma_adjust_cont_pte_trans_huge(struct vm_area_struct *vma,
+				   unsigned long start,
+				   unsigned long end,
+				   long adjust_next)
+{
+
+}
+#else
+static inline bool thp_migration_supported(void)
+{
+	/* we don't support migration of cont_pte hugepage */
+	return false;
+}
+
+void vma_adjust_cont_pte_trans_huge(struct vm_area_struct *vma,
+				   unsigned long start,
+				   unsigned long end,
+				   long adjust_next);
+#endif
 
 static inline struct list_head *page_deferred_list(struct page *page)
 {
@@ -330,6 +375,10 @@ static inline bool transhuge_vma_suitable(struct vm_area_struct *vma,
 
 static inline void prep_transhuge_page(struct page *page) {}
 static inline void free_transhuge_page(struct page *page) {}
+static inline bool is_transparent_hugepage(struct page *page)
+{
+	return false;
+}
 
 #define transparent_hugepage_flags 0UL
 
@@ -414,6 +463,7 @@ static inline void mm_put_huge_zero_page(struct mm_struct *mm)
 {
 	return;
 }
+struct page *mm_get_huge_zero_page(struct mm_struct *mm);
 
 static inline struct page *follow_devmap_pmd(struct vm_area_struct *vma,
 	unsigned long addr, pmd_t *pmd, int flags, struct dev_pagemap **pgmap)
@@ -427,10 +477,31 @@ static inline struct page *follow_devmap_pud(struct vm_area_struct *vma,
 	return NULL;
 }
 
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 static inline bool thp_migration_supported(void)
 {
 	return false;
 }
+static inline void vma_adjust_cont_pte_trans_huge(struct vm_area_struct *vma,
+				   unsigned long start,
+				   unsigned long end,
+				   long adjust_next)
+{
+
+}
+#else
+static inline bool thp_migration_supported(void)
+{
+	/* we don't support migration of cont_pte hugepage */
+	return false;
+}
+
+void vma_adjust_cont_pte_trans_huge(struct vm_area_struct *vma,
+				   unsigned long start,
+				   unsigned long end,
+				   long adjust_next);
+#endif
+
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 #endif /* _LINUX_HUGE_MM_H */

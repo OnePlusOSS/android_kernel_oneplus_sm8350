@@ -22,6 +22,9 @@
 #include <linux/smp.h>
 #include <linux/sched.h>
 #include <trace/hooks/topology.h>
+#if defined(CONFIG_OPLUS_CPU_FREQ_GOV_UAG) && defined(CONFIG_UAG_NONLINEAR_FREQ_CTL)
+#include <../kernel/uad/nonlinear_opp_cap.h>
+#endif
 
 DEFINE_PER_CPU(unsigned long, freq_scale) = SCHED_CAPACITY_SCALE;
 DEFINE_PER_CPU(unsigned long, max_cpu_freq);
@@ -36,6 +39,9 @@ void arch_set_freq_scale(struct cpumask *cpus, unsigned long cur_freq,
 	scale = (cur_freq << SCHED_CAPACITY_SHIFT) / max_freq;
 
 	trace_android_vh_arch_set_freq_scale(cpus, cur_freq, max_freq, &scale);
+#if defined(CONFIG_OPLUS_CPU_FREQ_GOV_UAG) && defined(CONFIG_UAG_NONLINEAR_FREQ_CTL)
+	nlopp_arch_set_freq_scale(NULL, cpus, cur_freq, max_freq, &scale);
+#endif
 
 	for_each_cpu(i, cpus){
 		per_cpu(freq_scale, i) = scale;
@@ -59,7 +65,9 @@ void arch_set_max_freq_scale(struct cpumask *cpus,
 	scale = (policy_max_freq << SCHED_CAPACITY_SHIFT) / max_freq;
 
 	trace_android_vh_arch_set_freq_scale(cpus, policy_max_freq, max_freq, &scale);
-
+#if defined(CONFIG_OPLUS_CPU_FREQ_GOV_UAG) && defined(CONFIG_UAG_NONLINEAR_FREQ_CTL)
+	nlopp_arch_set_freq_scale(NULL, cpus, policy_max_freq, max_freq, &scale);
+#endif
 	for_each_cpu(cpu, cpus)
 		per_cpu(max_freq_scale, cpu) = scale;
 }
@@ -77,7 +85,7 @@ static ssize_t cpu_capacity_show(struct device *dev,
 {
 	struct cpu *cpu = container_of(dev, struct cpu, dev);
 
-	return sprintf(buf, "%lu\n", topology_get_cpu_scale(cpu->dev.id));
+	return sysfs_emit(buf, "%lu\n", topology_get_cpu_scale(cpu->dev.id));
 }
 
 static void update_topology_flags_workfn(struct work_struct *work);
@@ -278,6 +286,16 @@ core_initcall(free_raw_capacity);
 #endif
 
 #if defined(CONFIG_ARM64) || defined(CONFIG_RISCV)
+/*
+ * This function returns the logic cpu number of the node.
+ * There are basically three kinds of return values:
+ * (1) logic cpu number which is > 0.
+ * (2) -ENODEV when the device tree(DT) node is valid and found in the DT but
+ * there is no possible logical CPU in the kernel to match. This happens
+ * when CONFIG_NR_CPUS is configure to be smaller than the number of
+ * CPU nodes in DT. We need to just ignore this case.
+ * (3) -1 if the node does not exist in the device tree
+ */
 static int __init get_cpu_for_node(struct device_node *node)
 {
 	struct device_node *cpu_node;
@@ -291,7 +309,8 @@ static int __init get_cpu_for_node(struct device_node *node)
 	if (cpu >= 0)
 		topology_parse_cpu_capacity(cpu_node, cpu);
 	else
-		pr_crit("Unable to find CPU node for %pOF\n", cpu_node);
+		pr_info("CPU node for %pOF exist but the possible cpu range is :%*pbl\n",
+			cpu_node, cpumask_pr_args(cpu_possible_mask));
 
 	of_node_put(cpu_node);
 	return cpu;
@@ -316,9 +335,8 @@ static int __init parse_core(struct device_node *core, int package_id,
 				cpu_topology[cpu].package_id = package_id;
 				cpu_topology[cpu].core_id = core_id;
 				cpu_topology[cpu].thread_id = i;
-			} else {
-				pr_err("%pOF: Can't get CPU for thread\n",
-				       t);
+			} else if (cpu != -ENODEV) {
+				pr_err("%pOF: Can't get CPU for thread\n", t);
 				of_node_put(t);
 				return -EINVAL;
 			}
@@ -337,7 +355,7 @@ static int __init parse_core(struct device_node *core, int package_id,
 
 		cpu_topology[cpu].package_id = package_id;
 		cpu_topology[cpu].core_id = core_id;
-	} else if (leaf) {
+	} else if (leaf && cpu != -ENODEV) {
 		pr_err("%pOF: Can't get CPU for leaf core\n", core);
 		return -EINVAL;
 	}
@@ -487,7 +505,7 @@ void update_siblings_masks(unsigned int cpuid)
 	for_each_online_cpu(cpu) {
 		cpu_topo = &cpu_topology[cpu];
 
-		if (cpuid_topo->llc_id == cpu_topo->llc_id) {
+		if (cpu_topo->llc_id != -1 && cpuid_topo->llc_id == cpu_topo->llc_id) {
 			cpumask_set_cpu(cpu, &cpuid_topo->llc_sibling);
 			cpumask_set_cpu(cpuid, &cpu_topo->llc_sibling);
 		}
@@ -567,5 +585,24 @@ void __init init_cpu_topology(void)
 		reset_cpu_topology();
 	else if (of_have_populated_dt() && parse_dt_topology())
 		reset_cpu_topology();
+}
+
+void store_cpu_topology(unsigned int cpuid)
+{
+	struct cpu_topology *cpuid_topo = &cpu_topology[cpuid];
+
+	if (cpuid_topo->package_id != -1)
+		goto topology_populated;
+
+	cpuid_topo->thread_id = -1;
+	cpuid_topo->core_id = cpuid;
+	cpuid_topo->package_id = cpu_to_node(cpuid);
+
+	pr_debug("CPU%u: package %d core %d thread %d\n",
+		 cpuid, cpuid_topo->package_id, cpuid_topo->core_id,
+		 cpuid_topo->thread_id);
+
+topology_populated:
+	update_siblings_masks(cpuid);
 }
 #endif

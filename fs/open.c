@@ -733,6 +733,18 @@ SYSCALL_DEFINE3(fchown, unsigned int, fd, uid_t, user, gid_t, group)
 	return ksys_fchown(fd, user, group);
 }
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+extern bool shmem_mapping(struct address_space *mapping);
+static inline bool shmem_file_dup(struct file *file)
+{
+	if (!IS_ENABLED(CONFIG_SHMEM))
+		return false;
+	if (!file || !file->f_mapping)
+		return false;
+	return shmem_mapping(file->f_mapping);
+}
+#endif
+
 static int do_dentry_open(struct file *f,
 			  struct inode *inode,
 			  int (*open)(struct inode *, struct file *))
@@ -823,9 +835,73 @@ static int do_dentry_open(struct file *f,
 	 * XXX: Huge page cache doesn't support writing yet. Drop all page
 	 * cache for this file before processing writes.
 	 */
-	if ((f->f_mode & FMODE_WRITE) && filemap_nr_thps(inode->i_mapping))
-		truncate_pagecache(inode, 0);
+	if (f->f_mode & FMODE_WRITE) {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		CHP_BUG_ON(inode->i_sb->s_magic == EROFS_SUPER_MAGIC_V1 && inode->may_cont_pte);
+#endif
+		if (filemap_nr_thps(inode->i_mapping))
+			truncate_pagecache(inode, 0);
+	} else {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		bool fs_supported = false;
 
+#if CONFIG_CONT_PTE_FILE_HUGEPAGE_DISABLE
+		return 0;
+#endif
+		fs_supported = handle_chp_fs_supported(inode);
+
+		if (!fs_supported)
+			return 0;
+
+		if (!S_ISREG(inode->i_mode))
+			return 0;
+		if (shmem_file_dup(f))
+			return 0;
+		if (inode->i_size < HPAGE_CONT_PTE_SIZE)
+			return 0;
+
+		inode_lock(inode);
+		if (!inode->may_cont_pte) {
+			int hugepage = 0;
+			const char *suffix;
+
+			/* executable files can be hugepages */
+			if (execute_ok(inode)) {
+				hugepage = NORMAL_HUGE;
+				goto done;
+			}
+
+			if (!f->f_path.dentry)
+				goto done;
+			suffix = strrchr(f->f_path.dentry->d_name.name, '.');
+			if (!suffix)
+				goto done;
+
+			if (!strcmp(suffix, ".so") || !strcmp(suffix, ".odex") ||
+				!strcmp(suffix, ".ttf") || !strcmp(suffix, ".ttc") ||
+				!strcmp(suffix, ".otf") ||
+				!strcmp(f->f_path.dentry->d_name.name, "OplusLauncher.apk") ||
+			    !strcmp(f->f_path.dentry->d_name.name, "OplusExSystemService.apk") ||
+			    !strcmp(f->f_path.dentry->d_name.name, "SystemUI.apk") ||
+			    !strcmp(f->f_path.dentry->d_name.name, "framework-res.apk") ||
+			    !strcmp(f->f_path.dentry->d_name.name, "oplus-framework-res.apk") ||
+			    !strcmp(f->f_path.dentry->d_name.name, "OplusAppPlatform.apk") ||
+				(supported_oat_hugepage && !strcmp(f->f_path.dentry->d_name.name, "boot-framework.oat"))) {
+				hugepage = NORMAL_HUGE;
+				goto done;
+			}
+			if (!strcmp(suffix, ".jar"))
+				hugepage = JAR_HUGE;
+done:
+			if (hugepage) {
+				init_cont_endio_spinlock(inode);
+				smp_wmb();
+				inode->may_cont_pte = hugepage;
+			}
+		}
+		inode_unlock(inode);
+#endif
+	}
 	return 0;
 
 cleanup_all:

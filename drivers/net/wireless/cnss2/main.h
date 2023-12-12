@@ -31,7 +31,6 @@
 
 #define MAX_NO_OF_MAC_ADDR		4
 #define QMI_WLFW_MAX_TIMESTAMP_LEN	32
-#define QMI_WLFW_MAX_NUM_MEM_SEG	32
 #define QMI_WLFW_MAX_BUILD_ID_LEN	128
 #define CNSS_RDDM_TIMEOUT_MS		20000
 #define RECOVERY_TIMEOUT		60000
@@ -456,10 +455,10 @@ struct cnss_plat_data {
 	char fw_build_id[QMI_WLFW_MAX_BUILD_ID_LEN + 1];
 	u32 otp_version;
 	u32 fw_mem_seg_len;
-	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
+	struct cnss_fw_mem fw_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	struct cnss_fw_mem m3_mem;
 	u32 qdss_mem_seg_len;
-	struct cnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG];
+	struct cnss_fw_mem qdss_mem[QMI_WLFW_MAX_NUM_MEM_SEG_V01];
 	u32 *qdss_reg;
 	struct cnss_pin_connect_result pin_result;
 	struct dentry *root_dentry;
@@ -506,7 +505,26 @@ struct cnss_plat_data {
 	struct device_node *dev_node;
 	u64 feature_list;
 	bool adsp_pc_enabled;
+
+    #ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+    //Add for wifi switch monitor
+	unsigned long loadBdfState;
+	unsigned long loadRegdbState;
+    #endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 };
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+//Add for wifi switch monitor
+enum cnss_load_state {
+	CNSS_LOAD_BDF_FAIL = 1,
+	CNSS_LOAD_BDF_SUCCESS,
+	CNSS_LOAD_REGDB_FAIL,
+	CNSS_LOAD_REGDB_SUCCESS,
+	CNSS_PROBE_FAIL,
+	CNSS_PROBE_SUCCESS,
+};
+
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
 
 #ifdef CONFIG_ARCH_QCOM
 static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)

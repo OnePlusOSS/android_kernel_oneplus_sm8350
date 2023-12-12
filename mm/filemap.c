@@ -39,6 +39,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/rmap.h>
 #include <linux/delayacct.h>
+#include <linux/delay.h>
 #include <linux/psi.h>
 #include <linux/ramfs.h>
 #include "internal.h"
@@ -52,7 +53,9 @@
 #include <linux/buffer_head.h> /* for try_to_free_buffers */
 
 #include <asm/mman.h>
-
+#ifdef CONFIG_OPLUS_DYNAMIC_READAHEAD
+#include "dynamic_readhead.h"
+#endif /* CONFIG_OPLUS_DYNAMIC_READAHEAD */
 int want_old_faultaround_pte = 1;
 
 /*
@@ -134,14 +137,18 @@ static void page_cache_delete(struct address_space *mapping,
 
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(PageTail(page), page);
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	VM_BUG_ON_PAGE(nr != 1 && shadow && !PageCont(page), page);
+#else
 	VM_BUG_ON_PAGE(nr != 1 && shadow, page);
+#endif
 
 	xas_store(&xas, shadow);
 	xas_init_marks(&xas);
 
 	page->mapping = NULL;
 	/* Leave page->index set: truncation lookup relies upon it */
-
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	if (shadow) {
 		mapping->nrexceptional += nr;
 		/*
@@ -152,6 +159,8 @@ static void page_cache_delete(struct address_space *mapping,
 		 */
 		smp_wmb();
 	}
+#endif
+	/* Leave page->index set: truncation lookup relies upon it */
 	mapping->nrpages -= nr;
 }
 
@@ -263,7 +272,11 @@ static void page_cache_free_page(struct address_space *mapping,
 		freepage(page);
 
 	if (PageTransHuge(page) && !PageHuge(page)) {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		page_ref_sub(page, thp_nr_pages(page));
+#else
 		page_ref_sub(page, HPAGE_PMD_NR);
+#endif
 		VM_BUG_ON_PAGE(page_count(page) <= 0, page);
 	} else {
 		put_page(page);
@@ -339,6 +352,16 @@ static void page_cache_delete_batch(struct address_space *mapping,
 
 		if (page->index == xas.xa_index)
 			page->mapping = NULL;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (ContPteHugePageHead(page)) {
+			/* we are using multi-index entries for cont_pte hugepages */
+			if (page->index == xas.xa_index)
+				i++;
+			xas_store(&xas, NULL);
+			total_pages += HPAGE_CONT_PTE_NR;
+			continue;
+		}
+#endif
 		/* Leave page->index set: truncation lookup relies on it */
 
 		/*
@@ -641,9 +664,10 @@ EXPORT_SYMBOL(filemap_fdatawait_keep_errors);
 /* Returns true if writeback might be needed or already in progress. */
 static bool mapping_needs_writeback(struct address_space *mapping)
 {
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	if (dax_mapping(mapping))
 		return mapping->nrexceptional;
-
+#endif
 	return mapping->nrpages;
 }
 
@@ -918,9 +942,10 @@ noinline int __add_to_page_cache_locked(struct page *page,
 		xas_store(&xas, page);
 		if (xas_error(&xas))
 			goto unlock;
-
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 		if (old)
 			mapping->nrexceptional--;
+#endif
 		mapping->nrpages++;
 
 		/* hugetlb pages do not participate in page cache accounting */
@@ -1240,6 +1265,18 @@ static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 			delayacct_thrashing_end();
 		psi_memstall_leave(&pflags);
 	}
+	/* For debugging, detect those getting subpages' lock */
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (ContPteHugePage(page) && !PageHead(page) && (behavior != DROP)) {
+		pr_err("@@@FIXME: %s Wait on THP subpage page:%pK pfn:%lx flags:%lx ref:%d index:%lx process:%s %d compound_head:%lx %pK cma:%d\n",
+				__func__, page, page_to_pfn(page), page->flags, atomic_read(&page->_refcount),
+				page->index, current->comm, current->pid, page->compound_head, compound_head(page),
+				within_cont_pte_cma(page_to_pfn(page)));
+		dump_page(page, "THP subpage");
+		dump_page(compound_head(page), "THP subpage head");
+		CHP_BUG_ON(1);
+	}
+#endif
 
 	/*
 	 * A signal could leave PageWaiters set. Clearing it here if
@@ -1347,10 +1384,48 @@ void unlock_page(struct page *page)
 	BUILD_BUG_ON(PG_waiters != 7);
 	page = compound_head(page);
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
+#if defined(CONFIG_CONT_PTE_HUGEPAGE) && defined(CONFIG_CONT_PTE_HUGEPAGE_DEBUG_VERBOSE)
+	if (!PageLocked(page)) {
+		pr_err("@@@Fixme: unlocking an unlocked page %s page:%lx flags:%lx pfn:%lx\n",
+			__func__, page, page->flags, page_to_pfn(page));
+		WARN_ON(1);
+	}
+	if (PageCont(page) && !PageCompound(page)) {
+		pr_err("@@@Fixme: unlocking page transforming to THP %s page:%lx flags:%lx pfn:%lx\n",
+			__func__, page, page->flags, page_to_pfn(page));
+		WARN_ON(1);
+	}
+#endif
+
 	if (clear_bit_unlock_is_negative_byte(PG_locked, &page->flags))
 		wake_up_page_bit(page, PG_locked);
 }
 EXPORT_SYMBOL(unlock_page);
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+void unlock_nr_pages(struct page **page, int nr)
+{
+	int i;
+
+	BUILD_BUG_ON(PG_waiters != 7);
+
+	for (i = 0; i < nr; i++) {
+		VM_BUG_ON_PAGE(!PageLocked(page[i]), page[i]);
+
+#if defined(CONFIG_CONT_PTE_HUGEPAGE) && defined(CONFIG_CONT_PTE_HUGEPAGE_DEBUG_VERBOSE)
+		if (!PageLocked(page[i])) {
+			pr_err("@@@Fixme: unlocking an unlocked page %s page:%lx flags:%lx pfn:%lx\n",
+					__func__, page[i], page[i]->flags, page_to_pfn(page[i]));
+			WARN_ON(1);
+		}
+#endif
+		if (clear_bit_unlock_is_negative_byte(PG_locked, &page[i]->flags))
+			wake_up_page_bit(page[i], PG_locked);
+
+	}
+}
+EXPORT_SYMBOL(unlock_nr_pages);
+#endif
 
 /**
  * end_page_writeback - end writeback against a page
@@ -1666,7 +1741,19 @@ struct page *pagecache_get_page(struct address_space *mapping, pgoff_t offset,
 	struct page *page;
 
 repeat:
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	/*
+	 * building thp might be ongoing, find_get_entry might get cont_pte
+	 * which is going to be dropped immediately due to xa conflict in
+	 * cont_add_to_page_cache_locked(). find_get_entry_may_cont_pte()
+	 * makes sure we won't get pre-mature cont_pte pages either being
+	 * dropped or building thp
+	 */
+	page = mapping->host && mapping->host->may_cont_pte ?
+		find_get_entry_may_cont_pte(mapping, offset) : find_get_entry(mapping, offset);
+#else
 	page = find_get_entry(mapping, offset);
+#endif
 	if (xa_is_value(page))
 		page = NULL;
 	if (!page)
@@ -2422,6 +2509,11 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	struct file *fpin = NULL;
 	pgoff_t offset = vmf->pgoff;
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (vmf->flags & FAULT_FLAG_CONT_PTE)
+		return do_cont_pte_sync_mmap_readahead(vmf);
+#endif
+
 	/* If we don't want any read-ahead, don't bother */
 	if (vmf->vma_flags & VM_RAND_READ)
 		return fpin;
@@ -2450,9 +2542,24 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	 * mmap read-around
 	 */
 	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+#ifdef CONFIG_OPLUS_DYNAMIC_READAHEAD
+	adjust_readaround(ra, offset);
+#else /* CONFIG_OPLUS_DYNAMIC_READAHEAD */
 	ra->start = max_t(long, 0, offset - ra->ra_pages / 2);
 	ra->size = ra->ra_pages;
 	ra->async_size = ra->ra_pages / 4;
+#endif
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (mapping->host && mapping->host->may_cont_pte) {
+		unsigned long end = ra->start + ra->ra_pages;
+
+		end = min_t(long, end, ALIGN_DOWN(vmf->pgoff, HPAGE_CONT_PTE_NR) + HPAGE_CONT_PTE_NR);
+		ra->start = max_t(long, ra->start, ALIGN_DOWN(vmf->pgoff, HPAGE_CONT_PTE_NR));
+		ra->size = end - ra->start;
+		ra->async_size = 0;
+		//ractl._index = ra->start;
+	}
+#endif
 	ra_submit(ra, mapping, file);
 	return fpin;
 }
@@ -2477,6 +2584,10 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 	if (ra->mmap_miss > 0)
 		ra->mmap_miss--;
 	if (PageReadahead(page)) {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+			if (vmf->flags & FAULT_FLAG_CONT_PTE)
+				return do_cont_pte_async_mmap_readahead(vmf, page);
+#endif
 		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
 		page_cache_async_readahead(mapping, ra, file,
 					   page, offset, ra->ra_pages);
@@ -2519,15 +2630,44 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	pgoff_t max_off;
 	struct page *page;
 	vm_fault_t ret = 0;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	unsigned long haddr = vmf->address & HPAGE_CONT_PTE_MASK;
+	bool can_be_cont = transhuge_cont_pte_vma_suitable(vmf->vma, haddr);
+	bool fault_cont_pte = false;
+	int hit;
+#endif
 
 	max_off = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 	if (unlikely(offset >= max_off))
 		return VM_FAULT_SIGBUS;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	vmf->flags &= ~FAULT_FLAG_CONT_PTE;
+	if (inode->may_cont_pte) {
+		hit = find_get_cont_pte_pages(mapping, offset, &page);
+		switch (hit) {
+		case HIT_NOTHING: /* we are going to alloc, build thp and map */
+		case HIT_CONT:	  /* we are going to build thp and map */
+		case HIT_THP:	  /* we are going to map */
+			if (can_be_cont) {
+				vmf->flags |= FAULT_FLAG_CONT_PTE;
+				fault_cont_pte = true;
+			}
+			break;
+		case HIT_BASEPAGE: /* fallback to basepage */
+		default:
+			break;
+		}
+	}
+#endif
 
 	/*
 	 * Do we have something in the page cache already?
 	 */
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	page = inode->may_cont_pte ? page : find_get_page(mapping, offset);
+#else
 	page = find_get_page(mapping, offset);
+#endif
 	if (likely(page) && !(vmf->flags & FAULT_FLAG_TRIED)) {
 		/*
 		 * We found the page, so try async readahead before
@@ -2535,12 +2675,58 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 		 */
 		fpin = do_async_mmap_readahead(vmf, page);
 	} else if (!page) {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		int retries = 0;
+#endif
+
 		/* No page in the page cache at all */
 		count_vm_event(PGMAJFAULT);
 		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
 		ret = VM_FAULT_MAJOR;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		retry_readahead:
+#endif
 		fpin = do_sync_mmap_readahead(vmf);
 retry_find:
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (inode->may_cont_pte) {
+			hit = find_get_cont_pte_pages(mapping, offset, &page);
+
+			if ((hit == HIT_BASEPAGE) || ((hit == HIT_NOTHING) && !(vmf->flags & FAULT_FLAG_CONT_PTE))) {
+				if (!page)
+					page = pagecache_get_page(mapping, offset,
+							FGP_CREAT|FGP_FOR_MMAP,
+							vmf->gfp_mask);
+				/* pagecache_get_page should never return intermediate cont-pte page */
+				CHP_BUG_ON(page && PageCont(page) && !PageTransCompound(page));
+
+				if (page && !PageCont(page))
+					vmf->flags &= ~FAULT_FLAG_CONT_PTE;
+				if (page && PageTransCompound(page))
+					page = compound_head(page);
+			} else if ((hit == HIT_NOTHING) && (vmf->flags & FAULT_FLAG_CONT_PTE)) {
+				/*
+				 * we might hit basepages while doing hugepage readahead, thus we failed to
+				 * add cont_pte. After that and before searching xa, those	basepages might
+				 * be swapped out, then we hit nothing. since xa is empty for these 16 pages,
+				 * we get one more chance to re-insert hugepage, retry readahead
+				 */
+				if (fpin)
+					goto out_retry;
+
+				retries++;
+				if (retries >= 2) {
+					pr_warn_ratelimited("@@@%s %s %d arrive max retries:%d thp:%ldMB mappped:%ldMB pool:%ldMB\n",
+						__func__, current->comm, current->pid, retries,
+						global_node_page_state(NR_FILE_THPS) * HPAGE_CONT_PTE_SIZE / SZ_1M,
+						global_node_page_state(NR_FILE_PMDMAPPED) * HPAGE_CONT_PTE_SIZE / SZ_1M,
+						cont_pte_pool_total_pages() * PAGE_SIZE / SZ_1M);
+					vmf->flags &= ~FAULT_FLAG_CONT_PTE;
+				}
+				goto retry_readahead;
+			}
+		} else
+#endif
 		page = pagecache_get_page(mapping, offset,
 					  FGP_CREAT|FGP_FOR_MMAP,
 					  vmf->gfp_mask);
@@ -2553,6 +2739,17 @@ retry_find:
 
 	if (!lock_page_maybe_drop_mmap(vmf, page, &fpin))
 		goto out_retry;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	CHP_BUG_ON(PageCont(page) && !PageHead(page));
+	CHP_BUG_ON(PageCont(page) && !PageLocked(page));
+	page = ContPteHugePageHead(page) ? page + (offset & (HPAGE_CONT_PTE_NR - 1)) : page;
+	/*
+	 * we were falling back to basepage, but the other threads might still succeed on
+	 * getting hugepage. we don't map it as basepage
+	 */
+	if (PageCont(page) && fault_cont_pte)
+		vmf->flags |= FAULT_FLAG_CONT_PTE;
+#endif
 
 	/* Did it get truncated? */
 	if (unlikely(compound_head(page)->mapping != mapping)) {
@@ -2594,6 +2791,22 @@ retry_find:
 	return ret | VM_FAULT_LOCKED;
 
 page_not_uptodate:
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (ContPteHugePage(page)) {
+		pr_err("@@@%s process: %s %d cont_pte hugepage IO error on file: %s\n", __func__,
+			current->comm, current->pid, file->f_path.dentry->d_name.name);
+
+		if (fpin) {
+			unlock_page(page);
+			goto out_retry;
+		}
+
+		unlock_page(page);
+		put_page(page);
+		return VM_FAULT_SIGBUS;
+	}
+#endif
+
 	/*
 	 * Umm, take care of errors if the page isn't up-to-date.
 	 * Try to re-read it _once_. We do this synchronously,
@@ -2642,7 +2855,14 @@ void filemap_map_pages(struct vm_fault *vmf,
 	unsigned long max_idx;
 	XA_STATE(xas, &mapping->i_pages, start_pgoff);
 	struct page *page;
+#ifdef CONFIG_F2FS_APPBOOST
+	char *pathbuf = NULL;
+#endif
 
+#ifdef CONFIG_F2FS_APPBOOST
+	if (trace_filemap_map_pages_enabled())
+		pathbuf = kmalloc(PATH_MAX, GFP_KERNEL);
+#endif
 	rcu_read_lock();
 	xas_for_each(&xas, page, end_pgoff) {
 		if (xas_retry(&xas, page))
@@ -2695,6 +2915,16 @@ void filemap_map_pages(struct vm_fault *vmf,
 
 		if (alloc_set_pte(vmf, NULL, page))
 			goto unlock;
+#ifdef CONFIG_F2FS_APPBOOST
+		if (trace_filemap_map_pages_enabled() && pathbuf) {
+			if (mapping->host && mapping->host->i_sb
+				&& mapping->host->i_sb->s_magic == F2FS_SUPER_MAGIC) {
+				char *path = d_path(&file->f_path, pathbuf, PATH_MAX);
+				if (!IS_ERR(path))
+					trace_filemap_map_pages(mapping->host, page, path);
+			}
+		}
+#endif
 		unlock_page(page);
 		goto next;
 unlock:
@@ -2707,6 +2937,10 @@ next:
 			break;
 	}
 	rcu_read_unlock();
+#ifdef CONFIG_F2FS_APPBOOST
+	if (pathbuf)
+		kfree(pathbuf);
+#endif
 }
 EXPORT_SYMBOL(filemap_map_pages);
 
@@ -3304,7 +3538,7 @@ ssize_t generic_perform_write(struct file *file,
 		unsigned long offset;	/* Offset into pagecache page */
 		unsigned long bytes;	/* Bytes to write to page */
 		size_t copied;		/* Bytes copied from user */
-		void *fsdata;
+		void *fsdata = NULL;
 
 		offset = (pos & (PAGE_SIZE - 1));
 		bytes = min_t(unsigned long, PAGE_SIZE - offset,

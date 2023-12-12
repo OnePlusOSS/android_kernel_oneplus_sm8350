@@ -8,6 +8,22 @@
 
 #include "qc_vas.h"
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+#include "../../tuning/frame_group.h"
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include <linux/task_sched_info.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
+
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+#include "../../../drivers/soc/oplus/oplus_overload/task_overload.h"
+#endif
+
 #ifdef CONFIG_SCHED_WALT
 /* 1ms default for 20ms window size scaled to 1024 */
 unsigned int sysctl_sched_min_task_util_for_boost = 51;
@@ -134,6 +150,11 @@ void walt_check_for_rotation(struct rq *src_rq)
 		if (rq->nr_running > 1)
 			continue;
 
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+		if (fbg_skip_migration(rq->curr, i, src_cpu))
+			continue;
+#endif
+
 		run = wc - rq->curr->wts.last_enqueued_ts;
 
 		if (run < WALT_ROTATION_THRESHOLD_NS)
@@ -182,8 +203,11 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 	int new_cpu = -1;
 	int prev_cpu = task_cpu(p);
 	int ret;
-
+#ifdef CONFIG_OPLUS_FEATURE_FRAME_BOOST
+	if (rq->misfit_task_load || fbg_need_up_migration(p, rq)) {
+#else
 	if (rq->misfit_task_load) {
+#endif
 		if (rq->curr->state != TASK_RUNNING ||
 		    rq->curr->nr_cpus_allowed == 1)
 			return;
@@ -199,8 +223,15 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 		rcu_read_lock();
 		new_cpu = find_energy_efficient_cpu(p, prev_cpu, 0, 1);
 		rcu_read_unlock();
+#ifdef CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG
+		ret = (sysctl_abnormal_enable && (new_cpu >= 0) && (new_cpu != prev_cpu) && (capacity_orig_of(new_cpu) < capacity_orig_of(prev_cpu))
+				&& !test_task_ux(p) && is_max_capacity_cpu(prev_cpu) && (p->abnormal_flag > ABNORMAL_THRESHOLD));
+		if (ret || ((new_cpu >= 0) && (new_cpu != prev_cpu) && (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))
+				&& (!sysctl_abnormal_enable || p->abnormal_flag < ABNORMAL_THRESHOLD))) {
+#else
 		if ((new_cpu >= 0) && (new_cpu != prev_cpu) &&
 		    (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))) {
+#endif
 			active_balance = kick_active_balance(rq, p, new_cpu);
 			if (active_balance) {
 				mark_reserved(new_cpu);
@@ -665,6 +696,9 @@ out:
 	cpu_maps_update_done();
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 1);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_cpu_isolate_info(cpu, cpu_isolate);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	return ret_code;
 }
 
@@ -711,6 +745,9 @@ int sched_unisolate_cpu_unlocked(int cpu)
 out:
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 0);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_cpu_isolate_info(cpu, cpu_unisolate);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	return ret_code;
 }
 

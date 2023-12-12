@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -352,18 +352,19 @@ void *hh_msgq_register(enum hh_msgq_label label)
 	/* Multiple clients cannot register to the same label (msgq) */
 	if (cap_table_entry->client_desc) {
 		spin_unlock(&cap_table_entry->cap_entry_lock);
+		pr_err("%s: Client already exists for label %d\n",
+				__func__, label);
 		return ERR_PTR(-EBUSY);
 	}
 
-	spin_unlock(&cap_table_entry->cap_entry_lock);
-
-	client_desc = kzalloc(sizeof(*client_desc), GFP_KERNEL);
-	if (!client_desc)
+	client_desc = kzalloc(sizeof(*client_desc), GFP_ATOMIC);
+	if (!client_desc) {
+		spin_unlock(&cap_table_entry->cap_entry_lock);
 		return ERR_PTR(ENOMEM);
+	}
 
 	client_desc->label = label;
 
-	spin_lock(&cap_table_entry->cap_entry_lock);
 	cap_table_entry->client_desc = client_desc;
 	spin_unlock(&cap_table_entry->cap_entry_lock);
 
@@ -561,14 +562,14 @@ static int __init hh_msgq_init(void)
 		spin_lock_init(&cap_table_entry->rx_lock);
 		spin_lock_init(&cap_table_entry->cap_entry_lock);
 
-		cap_table_entry->tx_irq_name = kasprintf(GFP_KERNEL,
+		cap_table_entry->tx_irq_name = kasprintf(GFP_ATOMIC,
 							"hh_msgq_tx_%d", i);
 		if (!cap_table_entry->tx_irq_name) {
 			ret = -ENOMEM;
 			goto err;
 		}
 
-		cap_table_entry->rx_irq_name = kasprintf(GFP_KERNEL,
+		cap_table_entry->rx_irq_name = kasprintf(GFP_ATOMIC,
 							"hh_msgq_rx_%d", i);
 		if (!cap_table_entry->rx_irq_name) {
 			ret = -ENOMEM;

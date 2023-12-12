@@ -40,7 +40,9 @@ static inline void __clear_shadow_entry(struct address_space *mapping,
 	if (xas_load(&xas) != entry)
 		return;
 	xas_store(&xas, NULL);
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	mapping->nrexceptional--;
+#endif
 }
 
 static void clear_shadow_entry(struct address_space *mapping, pgoff_t index,
@@ -296,8 +298,11 @@ void truncate_inode_pages_range(struct address_space *mapping,
 	pgoff_t		indices[PAGEVEC_SIZE];
 	pgoff_t		index;
 	int		i;
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (mapping_empty(mapping))
+#else
 	if (mapping->nrpages == 0 && mapping->nrexceptional == 0)
+#endif
 		goto out;
 
 	/* Offsets within partial pages */
@@ -320,6 +325,26 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		end = -1;
 	else
 		end = (lend + 1) >> PAGE_SHIFT;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	/*
+	 * In rare cases, while removing inode of a file which can be hugepage, we should
+	 * wait for the completion of building thp from intermediate basepages
+	 */
+	if (mapping->host && mapping->host->may_cont_pte) {
+		pgoff_t s = ALIGN_DOWN(start, HPAGE_CONT_PTE_NR);
+		pgoff_t e = ALIGN_DOWN(min_t(pgoff_t, end, mapping->host->i_size / PAGE_SIZE), HPAGE_CONT_PTE_NR);
+		pgoff_t n;
+
+		for (n = s; n <= e; n += HPAGE_CONT_PTE_NR) {
+			struct page *page = find_get_entry_may_cont_pte(mapping, n);
+
+			if (page && !xa_is_value(page)) {
+				CHP_BUG_ON(PageCont(page) && !PageTransHuge(page));
+				put_page(page);
+			}
+		}
+	}
+#endif
 
 	pagevec_init(&pvec);
 	index = start;
@@ -485,9 +510,10 @@ EXPORT_SYMBOL(truncate_inode_pages);
  */
 void truncate_inode_pages_final(struct address_space *mapping)
 {
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	unsigned long nrexceptional;
 	unsigned long nrpages;
-
+#endif
 	/*
 	 * Page reclaim can not participate in regular inode lifetime
 	 * management (can't call iput()) and thus can race with the
@@ -496,7 +522,7 @@ void truncate_inode_pages_final(struct address_space *mapping)
 	 * final truncate has begun.
 	 */
 	mapping_set_exiting(mapping);
-
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	/*
 	 * When reclaim installs eviction entries, it increases
 	 * nrexceptional first, then decreases nrpages.  Make sure we see
@@ -507,6 +533,9 @@ void truncate_inode_pages_final(struct address_space *mapping)
 	nrexceptional = mapping->nrexceptional;
 
 	if (nrpages || nrexceptional) {
+#else
+	if (!mapping_empty(mapping)) {
+#endif
 		/*
 		 * As truncation uses a lockless tree lookup, cycle
 		 * the tree lock to make sure any ongoing tree
@@ -567,6 +596,16 @@ unsigned long invalidate_mapping_pages(struct address_space *mapping,
 							     page);
 				continue;
 			}
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+			if (PageCont(page) && !PageTransCompound(page)) {
+				/*
+				 * NOTE: The odds of getting here are low, so we're not going to reclaim
+				 * the middle page that's being transformed.
+				 */
+				atomic64_inc(&perf_stat.truncate_hit_middle_page_cnt);
+				continue;
+			}
+#endif
 
 			if (!trylock_page(page))
 				continue;
@@ -688,8 +727,11 @@ int invalidate_inode_pages2_range(struct address_space *mapping,
 	int ret = 0;
 	int ret2 = 0;
 	int did_range_unmap = 0;
-
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	if (mapping->nrpages == 0 && mapping->nrexceptional == 0)
+#else
+	if (mapping_empty(mapping))
+#endif
 		goto out;
 
 	pagevec_init(&pvec);

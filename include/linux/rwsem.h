@@ -53,7 +53,17 @@ struct rw_semaphore {
 	struct lockdep_map	dep_map;
 #endif
 	ANDROID_VENDOR_DATA(1);
+#if IS_ENABLED(CONFIG_OPLUS_LOCKING_STRATEGY)
+	ANDROID_OEM_DATA_ARRAY(1, 2);
+#endif
+#if IS_ENABLED(CONFIG_OPLUS_LOCKING_STRATEGY)
+	struct task_struct *ux_dep_task;
+#endif
 };
+
+#if IS_ENABLED(CONFIG_OPLUS_LOCKING_STRATEGY)
+#define PREEMPT_DISABLE_RWSEM 5000000
+#endif
 
 /*
  * Setting all bits of the owner field except bit 0 will indicate
@@ -85,7 +95,11 @@ static inline int rwsem_is_locked(struct rw_semaphore *sem)
 #endif
 
 #ifdef CONFIG_RWSEM_SPIN_ON_OWNER
+#if IS_ENABLED(CONFIG_OPLUS_LOCKING_STRATEGY)
+#define __RWSEM_OPT_INIT(lockname) , .osq = OSQ_LOCK_UNLOCKED, .ux_dep_task = NULL
+#else /* CONFIG_OPLUS_LOCKING_STRATEGY */
 #define __RWSEM_OPT_INIT(lockname) , .osq = OSQ_LOCK_UNLOCKED
+#endif /* CONFIG_OPLUS_LOCKING_STRATEGY */
 #else
 #define __RWSEM_OPT_INIT(lockname)
 #endif

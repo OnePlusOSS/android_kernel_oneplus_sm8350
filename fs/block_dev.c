@@ -79,13 +79,16 @@ static void bdev_write_inode(struct block_device *bdev)
 void kill_bdev(struct block_device *bdev)
 {
 	struct address_space *mapping = bdev->bd_inode->i_mapping;
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (mapping_empty(mapping))
+#else
 	if (mapping->nrpages == 0 && mapping->nrexceptional == 0)
+#endif
 		return;
 
 	invalidate_bh_lrus();
 	truncate_inode_pages(mapping, 0);
-}	
+}
 EXPORT_SYMBOL(kill_bdev);
 
 /* Invalidate clean unused buffers and pagecache. */

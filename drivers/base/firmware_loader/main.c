@@ -98,12 +98,15 @@ static struct firmware_cache fw_cache;
 extern struct builtin_fw __start_builtin_fw[];
 extern struct builtin_fw __end_builtin_fw[];
 
-static void fw_copy_to_prealloc_buf(struct firmware *fw,
+static bool fw_copy_to_prealloc_buf(struct firmware *fw,
 				    void *buf, size_t size)
 {
-	if (!buf || size < fw->size)
-		return;
+	if (!buf)
+		return true;
+	if (size < fw->size)
+		return false;
 	memcpy(buf, fw->data, fw->size);
+	return true;
 }
 
 static bool fw_get_builtin_firmware(struct firmware *fw, const char *name,
@@ -115,9 +118,7 @@ static bool fw_get_builtin_firmware(struct firmware *fw, const char *name,
 		if (strcmp(name, b_fw->name) == 0) {
 			fw->size = b_fw->size;
 			fw->data = b_fw->data;
-			fw_copy_to_prealloc_buf(fw, buf, size);
-
-			return true;
+			return fw_copy_to_prealloc_buf(fw, buf, size);
 		}
 	}
 
@@ -443,6 +444,11 @@ static int fw_decompress_xz(struct device *dev, struct fw_priv *fw_priv,
 /* direct firmware loading support */
 static char fw_path_para[256];
 static const char * const fw_path[] = {
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_BDF2)
+	"/mnt/vendor/persist/copy",
+	"/mnt/vendor/persist",
+	"/odm/etc/wifi",
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_BDF2 */
 	fw_path_para,
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
@@ -497,6 +503,18 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 			break;
 		}
 
+#if defined(OPLUS_FEATURE_PXLW_IRIS5)
+                if (!strcmp(fw_priv->fw_name, "iris5.fw")
+                        || !strcmp(fw_priv->fw_name, "iris5_ccf1.fw")
+                        || !strcmp(fw_priv->fw_name, "iris5_ccf2.fw")) {
+                        snprintf(path, PATH_MAX, "%s/%s", "/odm/vendor/firmware", fw_priv->fw_name);
+                }
+
+                if (!strcmp(fw_priv->fw_name, "iris5_ccf1b.fw")
+                        || !strcmp(fw_priv->fw_name, "iris5_ccf2b.fw")) {
+                        snprintf(path, PATH_MAX, "%s/%s", "/data/vendor/display", fw_priv->fw_name);
+                }
+#endif /*OPLUS_FEATURE_PXLW_IRIS5*/
 		fw_priv->size = 0;
 		rc = kernel_read_file_from_path(path, &buffer, &size,
 						msize, id);
@@ -760,6 +778,8 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 		  enum fw_opt opt_flags)
 {
 	struct firmware *fw = NULL;
+	struct cred *kern_cred = NULL;
+	const struct cred *old_cred;
 	int ret;
 
 	if (!firmware_p)
@@ -774,6 +794,18 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 					opt_flags);
 	if (ret <= 0) /* error or already assigned */
 		goto out;
+
+	/*
+	 * We are about to try to access the firmware file. Because we may have been
+	 * called by a driver when serving an unrelated request from userland, we use
+	 * the kernel credentials to read the file.
+	 */
+	kern_cred = prepare_kernel_cred(NULL);
+	if (!kern_cred) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	old_cred = override_creds(kern_cred);
 
 	ret = fw_get_filesystem_firmware(device, fw->priv, "", NULL);
 #ifdef CONFIG_FW_LOADER_COMPRESS
@@ -790,6 +822,9 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 		ret = firmware_fallback_sysfs(fw, name, device, opt_flags, ret);
 	} else
 		ret = assign_fw(fw, device, opt_flags);
+
+	revert_creds(old_cred);
+	put_cred(kern_cred);
 
  out:
 	if (ret < 0) {
@@ -836,6 +871,24 @@ request_firmware(const struct firmware **firmware_p, const char *name,
 	return ret;
 }
 EXPORT_SYMBOL(request_firmware);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_WIFI_BDF)
+//Add for: reload wlan bdf without using cache
+int
+request_firmware_no_cache(const struct firmware **firmware_p, const char *name,
+		 struct device *device)
+{
+	int ret;
+
+	/* Need to pin this module until return */
+	__module_get(THIS_MODULE);
+	ret = _request_firmware(firmware_p, name, device, NULL, 0,
+				FW_OPT_UEVENT | FW_OPT_NOCACHE);
+	module_put(THIS_MODULE);
+	return ret;
+}
+EXPORT_SYMBOL(request_firmware_no_cache);
+#endif /* CONFIG_OPLUS_FEATURE_WIFI_BDF */
 
 /**
  * firmware_request_nowarn() - request for an optional fw module

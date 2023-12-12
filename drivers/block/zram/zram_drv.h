@@ -21,6 +21,11 @@
 
 #include "zcomp.h"
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE_64K_ZRAM
+#define SECTORS_PER_CONT_PTE_SHIFT	(CONT_PTE_SHIFT - SECTOR_SHIFT)
+#define SECTORS_PER_CONT_PTE	   (1 << SECTORS_PER_CONT_PTE_SHIFT)
+#endif
+
 #define SECTORS_PER_PAGE_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
 #define SECTORS_PER_PAGE	(1 << SECTORS_PER_PAGE_SHIFT)
 #define ZRAM_LOGICAL_BLOCK_SHIFT 12
@@ -28,6 +33,9 @@
 #define ZRAM_SECTOR_PER_LOGICAL_BLOCK	\
 	(1 << (ZRAM_LOGICAL_BLOCK_SHIFT - SECTOR_SHIFT))
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE_64K_ZRAM
+#define ENABLE_HUGEPAGE_ZRAM_DEBUG 0
+#endif
 
 /*
  * The lower ZRAM_FLAG_SHIFT bits of table.flags is for
@@ -50,7 +58,12 @@ enum zram_pageflags {
 	ZRAM_UNDER_WB,	/* page is under writeback */
 	ZRAM_HUGE,	/* Incompressible page */
 	ZRAM_IDLE,	/* not accessed page since last idle marking */
-
+#ifdef CONFIG_HYBRIDSWAP_CORE
+	ZRAM_BATCHING_OUT,
+	ZRAM_FROM_HYBRIDSWAP,
+	ZRAM_MCGID_CLEAR,
+	ZRAM_IN_BD, /* zram stored in back device */
+#endif
 	__NR_ZRAM_PAGEFLAGS,
 };
 
@@ -86,6 +99,15 @@ struct zram_stats {
 	atomic64_t bd_count;		/* no. of pages in backing device */
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
+#endif
+#ifdef CONFIG_CONT_PTE_HUGEPAGE_64K_ZRAM
+	atomic64_t zram_bio_write_count;
+	atomic64_t zram_bio_read_count;
+	atomic64_t zram_rw_write_count;
+	atomic64_t zram_rw_read_count;
+	atomic64_t zram_thp_write_alloc_all;
+	atomic64_t zram_thp_write_alloc_fail;
+	atomic64_t zram_thp_partial_read_count;
 #endif
 };
 
@@ -124,6 +146,15 @@ struct zram {
 #endif
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
+#endif
+#if (defined CONFIG_ZRAM_WRITEBACK) || (defined CONFIG_HYBRIDSWAP_CORE)
+	struct block_device *bdev;
+	unsigned int old_block_size;
+	unsigned long nr_pages;
+	unsigned long increase_nr_pages;
+#endif
+#ifdef CONFIG_HYBRIDSWAP_CORE
+	struct hybridswap *hs_swap;
 #endif
 };
 #endif

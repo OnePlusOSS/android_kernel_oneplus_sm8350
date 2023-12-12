@@ -22,6 +22,10 @@
 #include <linux/spinlock.h>
 #include <linux/threads.h>
 
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+#include <linux/oplus_midas.h>
+#endif
+
 static DEFINE_SPINLOCK(task_time_in_state_lock); /* task->time_in_state */
 
 /**
@@ -135,6 +139,9 @@ void cpufreq_acct_update_power(struct task_struct *p, u64 cputime)
 	unsigned long flags;
 	unsigned int state;
 	struct cpu_freqs *freqs = all_freqs[task_cpu(p)];
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+	uid_t uid;
+#endif
 
 	if (!freqs || is_idle_task(p) || p->flags & PF_EXITING)
 		return;
@@ -146,6 +153,11 @@ void cpufreq_acct_update_power(struct task_struct *p, u64 cputime)
 	    p->time_in_state)
 		p->time_in_state[state] += cputime;
 	spin_unlock_irqrestore(&task_time_in_state_lock, flags);
+
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+	uid = from_kuid_munged(current_user_ns(), task_uid(p));
+	midas_record_task_times(uid, cputime, p, state);
+#endif
 }
 
 static int cpufreq_times_get_index(struct cpu_freqs *freqs, unsigned int freq)

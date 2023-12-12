@@ -24,7 +24,9 @@
 #include <linux/fadvise.h>
 
 #include "internal.h"
-
+#ifdef CONFIG_OPLUS_DYNAMIC_READAHEAD
+#include "dynamic_readhead.h"
+#endif /* CONFIG_OPLUS_DYNAMIC_READAHEAD */
 /*
  * Initialise a struct file's readahead state.  Assumes that the caller has
  * memset *ra to zero.
@@ -124,6 +126,18 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 
 	if (mapping->a_ops->readpages) {
 		ret = mapping->a_ops->readpages(filp, mapping, pages, nr_pages);
+#if 0 //def CONFIG_CONT_PTE_HUGEPAGE
+		if (PageCont(page)) {
+			pr_err("@@@FIXME: %s readahead_page page:%pK pfn:%lx flags:%lx ref:%d index:%lx process:%s %d compound_head:%lx %pK cma:%d\n",
+					__func__, page, page_to_pfn(page), page->flags, atomic_read(&page->_refcount),
+					page->index, current->comm, current->pid, page->compound_head, compound_head(page),
+					within_cont_pte_cma(page_to_pfn(page)));
+			dump_page(page, "THP readahead_page");
+			dump_page(compound_head(page), "THP readahead_page head");
+			CHP_BUG_ON(1);
+		}
+#endif
+
 		/* Clean up the remaining pages */
 		put_pages_list(pages);
 		goto out;
@@ -389,12 +403,27 @@ ondemand_readahead(struct address_space *mapping,
 	unsigned long add_pages;
 	pgoff_t prev_offset;
 
+/* FIXME: There may be a bug? */
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	/* prevent syscall from read hugepages ahead */
+	if (mapping && mapping->host && mapping->host->may_cont_pte) {
+		ra->start = offset;
+		ra->size = CONT_PTES - (offset % CONT_PTES);
+		ra->async_size = 0;
+		return __do_page_cache_readahead(mapping, filp, ra->start, ra->size, ra->async_size);
+	}
+#endif
+
 	/*
 	 * If the request exceeds the readahead window, allow the read to
 	 * be up to the optimal hardware IO size
 	 */
 	if (req_size > max_pages && bdi->io_pages > max_pages)
 		max_pages = min(req_size, bdi->io_pages);
+
+#ifdef CONFIG_OPLUS_DYNAMIC_READAHEAD
+	max_pages = adjust_readahead(ra,max_pages);
+#endif
 
 	/*
 	 * start of file

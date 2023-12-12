@@ -404,6 +404,28 @@ static unsigned long total_mapping_size(const struct elf_phdr *cmds, int nr)
 				ELF_PAGESTART(cmds[first_idx].p_vaddr);
 }
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
+{
+	unsigned long alignment = 0;
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		if (cmds[i].p_type == PT_LOAD) {
+			unsigned long p_align = cmds[i].p_align;
+
+			/* skip non-power of two alignments as invalid */
+			if (!is_power_of_2(p_align))
+				continue;
+			alignment = max(alignment, p_align);
+		}
+	}
+
+	/* ensure we align to at least one page */
+	return ELF_PAGEALIGN(alignment);
+}
+#endif
+
 /**
  * load_elf_phdrs() - load ELF program headers
  * @elf_ex:   ELF header of the binary whose program headers should be loaded
@@ -583,7 +605,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 
 			vaddr = eppnt->p_vaddr;
 			if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
-				elf_type |= MAP_FIXED_NOREPLACE;
+				elf_type |= MAP_FIXED;
 			else if (no_base && interp_elf_ex->e_type == ET_DYN)
 				load_addr = -vaddr;
 
@@ -866,7 +888,10 @@ out_free_interp:
 				 executable_stack);
 	if (retval < 0)
 		goto out_free_dentry;
-	
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+       handle_chp_load_elf_binary(bprm->filename);
+#endif
 	elf_bss = 0;
 	elf_brk = 0;
 
@@ -882,13 +907,15 @@ out_free_interp:
 		int elf_prot, elf_flags;
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		unsigned long alignment;
+#endif
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
 
 		if (unlikely (elf_brk > elf_bss)) {
 			unsigned long nbyte;
-	            
+ 
 			/* There was a PT_LOAD segment with p_memsz > p_filesz
 			   before this one. Map anonymous pages, if needed,
 			   and clear the area.  */
@@ -959,6 +986,15 @@ out_free_interp:
 				load_bias = ELF_ET_DYN_BASE;
 				if (current->flags & PF_RANDOMIZE)
 					load_bias += arch_mmap_rnd();
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+				alignment = maximum_alignment(elf_phdata, loc->elf_ex.e_phnum);
+				/*
+				 * make code section aligned with 64KB for dynamic hugepage
+				 */
+				alignment = max(alignment, CONT_PTE_SIZE);
+				if (alignment)
+					load_bias &= ~(alignment - 1);
+#endif
 				elf_flags |= MAP_FIXED;
 			} else
 				load_bias = 0;

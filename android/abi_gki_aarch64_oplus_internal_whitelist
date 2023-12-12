@@ -1,0 +1,161 @@
+# List of symbols exported by oplus in-kernel drivers and used by external DLKMs
+# oplus internal whitelist
+[abi_whitelist]
+#ifdef OPLUS_FEATURE_TP_BASIC
+  tp_judge_ic_match
+  tp_util_get_vendor
+  preconfig_power_control
+  reconfig_power_control
+  tp_debug
+  getpara_for_item
+  get_test_item_info
+  save_test_result
+  tp_limit_read
+  syna_tcm_refresh_switch
+  sec_raw_device_init
+  sec_raw_device_release
+  sec_auto_test
+  sec_create_proc
+  sec_remove_proc
+  operate_mode_switch
+  tp_touch_btnkey_release
+  tp_powercontrol_vddi
+  tp_powercontrol_avdd
+  esd_handle_switch
+  register_common_touch_device
+  unregister_common_touch_device
+  common_touch_data_alloc
+  common_touch_data_free
+  tp_shutdown
+  tp_pm_suspend
+  tp_pm_resume
+  clear_view_touchdown_flag
+  is_oem_unlocked
+  get_oem_verified_boot_state
+  check_touchirq_triggered
+  lcd_tp_load_fw
+  tp_gesture_enable_flag
+  tp_control_reset_gpio
+  tp_ftm_extra
+  touch_i2c_continue_read
+  touch_i2c_read_block
+  touch_i2c_continue_write
+  touch_i2c_write_block
+  touch_i2c_read_byte
+  touch_i2c_write_byte
+  touch_i2c_read_word
+  touch_i2c_write_word
+  touch_i2c_read
+  touch_i2c_write
+  reset_healthinfo_time_counter
+  tp_healthinfo_report
+  tp_dsi_display_primary
+  tp_dsi_display_secondary
+  tp_judge_ic_match_commandline
+  kevent_send_to_user
+#endif /*VENDOR_EDIT*/
+
+#ifdef OPLUS_FEATURE_OPROJECT
+  get_project
+  get_Modem_Version
+  get_eng_version
+  startup_mode
+  bootmode
+  oplus_ftm_mode
+  charger_present
+  build_variant
+  sim_card_num
+  seq_printf
+  proc_create_data
+  remove_proc_entry
+  get_boot_mode
+  get_PCB_Version
+  qcom_smem_get
+  is_confidential
+#endif /* OPLUS_FEATURE_OPROJECT */
+
+#ifdef OPLUS_BUG_STABILITY
+  drm_crtc_vblank_put
+  drm_crtc_vblank_get
+  mipi_dsi_dcs_write
+  drm_crtc_vblank_waitqueue
+  drm_crtc_vblank_count
+#endif /*OPLUS_BUG_STABILITY*/
+
+#ifdef VENDOR_EDIT
+  commit_creds
+  prepare_creds
+  power_supply_unregister
+  round_jiffies_relative
+  i2c_smbus_read_byte_data
+  i2c_smbus_write_byte_data
+  i2c_smbus_read_i2c_block_data
+  i2c_smbus_write_i2c_block_data
+  i2c_smbus_write_word_data
+  i2c_smbus_read_word_data
+#endif /*VENDOR_EDIT*/
+
+#ifdef OPLUS_FEATURE_FINGERPRINT
+  devm_gpio_free
+  wakeup_source_remove
+  wakeup_source_add
+  get_boot_mode
+#endif /* OPLUS_FEATURE_FINGERPRINT */
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+  register_devinfo
+  register_device_proc_for_ufsplus
+  register_device_proc
+  set_normalized_timespec
+#endif /*OPLUS_FEATURE_TP_BASIC*/
+
+#ifdef OPLUS_FEATURE_QCOM_WATCHDOG
+  oplus_dump_cpu_online_smp_call
+  oplus_get_cpu_ping_mask
+  oplus_dump_wdog_cpu
+  oplus_show_utc_time
+#endif
+
+#ifdef OPLUS_FEATURE_APP_MONITOR
+  statistics_monitor_apps_rtt_via_uid
+  apps_monitor_netlink_send_to_user
+#endif
+
+#ifdef OPLUS_FEATURE_WIFI_DCS_SWITCH
+#Add for wifi switch monitor
+  driver_create_file
+#endif /* OPLUS_FEATURE_WIFI_DCS_SWITCH */
+
+#ifdef OPLUS_FEATURE_NFC_GKI
+  prj_name
+  spi_set_cs_timing
+  devm_gpiod_get
+#endif
+revert_creds
+
+#ifdef OPLUS_FEATURE_EXPLORER
+sdio_enable_func
+sdio_disable_func
+sdio_release_host
+sdio_claim_host
+sdio_release_irq
+sdio_claim_irq
+sdio_unregister_driver
+sdio_register_driver
+sdio_set_block_size
+sdio_writesb
+sdio_memcpy_toio
+sdio_memcpy_fromio
+sdio_writeb
+sdio_readb
+sdio_writeb_readb
+#endif/*OPLUS_FEATURE_EXPLORER*/
+
+#ifdef OPLUS_FEATURE_LAST_BOOT_REASON
+vfs_fsync_range
+generic_perform_write
+generic_write_checks
+iov_iter_kvec
+blkdev_get_by_path
+blkdev_fsync
+#endif/*OPLUS_FEATURE_LAST_BOOT_REASON*/

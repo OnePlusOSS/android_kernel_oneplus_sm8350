@@ -71,6 +71,11 @@ struct se_geni_rsc {
 	struct pinctrl_state *geni_gpio_shutdown;
 	struct pinctrl_state *geni_gpio_active;
 	struct pinctrl_state *geni_gpio_sleep;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* Add for gauge i2c reset */
+	struct pinctrl_state *geni_gpio_pulldown;
+	struct pinctrl_state *geni_gpio_pullup;
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 	int	clk_freq_out;
 	unsigned int num_clk_levels;
 	unsigned long *clk_perf_tbl;
@@ -81,6 +86,11 @@ struct se_geni_rsc {
 #define PINCTRL_ACTIVE	"active"
 #define PINCTRL_SLEEP	"sleep"
 #define PINCTRL_SHUTDOWN	"shutdown"
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/* 2021/11/02, Add for gauge i2c reset */
+#define PINCTRL_PULLDOWN	"pulldown"
+#define PINCTRL_PULLUP		"pullup"
+#endif /* OPLUS_FEATURE_CHG_BASIC */
 
 #define KHz(freq) (1000 * (freq))
 

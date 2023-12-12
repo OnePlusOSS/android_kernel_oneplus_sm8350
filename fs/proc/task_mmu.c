@@ -21,6 +21,7 @@
 #include <linux/pkeys.h>
 #include <linux/mm_inline.h>
 #include <linux/ctype.h>
+#include <linux/sched/signal.h>
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -624,8 +625,43 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 
 	if (!page)
 		return;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	/* NOTE: pte_cont filters out double map pages */
+	if (ContPteHugePage(page) && pte_cont(*pte)) {
+		if (PageHead(page)) {
+			int i;
+			pte_t *ptep = pte;
+			bool young = false;
+			bool dirty = false;
 
-	smaps_account(mss, page, false, pte_young(*pte), pte_dirty(*pte), locked);
+			if (PageAnon(page))
+				mss->anonymous_thp += HPAGE_CONT_PTE_SIZE;
+			else if (PageSwapBacked(page))
+				mss->shmem_thp += HPAGE_CONT_PTE_SIZE;
+			else if (is_zone_device_page(page))
+				/* pass */;
+			else if (!is_huge_zero_page(page))
+				mss->file_thp += HPAGE_CONT_PTE_SIZE;
+
+			for (i = 0; i < HPAGE_CONT_PTE_NR; i++) {
+				if (!young && pte_young(*ptep))
+				young = true;
+
+				if (!dirty &&  pte_dirty(*ptep))
+				dirty = true;
+
+				if (dirty && young)
+				break;
+
+				ptep++;
+			}
+			smaps_account(mss, page, true, young, dirty, locked);
+		}
+	} else
+#endif
+	{
+		smaps_account(mss, page, false, pte_young(*pte), pte_dirty(*pte), locked);
+	}
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -782,9 +818,7 @@ static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
 			page = device_private_entry_to_page(swpent);
 	}
 	if (page) {
-		int mapcount = page_mapcount(page);
-
-		if (mapcount >= 2)
+		if (page_mapcount(page) >= 2 || hugetlb_pmd_shared(pte))
 			mss->shared_hugetlb += huge_page_size(hstate_vma(vma));
 		else
 			mss->private_hugetlb += huge_page_size(hstate_vma(vma));
@@ -890,6 +924,28 @@ static int show_smap(struct seq_file *m, void *v)
 
 	smap_gather_stats(vma, &mss);
 
+#ifdef OPLUS_FEATURE_PERFORMANCE
+	if (strcmp(current->comm, "android.bg") == 0) {
+		if ((unsigned long)(mss.pss >> (10 + PSS_SHIFT)) > 0) {
+			seq_printf(m,
+				"Pss:            %8lu kB\n",
+			(	unsigned long)(mss.pss >> (10 + PSS_SHIFT)));
+		}
+		if ((mss.private_clean >> 10) > 0) {
+			seq_printf(m,
+				"Private_Clean:  %8lu kB\n",
+				mss.private_clean >> 10);
+		}
+		if ((mss.private_dirty >> 10) > 0) {
+			seq_printf(m,
+				"Private_Dirty:  %8lu kB\n",
+				mss.private_dirty >> 10);
+		}
+		m_cache_vma(m, vma);
+		return 0;
+	}
+#endif /*OPLUS_FEATURE_PERFORMANCE*/
+
 	show_map_vma(m, vma);
 	if (vma_get_anon_name(vma)) {
 		seq_puts(m, "Name:           ");
@@ -906,6 +962,80 @@ static int show_smap(struct seq_file *m, void *v)
 
 	seq_printf(m, "THPeligible:		%d\n",
 		   transparent_hugepage_enabled(vma));
+#if defined(CONFIG_CONT_PTE_HUGEPAGE) && defined(CONFIG_CONT_PTE_HUGEPAGE_DEBUG)
+	if (!strcmp(current->comm, "cat")) {
+		char buf[256];
+		char *p;
+
+		if (!vma_is_anonymous(vma)) {
+			if (mss.file_thp) {
+				p = d_path(&vma->vm_file->f_path, buf, 256);
+				if (!IS_ERR(p)) {
+					seq_printf(m, "GottenContPte: %lx-%lx(vma) %c%c%c%c %lx(pgoff) ",
+							vma->vm_start, vma->vm_end,
+							vma->vm_flags & VM_READ ? 'r' : '-',
+							vma->vm_flags & VM_WRITE ? 'w' : '-',
+							vma->vm_flags & VM_EXEC ? 'x' : '-',
+							vma->vm_flags & VM_MAYSHARE ? 's' : 'p',
+							vma->vm_pgoff);
+					SEQ_PUT_DEC("size:", vma->vm_end - vma->vm_start);
+					SEQ_PUT_DEC("kB  rss:", mss.resident);
+					SEQ_PUT_DEC("kB  thp_size:", mss.file_thp);
+					seq_printf(m, "kB  %s\n", p);
+				}
+			} else {
+				if (transhuge_cont_pte_vma_suitable(vma, ALIGN_DOWN(vma->vm_start, HPAGE_CONT_PTE_SIZE) + HPAGE_CONT_PTE_SIZE)) {
+					p = d_path(&vma->vm_file->f_path, buf, 256);
+					if (!IS_ERR(p)) {
+						/* filter: vma size >= 128k */
+						if ((vma->vm_end - vma->vm_start) >= (128 << 10)) {
+							seq_printf(m, "MissedContPte: %lx-%lx(vma) %c%c%c%c %lx(pgoff) ",
+									vma->vm_start, vma->vm_end,
+									vma->vm_flags & VM_READ ? 'r' : '-',
+									vma->vm_flags & VM_WRITE ? 'w' : '-',
+									vma->vm_flags & VM_EXEC ? 'x' : '-',
+									vma->vm_flags & VM_MAYSHARE ? 's' : 'p',
+									vma->vm_pgoff);
+							SEQ_PUT_DEC("size:", vma->vm_end - vma->vm_start);
+							SEQ_PUT_DEC("kB  rss:", mss.resident);
+							SEQ_PUT_DEC("kB  thp_size:", mss.file_thp);
+							seq_printf(m, "kB  %s\n", p);
+						}
+					}
+				}
+			}
+		} else {
+			seq_printf(m, "chp: %d\n", vma_is_chp_anonymous(vma));
+			if (mss.anonymous_thp) {
+				seq_printf(m, "GottenAnonContPte: %lx-%lx(vma) %c%c%c%c %lx(pgoff) ",
+						vma->vm_start, vma->vm_end,
+						vma->vm_flags & VM_READ ? 'r' : '-',
+						vma->vm_flags & VM_WRITE ? 'w' : '-',
+						vma->vm_flags & VM_EXEC ? 'x' : '-',
+						vma->vm_flags & VM_MAYSHARE ? 's' : 'p',
+						vma->vm_pgoff);
+				SEQ_PUT_DEC("size:", vma->vm_end - vma->vm_start);
+				SEQ_PUT_DEC("kB  rss:", mss.resident);
+				SEQ_PUT_DEC("kB  thp_size:", mss.anonymous_thp);
+				seq_printf(m, "kB \n");
+			} else {
+				if (mss.resident >= HPAGE_CONT_PTE_SIZE) {
+					seq_printf(m, "MissedAnonContPte: %lx-%lx(vma) %c%c%c%c %lx(pgoff) ",
+							vma->vm_start, vma->vm_end,
+							vma->vm_flags & VM_READ ? 'r' : '-',
+							vma->vm_flags & VM_WRITE ? 'w' : '-',
+							vma->vm_flags & VM_EXEC ? 'x' : '-',
+							vma->vm_flags & VM_MAYSHARE ? 's' : 'p',
+							vma->vm_pgoff);
+					SEQ_PUT_DEC("size:", vma->vm_end - vma->vm_start);
+					SEQ_PUT_DEC("kB  rss:", mss.resident);
+					SEQ_PUT_DEC("kB  thp_size:", mss.anonymous_thp);
+					seq_printf(m, "kB \n");
+				}
+			}
+		}
+	}
+#endif
 
 	if (arch_pkeys_enabled())
 		seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
@@ -948,7 +1078,7 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 		last_vma_end = vma->vm_end;
 	}
 
-	show_vma_header_prefix(m, priv->mm->mmap->vm_start,
+	show_vma_header_prefix(m, priv->mm->mmap ? priv->mm->mmap->vm_start : 0,
 			       last_vma_end, 0, 0, 0, 0);
 	seq_pad(m, ' ');
 	seq_puts(m, "[rollup]\n");
@@ -1718,6 +1848,16 @@ const struct file_operations proc_pagemap_operations = {
 #endif /* CONFIG_PROC_PAGE_MONITOR */
 
 #ifdef CONFIG_PROCESS_RECLAIM
+/*
+ * Because there may be a mix of hugepages and small pages,
+ * use 2 * SWAP_CLUSTER_MAX conservatively.
+ * FIXME: use CHP_SWAP_CLUSTER_MAX?
+ */
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+#define ISOLATED_MAX_PAGES (2 * SWAP_CLUSTER_MAX)
+#else
+#define ISOLATED_MAX_PAGES SWAP_CLUSTER_MAX
+#endif
 static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
@@ -1728,7 +1868,9 @@ static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 	LIST_HEAD(page_list);
 	int isolated;
 
-	split_huge_pmd(vma, addr, pmd);
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
+	split_huge_pmd(vma, pmd, addr);
+#endif
 	if (pmd_trans_unstable(pmd))
 		return 0;
 cont:
@@ -1739,9 +1881,79 @@ cont:
 		if (!pte_present(ptent))
 			continue;
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (pte_cont(ptent)) {
+			unsigned long next = pte_cont_addr_end(addr, end);
+
+			if (next - addr != HPAGE_CONT_PTE_SIZE) {
+				goto skip;  /* ignore reclaim for partial cont_pte */
+			} else {
+				page = vm_normal_page(vma, addr, ptent);
+				if (!page)
+					goto skip;
+
+				CHP_BUG_ON(!ContPteHugePageHead(page));
+				/*
+				 * do not reclaim page in active lru list
+				 */
+				if (PageActive(page) || PageUnevictable(page))
+					goto skip;
+
+				if (isolate_lru_page(page))
+					goto skip;
+
+				/*
+				 * MADV_FREE clears pte dirty bit and then marks the page
+				 * lazyfree (clear SwapBacked). Inbetween if this lazyfreed page
+				 * is touched by user then it becomes dirty.  PPR in
+				 * shrink_page_list in try_to_unmap finds the page dirty, marks
+				 * it back as PageSwapBacked and skips reclaim. This can cause
+				 * isolated count mismatch.
+				 */
+				if (PageAnon(page) && !PageSwapBacked(page)) {
+					putback_lru_page(page);
+					goto skip;
+				}
+
+				list_add(&page->lru, &page_list);
+#ifdef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+				/*
+				 * only qualcomm need inc isolate count; mtk do it itself.
+				 */
+				mod_node_page_state(page_pgdat(page), NR_ISOLATED_ANON + page_is_file_cache(page),
+						compound_nr(page));
+#endif
+				isolated += compound_nr(page);
+				if (isolated >= ISOLATED_MAX_PAGES)
+					break;
+			}
+skip:
+			pte += (next - PAGE_SIZE - addr)/PAGE_SIZE;
+			addr = next - PAGE_SIZE;
+			continue;
+		}
+#endif /* CONFIG_CONT_PTE_HUGEPAGE */
+
+
 		page = vm_normal_page(vma, addr, ptent);
 		if (!page)
 			continue;
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (PageTransCompound(page)) {
+			pr_err_ratelimited("%s comm:%s pid:%d -> non_cont pte thp reclaim page:%lx "
+					   "PageHead:%d compound_mapcount:%d page_mapcount:%d ref_count:%d \n",
+						__func__, current->comm, current->pid, page, PageHead(page),
+						compound_mapcount(page), page_mapcount(page), page_ref_count(page));
+
+#if CONFIG_PROCESS_RECLAIM_DEBUG
+			atomic64_inc(&perf_stat.process_reclaim_double_map_cnt);
+#endif
+
+			continue;
+		}
+#endif /* CONFIG_CONT_PTE_HUGEPAGE */
+
 
 		if (isolate_lru_page(compound_head(page)))
 			continue;
@@ -1762,7 +1974,7 @@ cont:
 		inc_node_page_state(page, NR_ISOLATED_ANON +
 				page_is_file_cache(page));
 		isolated++;
-		if (isolated >= SWAP_CLUSTER_MAX)
+		if (isolated >= ISOLATED_MAX_PAGES)
 			break;
 	}
 	pte_unmap_unlock(pte - 1, ptl);
@@ -1867,6 +2079,10 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 					min(vma->vm_end, end),
 					&reclaim_walk_ops, vma);
 			vma = vma->vm_next;
+
+			if (unlikely(signal_pending(current) &&
+				sigismember(&current->pending.signal, SIGUSR2)))
+				break;
 		}
 	} else {
 		for (vma = mm->mmap; vma; vma = vma->vm_next) {
@@ -1881,6 +2097,10 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 
 			walk_page_range(mm, vma->vm_start, vma->vm_end,
 					&reclaim_walk_ops, vma);
+
+			if (unlikely(signal_pending(current) &&
+				sigismember(&current->pending.signal, SIGUSR2)))
+				break;
 		}
 	}
 

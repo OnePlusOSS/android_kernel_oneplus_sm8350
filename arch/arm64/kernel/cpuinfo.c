@@ -24,6 +24,9 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/delay.h>
+#if IS_BUILTIN(CONFIG_QCOM_SOCINFO)
+#include <soc/qcom/socinfo.h>
+#endif  /* IS_BUILTIN(CONFIG_QCOM_SOCINFO) */
 
 /*
  * In case the boot CPU is hotpluggable, we record its initial state and
@@ -178,6 +181,10 @@ static int c_show(struct seq_file *m, void *v)
 		seq_printf(m, "CPU part\t: 0x%03x\n", MIDR_PARTNUM(midr));
 		seq_printf(m, "CPU revision\t: %d\n\n", MIDR_REVISION(midr));
 	}
+
+#if IS_BUILTIN(CONFIG_QCOM_SOCINFO)
+	seq_printf(m, "Hardware\t: Qualcomm Technologies, Inc %s\n", socinfo_get_id_string());
+#endif  /* IS_BUILTIN(CONFIG_QCOM_SOCINFO) */
 
 	return 0;
 }
@@ -344,6 +351,7 @@ static void __cpuinfo_store_cpu(struct cpuinfo_arm64 *info)
 	info->reg_id_aa64dfr1 = read_cpuid(ID_AA64DFR1_EL1);
 	info->reg_id_aa64isar0 = read_cpuid(ID_AA64ISAR0_EL1);
 	info->reg_id_aa64isar1 = read_cpuid(ID_AA64ISAR1_EL1);
+	info->reg_id_aa64isar2 = read_cpuid(ID_AA64ISAR2_EL1);
 	info->reg_id_aa64mmfr0 = read_cpuid(ID_AA64MMFR0_EL1);
 	info->reg_id_aa64mmfr1 = read_cpuid(ID_AA64MMFR1_EL1);
 	info->reg_id_aa64mmfr2 = read_cpuid(ID_AA64MMFR2_EL1);

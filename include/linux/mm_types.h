@@ -547,6 +547,11 @@ struct mm_struct {
 #endif
 		struct work_struct async_put_work;
 		ANDROID_VENDOR_DATA(1);
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+		unsigned long va_feature_rnd;
+		unsigned int zygoteheap_in_MB;
+		int va_feature;
+#endif
 	} __randomize_layout;
 
 	/*

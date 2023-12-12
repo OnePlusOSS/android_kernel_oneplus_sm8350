@@ -6,10 +6,37 @@
  * Author: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
  */
 #include <linux/cpufreq.h>
+#include <linux/sched/cpufreq.h>
 
 #include "sched.h"
 
 DEFINE_PER_CPU(struct update_util_data __rcu *, cpufreq_update_util_data);
+
+void default_em_map_util_freq(void *data, unsigned long util, unsigned long freq,
+		unsigned long cap, unsigned long *max_util, struct cpufreq_policy *policy,
+		bool *need_freq_update)
+{
+	return;
+}
+EXPORT_SYMBOL_GPL(default_em_map_util_freq);
+
+struct cluster_em_map_util_freq g_em_map_util_freq = {
+	.cem_map_util_freq = {
+		{
+			.gov_id = 0,
+			.pgov_map_func = default_em_map_util_freq,
+		},
+		{
+			.gov_id = 0,
+			.pgov_map_func = default_em_map_util_freq,
+		},
+		{
+			.gov_id = 0,
+			.pgov_map_func = default_em_map_util_freq,
+		},
+	},
+};
+EXPORT_SYMBOL_GPL(g_em_map_util_freq);
 
 /**
  * cpufreq_add_update_util_hook - Populate the CPU's update_util_data pointer.

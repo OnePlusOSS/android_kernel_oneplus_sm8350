@@ -170,16 +170,6 @@ static inline bool can_follow_write_pte(pte_t pte, unsigned int flags)
 	    ((flags & FOLL_FORCE) && (flags & FOLL_COW) && pte_dirty(pte));
 }
 
-/*
- * A (separate) COW fault might break the page the other way and
- * get_user_pages() would return the page from what is now the wrong
- * VM. So we need to force a COW break at GUP time even for reads.
- */
-static inline bool should_force_cow_break(struct vm_area_struct *vma, unsigned int flags)
-{
-	return is_cow_mapping(vma->vm_flags) && (flags & FOLL_GET);
-}
-
 static struct page *follow_page_pte(struct vm_area_struct *vma,
 		unsigned long address, pmd_t *pmd, unsigned int flags,
 		struct dev_pagemap **pgmap)
@@ -188,6 +178,17 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 	struct page *page;
 	spinlock_t *ptl;
 	pte_t *ptep, pte;
+
+	/*
+	 * Considering PTE level hugetlb, like continuous-PTE hugetlb on
+	 * ARM64 architecture.
+	 */
+	if (is_vm_hugetlb_page(vma)) {
+		page = follow_huge_pmd_pte(vma, address, flags);
+		if (page)
+			return page;
+		return no_page_table(vma, flags);
+	}
 
 retry:
 	if (unlikely(pmd_bad(*pmd)))
@@ -280,8 +281,15 @@ retry:
 		mark_page_accessed(page);
 	}
 	if ((flags & FOLL_MLOCK) && (vma->vm_flags & VM_LOCKED)) {
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 		/* Do not mlock pte-mapped THP */
 		if (PageTransCompound(page))
+#else
+		if (PageTransCompound(page) &&
+		    (!ContPteHugePageHead(page) ||
+		     PageDoubleMap(compound_head(page)) ||
+		     PageAnon(page)))
+#endif
 			goto out;
 
 		/*
@@ -334,7 +342,7 @@ static struct page *follow_pmd_mask(struct vm_area_struct *vma,
 	if (pmd_none(pmdval))
 		return no_page_table(vma, flags);
 	if (pmd_huge(pmdval) && vma->vm_flags & VM_HUGETLB) {
-		page = follow_huge_pmd(mm, address, pmd, flags);
+		page = follow_huge_pmd_pte(vma, address, flags);
 		if (page)
 			return page;
 		return no_page_table(vma, flags);
@@ -1458,7 +1466,10 @@ check_again:
 	for (i = 0; i < nr_pages;) {
 
 		struct page *head = compound_head(pages[i]);
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		if (ContPteHugePage(head))
+			continue;
+#endif
 		/*
 		 * gup may start from a tail page. Advance step by the left
 		 * part.
@@ -2235,7 +2246,7 @@ static int gup_pud_range(p4d_t *p4dp, p4d_t p4d, unsigned long addr, unsigned lo
 		next = pud_addr_end(addr, end);
 		if (pud_none(pud))
 			return 0;
-		if (unlikely(pud_huge(pud))) {
+		if (unlikely(pud_huge(pud) || pud_devmap(pud))) {
 			if (!gup_huge_pud(pud, pudp, addr, next, flags,
 					  pages, nr))
 				return 0;
@@ -2326,10 +2337,6 @@ static bool gup_fast_permitted(unsigned long start, unsigned long end)
  *
  * If the architecture does not support this function, simply return with no
  * pages pinned.
- *
- * Careful, careful! COW breaking can go either way, so a non-write
- * access can get ambiguous page results. If you call this function without
- * 'write' set, you'd better be sure that you're ok with that ambiguity.
  */
 int __get_user_pages_fast(unsigned long start, int nr_pages, int write,
 			  struct page **pages)
@@ -2357,12 +2364,6 @@ int __get_user_pages_fast(unsigned long start, int nr_pages, int write,
 	 *
 	 * We do not adopt an rcu_read_lock(.) here as we also want to
 	 * block IPIs that come from THPs splitting.
-	 *
-	 * NOTE! We allow read-only gup_fast() here, but you'd better be
-	 * careful about possible COW pages. You'll get _a_ COW page, but
-	 * not necessarily the one you intended to get depending on what
-	 * COW event happens after this. COW may break the page copy in a
-	 * random direction.
 	 */
 
 	if (IS_ENABLED(CONFIG_HAVE_FAST_GUP) &&

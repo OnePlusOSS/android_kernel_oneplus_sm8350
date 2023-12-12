@@ -499,6 +499,9 @@ void br_ifinfo_notify(int event, const struct net_bridge *br,
 		kfree_skb(skb);
 		goto errout;
 	}
+#ifdef CONFIG_HYFI_BRIDGE_HOOKS
+	__br_notify(RTNLGRP_LINK, event, port);
+#endif
 	rtnl_notify(skb, net, 0, RTNLGRP_LINK, NULL, GFP_ATOMIC);
 	return;
 errout:
@@ -1536,7 +1539,7 @@ static size_t br_get_linkxstats_size(const struct net_device *dev, int attr)
 	}
 
 	return numvls * nla_total_size(sizeof(struct bridge_vlan_xstats)) +
-	       nla_total_size(sizeof(struct br_mcast_stats)) +
+	       nla_total_size_64bit(sizeof(struct br_mcast_stats)) +
 	       nla_total_size(0);
 }
 

@@ -87,6 +87,25 @@ static int tcf_mpls_act(struct sk_buff *skb, const struct tc_action *a,
 				  skb->dev && skb->dev->type == ARPHRD_ETHER))
 			goto drop;
 		break;
+#ifdef CONFIG_NET_SCHED_ACT_MPLS_QGKI
+	case TCA_MPLS_ACT_MAC_PUSH:
+		if (skb_vlan_tag_present(skb)) {
+			if (__vlan_insert_inner_tag(skb, skb->vlan_proto,
+						    skb_vlan_tag_get(skb),
+						    ETH_HLEN) < 0)
+				goto drop;
+
+			skb->protocol = skb->vlan_proto;
+			__vlan_hwaccel_clear_tag(skb);
+		}
+
+		new_lse = tcf_mpls_get_lse(NULL, p, mac_len ||
+					   !eth_p_mpls(skb->protocol));
+
+		if (skb_mpls_push(skb, new_lse, p->tcfm_proto, 0, false))
+			goto drop;
+		break;
+#endif
 	case TCA_MPLS_ACT_MODIFY:
 		if (!pskb_may_pull(skb,
 				   skb_network_offset(skb) + MPLS_HLEN))
@@ -116,6 +135,11 @@ static int valid_label(const struct nlattr *attr,
 {
 	const u32 *label = nla_data(attr);
 
+	if (nla_len(attr) != sizeof(*label)) {
+		NL_SET_ERR_MSG_MOD(extack, "Invalid MPLS label length");
+		return -EINVAL;
+	}
+
 	if (*label & ~MPLS_LABEL_MASK || *label == MPLS_LABEL_IMPLNULL) {
 		NL_SET_ERR_MSG_MOD(extack, "MPLS label out of range");
 		return -EINVAL;
@@ -128,7 +152,8 @@ static const struct nla_policy mpls_policy[TCA_MPLS_MAX + 1] = {
 	[TCA_MPLS_UNSPEC]	= { .strict_start_type = TCA_MPLS_UNSPEC + 1 },
 	[TCA_MPLS_PARMS]	= NLA_POLICY_EXACT_LEN(sizeof(struct tc_mpls)),
 	[TCA_MPLS_PROTO]	= { .type = NLA_U16 },
-	[TCA_MPLS_LABEL]	= NLA_POLICY_VALIDATE_FN(NLA_U32, valid_label),
+	[TCA_MPLS_LABEL]	= NLA_POLICY_VALIDATE_FN(NLA_BINARY,
+							 valid_label),
 	[TCA_MPLS_TC]		= NLA_POLICY_RANGE(NLA_U8, 0, 7),
 	[TCA_MPLS_TTL]		= NLA_POLICY_MIN(NLA_U8, 1),
 	[TCA_MPLS_BOS]		= NLA_POLICY_RANGE(NLA_U8, 0, 1),
@@ -191,6 +216,9 @@ static int tcf_mpls_init(struct net *net, struct nlattr *nla,
 		}
 		break;
 	case TCA_MPLS_ACT_PUSH:
+#ifdef CONFIG_NET_SCHED_ACT_MPLS_QGKI
+	case TCA_MPLS_ACT_MAC_PUSH:
+#endif
 		if (!tb[TCA_MPLS_LABEL]) {
 			NL_SET_ERR_MSG_MOD(extack, "Label is required for MPLS push");
 			return -EINVAL;
