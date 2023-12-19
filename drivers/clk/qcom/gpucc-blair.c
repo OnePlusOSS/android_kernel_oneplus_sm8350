@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -23,12 +24,10 @@
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_HIGH_L1 + 1, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_HIGH_L1 + 1, 1, vdd_corner);
-static DEFINE_VDD_REGULATORS(vdd_gx, VDD_HIGH_L1 + 1, 1, vdd_corner);
+static DEFINE_VDD_REGULATORS(vdd_gx, VDD_NUM, 2, vdd_gx_corner);
 
 static struct clk_vdd_class *gpu_cc_blair_regulators[] = {
-	&vdd_cx,
 	&vdd_mx,
-	&vdd_gx,
 };
 
 enum {
@@ -202,6 +201,7 @@ static const struct freq_tbl ftbl_gpu_cc_gx_gfx3d_clk_src[] = {
 	F(390000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(490000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(650000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
+	F(700000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(770000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(840000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(900000000, P_GPU_CC_PLL0_OUT_EVEN, 2, 0, 0),
@@ -467,6 +467,22 @@ static int gpu_cc_blair_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
 	int ret;
+
+	vdd_gx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_gx");
+	if (IS_ERR(vdd_gx.regulator[0])) {
+		if (!(PTR_ERR(vdd_gx.regulator[0]) == -EPROBE_DEFER))
+			dev_err(&pdev->dev, "Unable to get vdd_gx regulator\n");
+		return PTR_ERR(vdd_gx.regulator[0]);
+	}
+
+	vdd_gx.regulator[1] = devm_regulator_get(&pdev->dev, "vdd_cx");
+	if (IS_ERR(vdd_gx.regulator[1])) {
+		if (!(PTR_ERR(vdd_gx.regulator[1]) == -EPROBE_DEFER))
+			dev_err(&pdev->dev, "Unable to get vdd_cx regulator\n");
+			return PTR_ERR(vdd_gx.regulator[1]);
+	}
+
+	vdd_cx.regulator[0] = vdd_gx.regulator[1];
 
 	regmap = qcom_cc_map(pdev, &gpu_cc_blair_desc);
 	if (IS_ERR(regmap))

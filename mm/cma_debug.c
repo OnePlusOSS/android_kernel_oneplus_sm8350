@@ -12,7 +12,9 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/mm_types.h>
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+#include <linux/mm.h>
+#endif
 #include "cma.h"
 
 struct cma_mem {
@@ -41,10 +43,22 @@ static int cma_used_get(void *data, u64 *val)
 {
 	struct cma *cma = data;
 	unsigned long used;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	bool spinlock = is_cont_pte_cma(cma);
 
+	if (spinlock)
+		spin_lock_irq(&cont_pte_cma_spinlock);
+	else
+#endif
 	mutex_lock(&cma->lock);
 	/* pages counter is smaller than sizeof(int) */
 	used = bitmap_weight(cma->bitmap, (int)cma_bitmap_maxno(cma));
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (spinlock)
+		spin_unlock_irq(&cont_pte_cma_spinlock);
+	else
+#endif
 	mutex_unlock(&cma->lock);
 	*val = (u64)used << cma->order_per_bit;
 
@@ -59,6 +73,12 @@ static int cma_maxchunk_get(void *data, u64 *val)
 	unsigned long start, end = 0;
 	unsigned long bitmap_maxno = cma_bitmap_maxno(cma);
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	bool spinlock = is_cont_pte_cma(cma);
+	if (spinlock)
+		spin_lock_irq(&cont_pte_cma_spinlock);
+	else
+#endif
 	mutex_lock(&cma->lock);
 	for (;;) {
 		start = find_next_zero_bit(cma->bitmap, bitmap_maxno, end);
@@ -67,6 +87,11 @@ static int cma_maxchunk_get(void *data, u64 *val)
 		end = find_next_bit(cma->bitmap, bitmap_maxno, start);
 		maxchunk = max(end - start, maxchunk);
 	}
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	if (spinlock)
+		spin_unlock_irq(&cont_pte_cma_spinlock);
+	else
+#endif
 	mutex_unlock(&cma->lock);
 	*val = (u64)maxchunk << cma->order_per_bit;
 

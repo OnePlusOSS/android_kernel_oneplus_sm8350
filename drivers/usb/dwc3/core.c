@@ -1008,8 +1008,13 @@ int dwc3_core_init(struct dwc3 *dwc)
 
 	if (!dwc->ulpi_ready) {
 		ret = dwc3_core_ulpi_init(dwc);
-		if (ret)
+		if (ret) {
+			if (ret == -ETIMEDOUT) {
+				dwc3_core_soft_reset(dwc);
+				ret = -EPROBE_DEFER;
+			}
 			goto err0;
+		}
 		dwc->ulpi_ready = true;
 	}
 
@@ -1157,11 +1162,27 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC31_LCSR_TX_DEEMPH_3(0),
 			dwc->gen2_tx_de_emph3 & DWC31_TX_DEEMPH_MASK);
 
-	/* set inter-packet gap 199.794ns to improve EL_23 margin */
+	/*
+	 * Set inter-packet gap 199.794ns to improve EL_23 margin.
+	 *
+	 * STAR 9001346572: Host: When a Single USB 2.0 Endpoint Receives NAKs Continuously, Host
+	 * Stops Transfers to Other Endpoints. When an active endpoint that is not currently cached
+	 * in the host controller is chosen to be cached to the same cache index as the endpoint
+	 * that receives NAK, The endpoint that receives the NAK responses would be in continuous
+	 * retry mode that would prevent it from getting evicted out of the host controller cache.
+	 * This would prevent the new endpoint to get into the endpoint cache and therefore service
+	 * to this endpoint is not done.
+	 * The workaround is to disable lower layer LSP retrying the USB2.0 NAKed transfer. Forcing
+	 * this to LSP upper layer allows next EP to evict the stuck EP from cache.
+	 */
 	if (dwc->revision >= DWC3_USB31_REVISION_170A) {
 		reg = dwc3_readl(dwc->regs, DWC3_GUCTL1);
 		reg |= DWC3_GUCTL1_IP_GAP_ADD_ON(1);
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
+
+		reg = dwc3_readl(dwc->regs, DWC3_GUCTL3);
+		reg |= DWC3_GUCTL3_USB20_RETRY_DISABLE;
+		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);
 	}
 
 	return 0;
@@ -1394,10 +1415,10 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	u8			lpm_nyet_threshold;
 	u8			tx_de_emphasis;
 	u8			hird_threshold;
-	u8			rx_thr_num_pkt_prd;
-	u8			rx_max_burst_prd;
-	u8			tx_thr_num_pkt_prd;
-	u8			tx_max_burst_prd;
+	u8			rx_thr_num_pkt_prd = 0;
+	u8			rx_max_burst_prd = 0;
+	u8			tx_thr_num_pkt_prd = 0;
+	u8			tx_max_burst_prd = 0;
 
 	/* default to highest possible threshold */
 	lpm_nyet_threshold = 0xf;
@@ -1755,9 +1776,13 @@ static int dwc3_probe(struct platform_device *pdev)
 			goto err3;
 		}
 	}
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES * 4,
+					dev_name(dwc->dev), 0);
+#else
 	dwc->dwc_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
 					dev_name(dwc->dev), 0);
+#endif
 	if (!dwc->dwc_ipc_log_ctxt)
 		dev_err(dwc->dev, "Error getting ipc_log_ctxt\n");
 
@@ -2164,6 +2189,6 @@ static struct platform_driver dwc3_driver = {
 module_platform_driver(dwc3_driver);
 
 MODULE_ALIAS("platform:dwc3");
-MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
+MODULE_AUTHOR("Felipe Balbi");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 DRD Controller Driver");

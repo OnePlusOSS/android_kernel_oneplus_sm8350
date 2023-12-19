@@ -7,7 +7,7 @@
  * Copyright (C) 2012 Google, Inc.
  * Copyright (C) 2016 Zodiac Inflight Innovations
  *
- * Author: Joonyoung Shim <jy0922.shim@samsung.com>
+ * Author: Joonyoung Shim
  */
 
 #include <linux/acpi.h>
@@ -1881,7 +1881,7 @@ static int mxt_read_info_block(struct mxt_data *data)
 	if (error) {
 		dev_err(&client->dev, "Error %d parsing object table\n", error);
 		mxt_free_object_table(data);
-		goto err_free_mem;
+		return error;
 	}
 
 	data->object_table = (struct mxt_object *)(id_buf + MXT_OBJECT_START);
@@ -3846,6 +3846,6 @@ static struct i2c_driver mxt_driver = {
 module_i2c_driver(mxt_driver);
 
 /* Module information */
-MODULE_AUTHOR("Joonyoung Shim <jy0922.shim@samsung.com>");
+MODULE_AUTHOR("Joonyoung Shim");
 MODULE_DESCRIPTION("Atmel maXTouch Touchscreen driver");
 MODULE_LICENSE("GPL");

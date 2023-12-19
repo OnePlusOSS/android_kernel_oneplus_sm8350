@@ -324,6 +324,10 @@ struct kgsl_device {
 	struct idr timelines;
 	/** @timelines_lock: Spinlock to protect the timelines idr */
 	spinlock_t timelines_lock;
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	bool snapshot_control;
+	int snapshotfault;
+	#endif
 };
 
 #define KGSL_MMU_DEVICE(_mmu) \
@@ -524,6 +528,10 @@ struct kgsl_snapshot {
 	bool first_read;
 	bool recovered;
 	struct kgsl_device *device;
+
+	#if IS_ENABLED(CONFIG_DRM_MSM)
+	char snapshot_hashid[96];
+	#endif
 };
 
 /**

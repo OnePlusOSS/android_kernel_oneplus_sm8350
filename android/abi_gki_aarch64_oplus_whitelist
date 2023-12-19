@@ -1,0 +1,192 @@
+# oplus kernel whitelist
+[abi_whitelist]
+#ifdef OPLUS_FEATURE_TP_BASIC
+  int_sqrt
+  __kfifo_alloc
+  remove_proc_subtree
+  strcat
+  wait_for_completion_killable_timeout
+  __kfifo_to_user
+  ktime_get_coarse_real_ts64
+  strncat
+#endif /*VENDOR_EDIT*/
+
+#ifdef OPLUS_FEATURE_OPROJECT
+  kobject_create_and_add
+  sysfs_create_group
+  proc_symlink
+  seq_printf
+  proc_create_data
+  remove_proc_entry
+#endif /* OPLUS_FEATURE_OPROJECT */
+
+#ifdef OPLUS_FEATURE_UFS_DRIVER
+  trace_printk
+  tracepoint_probe_register
+  tracepoint_probe_unregister
+  __tracepoint_android_vh_ufs_gen_proc_devinfo
+  __tracepoint_android_vh_ufs_latency_hist
+#endif /* OPLUS_FEATURE_UFS_DRIVER */
+
+#ifdef OPLUS_FEATURE_SHUTDOWN_DETECT
+  send_sig_info
+  filp_open
+  kernel_write
+  kernel_read
+  filp_close
+  vfs_fsync
+  kernel_power_off
+  ktime_get_real_ts64
+  kmsg_dump_get_line
+#endif
+
+#ifdef OPLUS_FEATURE_QCOM_PMICWD
+  rtc_set_alarm
+  rtc_read_alarm
+#endif
+  do_gettimeofday
+  device_remove_bin_file
+  snd_pcm_format_physical_width
+  snd_pcm_hw_constraint_mask64
+
+#ifdef OPLUS_BUG_STABILITY
+  drm_crtc_vblank_count_and_time
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_PMIC_MONITOR
+  qcom_smem_get
+#endif
+
+#ifdef CONFIG_OPLUS_RF_CABLE_MONITOR
+  qcom_smem_virt_to_phys
+  qcom_smem_alloc
+#endif
+
+#ifdef OPLUS_FEATURE_CONNECTIVITY_LUCKYMONEY
+  nf_register_net_hooks
+  nf_unregister_net_hooks
+  netlink_rcv_skb
+#endif
+
+#ifdef OPLUS_FEATURE_QCOM_WATCHDOG
+  nr_irqs
+#endif
+
+#ifdef OPLUS_FEATURE_UFS_DRIVER
+  __tracepoint_android_vh_check_throttle
+  __tracepoint_android_vh_set_inactive_ratio
+  __tracepoint_android_vh_set_swappiness
+#endif /* OPLUS_FEATURE_UFS_DRIVER */
+
+#ifdef OPLUS_FEATURE_WIFI_DHCP
+  __tracepoint_android_vh_check_dhcp_pkt
+  netlink_rcv_skb
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_THEIA
+  sched_show_task
+  handle_sysrq
+  touch_softlockup_watchdog
+  init_task
+#endif
+
+#ifdef CONFIG_DRM_MSM
+  msm_drm_register_client
+  msm_drm_unregister_client
+  msm_drm_notifier_call_chain
+#endif
+
+#ifdef CONFIG_QCOM_COMMAND_DB
+  cmd_db_ready
+  cmd_db_is_standalone
+  cmd_db_read_aux_data
+  cmd_db_read_addr
+  cmd_db_read_slave_id
+#endif
+
+#ifdef OPLUS_FEATURE_UIFRIST
+  runqueues
+  tracepoint_probe_register
+  __tracepoint_android_rvh_check_preempt_wakeup
+  __tracepoint_android_rvh_check_preempt_tick
+  __tracepoint_android_rvh_find_best_target
+  __tracepoint_android_rvh_cpupri_find_fitness
+#endif
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+  devm_gpiod_put
+  __kfifo_out_r
+  __kfifo_len_r
+  request_firmware_direct
+  __kfifo_in_r
+  wl2868c_set_ldo_value
+  wl2868c_set_en_ldo
+  wl2868c_ldo_enable
+  wl2868c_ldo_disable
+  wl2868c_check_ldo_status
+  i2c_unregister_device
+#endif
+
+#ifdef CONFIG_SND_SOC_AW882XX
+class_create_file_ns
+class_remove_file_ns
+#endif
+
+#ifdef OPLUS_FEATURE_TP_BASIC
+  flush_cache_all
+  thermal_zone_device_unregister
+#endif
+
+#ifdef OPLUS_FEATURE_APP_MONITOR
+  tcp_event_data_recv
+  tcp_event_new_data_sent
+  __tcp_retransmit_skb
+#endif
+
+#ifdef OPLUS_FEATURE_WIFI_DHCP
+  register_net_sysctl
+  unregister_net_sysctl_table
+  sock_gen_put
+  nf_sk_lookup_slow_v4
+  nf_sk_lookup_slow_v6
+  hid_unregister_driver
+  __hid_request
+  input_ff_create_memless
+  hid_open_report
+  hid_hw_start
+  __hid_register_driver
+#endif
+
+#ifdef OPLUS_FEATURE_UIFRIST_HEAVYLOAD
+  reciprocal_value
+#endif
+
+#ifdef OPLUS_FEATURE_SLABTRACE_DEBUG
+  __get_free_pages
+#endif
+
+#ifdef OPLUS_FEATURE_SENSOR_MONITOR_GKI
+  __kfifo_free
+#endif
+
+#ifdef OPLUS_FEATURE_APOLLO_BACKLIGHT
+  dma_buf_mmap
+#endif
+
+#ifdef OPLUS_FEATURE_EXPLORER_SDIO
+  sdhci_request
+#endif
+
+#ifdef OPLUS_FEATURE_EXPLORER_IPC
+  mmc_detect_change
+  mmc_wait_for_cmd
+#endif
+
+#ifdef OPLUS_FEATURE_NFC_GKI
+  simple_strtol
+#endif
+
+#ifdef CONFIG_OPLUS_FEATURE_SIGKILL_DIAGNOSIS
+ __tracepoint_android_vh_do_send_sig_info
+#endif
+revert_creds

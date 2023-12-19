@@ -83,16 +83,25 @@
  */
 #ifdef CONFIG_ARM64_64K_PAGES
 #define CONT_PTE_SHIFT		5
+
 #define CONT_PMD_SHIFT		5
 #elif defined(CONFIG_ARM64_16K_PAGES)
 #define CONT_PTE_SHIFT		7
 #define CONT_PMD_SHIFT		5
 #else
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+#define CONT_PTE_SHIFT (CONFIG_ARM64_CONT_SHIFT + PAGE_SHIFT)
+#else
 #define CONT_PTE_SHIFT		4
+#endif
 #define CONT_PMD_SHIFT		4
 #endif
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+#define CONT_PTES		CONT_PTE_SHIFT
+#else
 #define CONT_PTES		(1 << CONT_PTE_SHIFT)
+#endif
 #define CONT_PTE_SIZE		(CONT_PTES * PAGE_SIZE)
 #define CONT_PTE_MASK		(~(CONT_PTE_SIZE - 1))
 #define CONT_PMDS		(1 << CONT_PMD_SHIFT)

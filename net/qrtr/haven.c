@@ -187,6 +187,8 @@ static size_t haven_tx_avail(struct haven_pipe *pipe)
 		avail = 0;
 	else
 		avail -= FIFO_FULL_RESERVE;
+	if (WARN_ON_ONCE(avail > pipe->length))
+			avail = 0;
 
 	return avail;
 }
@@ -198,6 +200,8 @@ static void haven_tx_write(struct haven_pipe *pipe,
 	u32 head;
 
 	head = le32_to_cpu(*pipe->head);
+	if (WARN_ON_ONCE(head > pipe->length))
+			return;
 
 	len = min_t(size_t, count, pipe->length - head);
 	if (len)
@@ -604,7 +608,7 @@ static int qrtr_haven_probe(struct platform_device *pdev)
 	INIT_WORK(&qdev->work, qrtr_haven_retry_work);
 
 	qdev->ep.xmit = qrtr_haven_send;
-	ret = qrtr_endpoint_register(&qdev->ep, QRTR_EP_NET_ID_AUTO, false);
+	ret = qrtr_endpoint_register(&qdev->ep, QRTR_EP_NET_ID_AUTO, false, NULL);
 	if (ret)
 		goto register_fail;
 

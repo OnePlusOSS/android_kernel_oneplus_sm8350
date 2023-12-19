@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 VERSION = 5
 PATCHLEVEL = 4
-SUBLEVEL = 147
+SUBLEVEL = 233
 EXTRAVERSION =
 NAME = Kleptomaniac Octopus
 
@@ -505,6 +505,101 @@ KBUILD_LDFLAGS :=
 GCC_PLUGINS_CFLAGS :=
 CLANG_FLAGS :=
 
+# ifdef VENDOR_EDIT
+KBUILD_CFLAGS +=   -DVENDOR_EDIT
+KBUILD_CPPFLAGS += -DVENDOR_EDIT
+CFLAGS_KERNEL +=   -DVENDOR_EDIT
+CFLAGS_MODULE +=   -DVENDOR_EDIT
+# endif
+
+# ifdef OPLUS_BUG_STABILITY
+KBUILD_CFLAGS +=   -DOPLUS_BUG_STABILITY
+KBUILD_CPPFLAGS += -DOPLUS_BUG_STABILITY
+CFLAGS_KERNEL +=   -DOPLUS_BUG_STABILITY
+CFLAGS_MODULE +=   -DOPLUS_BUG_STABILITY
+# endif
+
+# ifdef OPLUS_FEATURE_POWER_EFFICIENCY
+KBUILD_CFLAGS +=   -DOPLUS_FEATURE_POWER_EFFICIENCY
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_POWER_EFFICIENCY
+CFLAGS_KERNEL +=   -DOPLUS_FEATURE_POWER_EFFICIENCY
+CFLAGS_MODULE +=   -DOPLUS_FEATURE_POWER_EFFICIENCY
+# endif
+
+#ifdef OPLUS_FEATURE_BUILD
+-include OplusKernelEnvConfig.mk
+#endif // OPLUS_FEATURE_BUILD
+
+#ifdef OPLUS_BUG_STABILITY
+ifeq ($(AGING_DEBUG_MASK),1)
+#Agingtest enable rtb
+OPLUS_AGING_TEST := true
+#Enable kernel memleak detect in aging test defaultly
+OPLUS_MEMLEAK_DETECT := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),2)
+#enable rtb
+OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_KASAN_TEST := true
+endif
+$(warning OPLUS_KASAN_TEST is $(OPLUS_KASAN_TEST))
+
+ifeq ($(AGING_DEBUG_MASK),3)
+#enable rtb
+OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_KMEMLEAK_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),4)
+#enable rtb
+OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_SLUB_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),5)
+#enable rtb
+OPLUS_AGING_TEST := true
+#enable kasan
+OPLUS_PAGEOWNER_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),6)
+#enable rtb
+OPLUS_AGING_TEST := true
+#enable slub debug and pageowner 
+OPLUS_PAGEOWNER_TEST := true
+OPLUS_SLUB_TEST := true
+endif
+
+ifeq ($(AGING_DEBUG_MASK),7)
+#enable rtb
+OPLUS_AGING_TEST := true
+#enable slub debug and pageowner 
+OPLUS_KASAN_TEST := true
+OPLUS_SLUB_TEST := true
+endif
+
+export OPLUS_AGING_TEST OPLUS_KASAN_TEST OPLUS_KMEMLEAK_TEST OPLUS_SLUB_TEST OPLUS_PAGEOWNER_TEST
+#endif
+
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+#Add for memleak test
+ifeq ($(TARGET_MEMLEAK_DETECT_TEST),0)
+OPLUS_MEMLEAK_DETECT := false
+else ifeq ($(TARGET_MEMLEAK_DETECT_TEST),1)
+OPLUS_MEMLEAK_DETECT := true
+endif
+
+#Add for memleak test
+$(warning TARGET_MEMLEAK_DETECT_TEST value is "$(TARGET_MEMLEAK_DETECT_TEST)")
+$(warning OPLUS_MEMLEAK_DETECT value is "$(OPLUS_MEMLEAK_DETECT)")
+export OPLUS_MEMLEAK_DETECT
+#endif
+
 export ARCH SRCARCH CONFIG_SHELL BASH HOSTCC KBUILD_HOSTCFLAGS CROSS_COMPILE LD CC
 export CPP AR NM STRIP OBJCOPY OBJDUMP OBJSIZE READELF PAHOLE LEX YACC AWK INSTALLKERNEL
 export PERL PYTHON PYTHON3 CHECK CHECKFLAGS MAKE UTS_MACHINE HOSTCXX
@@ -826,11 +921,11 @@ endif
 
 # Initialize all stack variables with a zero value.
 ifdef CONFIG_INIT_STACK_ALL_ZERO
-# Future support for zero initialization is still being debated, see
-# https://bugs.llvm.org/show_bug.cgi?id=45497. These flags are subject to being
-# renamed or dropped.
 KBUILD_CFLAGS	+= -ftrivial-auto-var-init=zero
+ifdef CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO_ENABLER
+# https://github.com/llvm/llvm-project/issues/44842
 KBUILD_CFLAGS	+= -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang
+endif
 endif
 
 DEBUG_CFLAGS	:= $(call cc-option, -fno-var-tracking-assignments)
@@ -841,7 +936,9 @@ DEBUG_CFLAGS	+= -gsplit-dwarf
 else
 DEBUG_CFLAGS	+= -g
 endif
-ifneq ($(LLVM_IAS),1)
+ifeq ($(LLVM_IAS),1)
+KBUILD_AFLAGS	+= -g
+else
 KBUILD_AFLAGS	+= -Wa,-gdwarf-2
 endif
 endif
@@ -1021,6 +1118,9 @@ KBUILD_CFLAGS   += $(KCFLAGS)
 KBUILD_LDFLAGS_MODULE += --build-id
 LDFLAGS_vmlinux += --build-id
 
+KBUILD_LDFLAGS	+= -z noexecstack
+KBUILD_LDFLAGS	+= $(call ld-option,--no-warn-rwx-segments)
+
 ifeq ($(CONFIG_STRIP_ASM_SYMS),y)
 LDFLAGS_vmlinux	+= $(call ld-option, -X,)
 endif
@@ -1111,7 +1211,7 @@ HOST_LIBELF_LIBS = $(shell pkg-config libelf --libs 2>/dev/null || echo -lelf)
 
 ifdef CONFIG_STACK_VALIDATION
   has_libelf := $(call try-run,\
-		echo "int main() {}" | $(HOSTCC) -xc -o /dev/null $(HOST_LIBELF_LIBS) -,1,0)
+		echo "int main() {}" | $(HOSTCC) $(KBUILD_HOSTLDFLAGS) -xc -o /dev/null $(HOST_LIBELF_LIBS) -,1,0)
   ifeq ($(has_libelf),1)
     objtool_target := tools/objtool FORCE
   else
@@ -1162,7 +1262,7 @@ PHONY += autoksyms_recursive
 ifdef CONFIG_TRIM_UNUSED_KSYMS
 autoksyms_recursive: descend modules.order
 	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/adjust_autoksyms.sh \
-	  "$(MAKE) -f $(srctree)/Makefile vmlinux"
+	  "$(MAKE) -f $(srctree)/Makefile autoksyms_recursive"
 endif
 
 # For the kernel to actually contain only the needed exported symbols,

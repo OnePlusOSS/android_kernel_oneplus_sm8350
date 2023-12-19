@@ -19,6 +19,11 @@ struct ramdump_segment {
 	unsigned long size;
 };
 
+#if defined(OPLUS_FEATURE_MODEM_MINIDUMP) && defined(CONFIG_OPLUS_FEATURE_MODEM_MINIDUMP)
+//Add for customized subsystem ramdump to skip generate dump cause by SAU
+extern bool SKIP_GENERATE_RAMDUMP;
+#endif
+
 struct qcom_dump_segment {
 	struct list_head node;
 	dma_addr_t da;

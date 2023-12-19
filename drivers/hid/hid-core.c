@@ -911,7 +911,16 @@ static int hid_scan_report(struct hid_device *hid)
 				hid->group = HID_GROUP_RMI;
 		break;
 	}
+#if IS_ENABLED(CONFIG_OPLUS_BT_BUG_STABILITY)
+//add for BLE-M1 uhid group change HID_GROUP_GENERIC
+	if (0x248a == hid->vendor && 2 == hid->group) {
+		hid_warn(hid, "scan_report change to GENERIC %u\n", hid->group);
+		hid->group = HID_GROUP_GENERIC;
+	}
 
+	/* fall back to generic driver in case specific driver doesn't exist */
+	hid_warn(hid, "report vendor %u,group %u\n", hid->vendor, hid->group);
+#endif /* CONFIG_OPLUS_BT_BUG_STABILITY */
 	kfree(parser->collection_stack);
 	vfree(parser);
 	return 0;
@@ -981,8 +990,8 @@ struct hid_report *hid_validate_values(struct hid_device *hid,
 		 * Validating on id 0 means we should examine the first
 		 * report in the list.
 		 */
-		report = list_entry(
-				hid->report_enum[type].report_list.next,
+		report = list_first_entry_or_null(
+				&hid->report_enum[type].report_list,
 				struct hid_report, list);
 	} else {
 		report = hid->report_enum[type].report_id_hash[id];
@@ -1302,6 +1311,9 @@ static s32 snto32(__u32 value, unsigned n)
 {
 	if (!value || !n)
 		return 0;
+
+	if (n > 32)
+		n = 32;
 
 	switch (n) {
 	case 8:  return ((__s8)value);

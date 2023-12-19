@@ -27,6 +27,15 @@
 #include <linux/uaccess.h>
 
 #include "internal.h"
+#if defined(OPLUS_FEATURE_VIRTUAL_RESERVE_MEMORY) && defined(CONFIG_VIRTUAL_RESERVE_MEMORY)
+#include "arch_mmap.h"
+#endif
+
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+#include <linux/sched_assist/sched_assist_common.h>
+#include "ux_page_pool.h"
+#endif /* OPLUS_UXMEM_OPT */
 
 /**
  * kfree_const - conditionally free memory
@@ -320,6 +329,38 @@ unsigned long randomize_stack_top(unsigned long stack_top)
 #endif
 }
 
+/**
+ * randomize_page - Generate a random, page aligned address
+ * @start:	The smallest acceptable address the caller will take.
+ * @range:	The size of the area, starting at @start, within which the
+ *		random address must fall.
+ *
+ * If @start + @range would overflow, @range is capped.
+ *
+ * NOTE: Historical use of randomize_range, which this replaces, presumed that
+ * @start was already page aligned.  We now align it regardless.
+ *
+ * Return: A page aligned address within [start, start + range).  On error,
+ * @start is returned.
+ */
+unsigned long randomize_page(unsigned long start, unsigned long range)
+{
+	if (!PAGE_ALIGNED(start)) {
+		range -= PAGE_ALIGN(start) - start;
+		start = PAGE_ALIGN(start);
+	}
+
+	if (start > ULONG_MAX - range)
+		range = ULONG_MAX - start;
+
+	range >>= PAGE_SHIFT;
+
+	if (range == 0)
+		return start;
+
+	return start + (get_random_long() % range << PAGE_SHIFT);
+}
+
 #ifdef CONFIG_ARCH_WANT_DEFAULT_TOPDOWN_MMAP_LAYOUT
 unsigned long arch_randomize_brk(struct mm_struct *mm)
 {
@@ -516,6 +557,10 @@ unsigned long vm_mmap(struct file *file, unsigned long addr,
 }
 EXPORT_SYMBOL(vm_mmap);
 
+#ifdef CONFIG_KVMALLOC_OPTIMIZATION
+#define KMALLOC_MAX_PAGES 8
+#endif
+
 /**
  * kvmalloc_node - attempt to allocate physically contiguous memory, but upon
  * failure, fall back to non-contiguous (vmalloc) allocation.
@@ -539,6 +584,10 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 {
 	gfp_t kmalloc_flags = flags;
 	void *ret;
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	bool is_ux = test_task_ux(current);
+#endif
 
 	/*
 	 * vmalloc uses GFP_KERNEL for some internal allocations (e.g page tables)
@@ -546,6 +595,17 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	 */
 	if ((flags & GFP_KERNEL) != GFP_KERNEL)
 		return kmalloc_node(size, flags, node);
+
+#ifdef CONFIG_KVMALLOC_OPTIMIZATION
+	/*do not attempt kmalloc if we need more than KMALLOC_MAX_PAGES pages at once*/
+	if (size >= KMALLOC_MAX_PAGES * PAGE_SIZE
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+				&& !is_ux
+#endif /* OPLUS_UXMEM_OPT */
+			)
+		goto use_vmalloc;
+#endif
 
 	/*
 	 * We want to attempt a large physically contiguous block first because
@@ -561,6 +621,18 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 			kmalloc_flags |= __GFP_NORETRY;
 	}
 
+#if defined(CONFIG_OPLUS_UXMEM_OPT) && defined(OPLUS_FEATURE_SCHED_ASSIST) \
+		&& defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST)
+	/*
+	 *Don't go to direct reclaim,when ux and size > UXMEM_POOL_MAX_PAGES.
+	 *It can get memory freom ux pool when order =< UXMEM_POOL_MAX_PAGES
+	 */
+	if ((size > UXMEM_POOL_MAX_PAGES * PAGE_SIZE) && is_ux) {
+		kmalloc_flags &= ~__GFP_DIRECT_RECLAIM;
+		kmalloc_flags |= __GFP_KSWAPD_RECLAIM;
+	}
+#endif
+
 	ret = kmalloc_node(size, kmalloc_flags, node);
 
 	/*
@@ -570,6 +642,9 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	if (ret || size <= PAGE_SIZE)
 		return ret;
 
+#ifdef CONFIG_KVMALLOC_OPTIMIZATION
+use_vmalloc:
+#endif
 	return __vmalloc_node_flags_caller(size, node, flags,
 			__builtin_return_address(0));
 }

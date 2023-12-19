@@ -45,3 +45,9 @@ config CNSS_QCA6750
 	  CNSS QCA6750 chipset.
 	  These changes are needed to support the new hardware architecture
 	  for CNSS QCA6750 chipset.
+
+config OPLUS_FEATURE_WIFI_BDF2
+	bool "Modify for: multi projects using different bdf"
+	depends on ICNSS2
+	help
+	  Modify for: multi projects using different bdf.

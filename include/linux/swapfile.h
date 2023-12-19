@@ -12,5 +12,7 @@ extern struct swap_info_struct *swap_info[];
 extern int try_to_unuse(unsigned int, bool, unsigned long);
 extern unsigned long generic_max_swapfile_size(void);
 extern unsigned long max_swapfile_size(void);
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+extern bool thp_swap_is_free(void);
+#endif
 #endif /* _LINUX_SWAPFILE_H */

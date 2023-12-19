@@ -372,8 +372,32 @@ void kgsl_process_init_sysfs(struct kgsl_device *device,
 			WARN(1, "Couldn't create sysfs file '%s'\n",
 				memtypes[i].attr.name);
 	}
+
+}
+#ifdef OPLUS_FEATURE_HEALTHINFO
+void gpu_usage_show()
+{
+	struct kgsl_process_private *p;
+	int type = KGSL_MEM_ENTRY_KERNEL;
+	printk("%-16s %-5s size\n", "comm", "pid");
+	read_lock(&kgsl_driver.proclist_lock);
+	list_for_each_entry(p, &kgsl_driver.process_list, list) {
+		printk("%-16s %-5d %zu\n", p->comm, pid_nr(p->pid),
+			(atomic64_read(&p->stats[type].cur) >> 10));
+	}
+	read_unlock(&kgsl_driver.proclist_lock);
 }
 
+unsigned long gpu_total(void)
+{
+	unsigned long gpu_usage = (unsigned long)atomic_long_read(&kgsl_driver.stats.page_alloc);
+	if ((gpu_usage >> 10) > 5242880) {
+		printk("+++++++++++ check_gpu_total_usage\n");
+		gpu_usage_show();
+	}
+	return gpu_usage;
+}
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 static ssize_t memstat_show(struct device *dev,
 			 struct device_attribute *attr, char *buf)
 {
@@ -898,6 +922,7 @@ void kgsl_get_memory_usage(char *name, size_t name_size, uint64_t memflags)
 {
 	unsigned int type = MEMFLAGS(memflags, KGSL_MEMTYPE_MASK,
 		KGSL_MEMTYPE_SHIFT);
+
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(memtypes); i++) {

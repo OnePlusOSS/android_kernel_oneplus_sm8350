@@ -32,6 +32,29 @@ static struct poweroff_reason reasons[] = {
 	{ "dm-verity device corrupted",	0x04 },
 	{ "dm-verity enforcing",	0x05 },
 	{ "keys clear",			0x06 },
+#ifdef VENDOR_EDIT
+	{ "silence",			0x21 },//PON_RESTART_REASON_SILENCE= 0x21,
+ 	{ "sau",			0x22 },//PON_RESTART_REASON_SAU= 0x22,
+        { "rf",	        		0x23 },//PON_RESTART_REASON_RF= 0x23,
+        { "wlan",			0x24 },//PON_RESTART_REASON_WLAN= 0x24,
+#ifdef USE_MOS_MODE
+        { "mos",			0x25 },//PON_RESTART_REASON_MOS= 0x25,
+#endif
+        { "ftm",			0x26 },//PON_RESTART_REASON_FACTORY= 0x26,
+        { "kernel",			0x27 },//PON_RESTART_REASON_KERNEL= 0x27,
+        { "modem",			0x28 },//PON_RESTART_REASON_MODEM= 0x28,
+        { "android",			0x29 },//PON_RESTART_REASON_ANDROID= 0x29,
+        { "safe",			0x2A },//PON_RESTART_REASON_SAFE= 0x2A,
+	//#ifdef OPLUS_FEATURE_AGINGTEST  
+	/*xiaofan.yang, 2019/01/07,Add for factory agingtest*/
+	{ "sbllowmemtest",		0x2B },///PON_RESTART_REASON_SBL_DDRTEST= 0x2B,
+	{ "sblmemtest",			0x2C },///PON_RESTART_REASON_SBL_DDR_CUS= 0x2C,
+	{ "usermemaging",		0x2D },///PON_RESTART_REASON_MEM_AGING= 0x2D,
+	/*0x2E is SBLTEST FAIL, just happen in ddrtest fail when xbl setup*/
+	//#endif/*OPLUS_FEATURE_AGINGTEST*/
+	{ "novib",			0x2F },///PON_RESTART_REASON_BOOT_NO_VIBRATION= 0x2F,
+	// { "other",			0x3E },//PON_RESTART_REASON_NORMAL= 0x3E,
+#endif /*VENDOR_EDIT*/
 	{}
 };
 

@@ -11,6 +11,7 @@
 #include <linux/f2fs_fs.h>
 #include <linux/seq_file.h>
 #include <linux/unicode.h>
+#include <linux/sysfs.h>
 
 #include "f2fs.h"
 #include "segment.h"
@@ -34,6 +35,9 @@ enum {
 	FAULT_INFO_TYPE,	/* struct f2fs_fault_info */
 #endif
 	RESERVED_BLOCKS,	/* struct f2fs_sb_info */
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	COMP_EXT,
+#endif
 };
 
 struct f2fs_attr {
@@ -69,6 +73,10 @@ static unsigned char *__struct_ptr(struct f2fs_sb_info *sbi, int struct_type)
 #ifdef CONFIG_F2FS_STAT_FS
 	else if (struct_type == STAT_INFO)
 		return (unsigned char *)F2FS_STAT(sbi);
+#endif
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	else if (struct_type == COMP_EXT)
+		return (unsigned char *)&sbi->mount_opt;
 #endif
 	return NULL;
 }
@@ -145,9 +153,17 @@ static ssize_t features_show(struct f2fs_attr *a,
 	if (f2fs_sb_has_casefold(sbi))
 		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "casefold");
+	if (f2fs_sb_has_readonly(sbi))
+		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
+				len ? ", " : "", "readonly");
 	if (f2fs_sb_has_compression(sbi))
 		len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "compression");
+#ifdef CONFIG_F2FS_FS_DEDUP
+	if (f2fs_sb_has_dedup(sbi))
+		len += snprintf(buf + len, PAGE_SIZE - len, "%s%s",
+				len ? ", " : "", "dedup");
+#endif
 	len += scnprintf(buf + len, PAGE_SIZE - len, "%s%s",
 				len ? ", " : "", "pin_file");
 	len += scnprintf(buf + len, PAGE_SIZE - len, "\n");
@@ -256,6 +272,58 @@ static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
 		return len;
 	}
 
+#ifdef CONFIG_F2FS_APPBOOST
+	if (!strcmp(a->attr.name, "appboost")) {
+		return sysfs_emit(buf, "%u\n",
+			sbi->appboost);
+	}
+	if (!strcmp(a->attr.name, "appboost_max_blocks")) {
+		return sysfs_emit(buf, "%u\n",
+			sbi->appboost_max_blocks);
+	}
+#endif
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	if (!strcmp(a->attr.name, "compr_written_block"))
+		return sysfs_emit(buf, "%llu\n", sbi->compr_written_block);
+
+	if (!strcmp(a->attr.name, "compr_saved_block"))
+		return sysfs_emit(buf, "%llu\n", sbi->compr_saved_block);
+
+	if (!strcmp(a->attr.name, "compr_new_inode"))
+		return sysfs_emit(buf, "%u\n", sbi->compr_new_inode);
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	if (!strcmp(a->attr.name, "compress_layout")) {
+		if (F2FS_OPTION(sbi).compress_layout == COMPRESS_FIXED_OUTPUT)
+			return sysfs_emit(buf, "fixed-output");
+		return sysfs_emit(buf, "fixed-input");
+	}
+
+	if (!strcmp(a->attr.name, "compress_extension")) {
+		int len = 0, i;
+
+		down_read(&sbi->sb_lock);
+		for (i = 0; i < F2FS_OPTION(sbi).compress_ext_cnt; i++) {
+			if (!strlen(F2FS_OPTION(sbi).extensions[i]))
+				continue;
+			len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
+					 F2FS_OPTION(sbi).extensions[i]);
+		}
+		up_read(&sbi->sb_lock);
+		return len;
+	}
+
+	if (!strcmp(a->attr.name, "compress_log_size")) {
+		int log_size;
+
+		down_read(&sbi->sb_lock);
+		log_size = F2FS_OPTION(sbi).compress_log_size;
+		up_read(&sbi->sb_lock);
+		return sysfs_emit(buf, "%d\n", log_size);
+	}
+#endif
+#endif
+
 	ui = (unsigned int *)(ptr + a->offset);
 
 	return sprintf(buf, "%u\n", *ui);
@@ -266,7 +334,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 			const char *buf, size_t count)
 {
 	unsigned char *ptr;
-	unsigned long t;
+	unsigned long long t;
 	unsigned int *ui;
 	ssize_t ret;
 
@@ -309,21 +377,57 @@ out:
 		return ret ? ret : count;
 	}
 
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	if (!strcmp(a->attr.name, "compress_extension")) {
+		char *token = NULL, *name = strim((char *)buf);
+		unsigned char (*ext)[F2FS_EXTENSION_LEN];
+		unsigned char extensions[COMPRESS_EXT_NUM][F2FS_EXTENSION_LEN];
+		unsigned char ext_cnt = 0;
+		ssize_t sz;
+
+		memset(extensions, 0, sizeof(extensions));
+		while ((token = strsep(&name, ",")) != NULL) {
+			sz = strlen(token);
+			if (sz == 0)
+				continue;
+			if (sz >= F2FS_EXTENSION_LEN)
+				return -EINVAL;
+			if (ext_cnt >= COMPRESS_EXT_NUM)
+				return -EINVAL;
+			memcpy(extensions[ext_cnt++], token, sz);
+		}
+
+		ext = F2FS_OPTION(sbi).extensions;
+		down_write(&sbi->sb_lock);
+		memset(ext, 0, sizeof(F2FS_OPTION(sbi).extensions));
+		memcpy(ext, extensions, ext_cnt * F2FS_EXTENSION_LEN);
+		F2FS_OPTION(sbi).compress_ext_cnt = ext_cnt;
+		/*
+		 * no need to persist the new extensions since RUS could
+		 * update it manually
+		 */
+		up_write(&sbi->sb_lock);
+		return count;
+	}
+#endif
+
 	ui = (unsigned int *)(ptr + a->offset);
 
-	ret = kstrtoul(skip_spaces(buf), 0, &t);
+	ret = kstrtoull(skip_spaces(buf), 0, &t);
 	if (ret < 0)
 		return ret;
 #ifdef CONFIG_F2FS_FAULT_INJECTION
-	if (a->struct_type == FAULT_INFO_TYPE && t >= (1 << FAULT_MAX))
+	if (a->struct_type == FAULT_INFO_TYPE && t >= (1ULL << FAULT_MAX))
 		return -EINVAL;
 	if (a->struct_type == FAULT_INFO_RATE && t >= UINT_MAX)
 		return -EINVAL;
 #endif
 	if (a->struct_type == RESERVED_BLOCKS) {
 		spin_lock(&sbi->stat_lock);
-		if (t > (unsigned long)(sbi->user_block_count -
-				F2FS_OPTION(sbi).root_reserved_blocks)) {
+		if (t > (unsigned long long)(sbi->user_block_count -
+				F2FS_OPTION(sbi).root_reserved_blocks -
+				sbi->blocks_per_seg *
+				SM_I(sbi)->additional_reserved_segments)) {
 			spin_unlock(&sbi->stat_lock);
 			return -EINVAL;
 		}
@@ -391,6 +495,49 @@ out:
 		return count;
 	}
 
+#ifdef CONFIG_F2FS_APPBOOST
+	if (!strcmp(a->attr.name, "appboost")) {
+		if (t)
+			sbi->appboost = 1;
+		else
+			sbi->appboost = 0;
+		return count;
+	}
+	if (!strcmp(a->attr.name, "appboost_max_blocks")) {
+		sbi->appboost_max_blocks = t;
+		return count;
+	}
+#endif
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	if (!strcmp(a->attr.name, "compr_written_block") ||
+		!strcmp(a->attr.name, "compr_saved_block")) {
+		if (t != 0)
+			return -EINVAL;
+		sbi->compr_written_block = 0;
+		sbi->compr_saved_block = 0;
+		return count;
+	}
+
+	if (!strcmp(a->attr.name, "compr_new_inode")) {
+		if (t != 0)
+			return -EINVAL;
+		sbi->compr_new_inode = 0;
+		return count;
+	}
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	if (!strcmp(a->attr.name, "compress_log_size")) {
+		if (t < MIN_COMPRESS_LOG_SIZE || t > MAX_COMPRESS_LOG_SIZE)
+			return -EINVAL;
+		down_write(&sbi->sb_lock);
+		F2FS_OPTION(sbi).compress_log_size = (unsigned char)t;
+		up_write(&sbi->sb_lock);
+		return count;
+	}
+#endif
+#endif
+
 	*ui = (unsigned int)t;
 
 	return count;
@@ -457,8 +604,10 @@ enum feat_id {
 	FEAT_SB_CHECKSUM,
 	FEAT_CASEFOLD,
 	FEAT_COMPRESSION,
+	FEAT_RO,
 	FEAT_TEST_DUMMY_ENCRYPTION_V2,
 	FEAT_ENCRYPTED_CASEFOLD,
+	FEAT_DEDUP,
 };
 
 static ssize_t f2fs_feature_show(struct f2fs_attr *a,
@@ -479,8 +628,10 @@ static ssize_t f2fs_feature_show(struct f2fs_attr *a,
 	case FEAT_SB_CHECKSUM:
 	case FEAT_CASEFOLD:
 	case FEAT_COMPRESSION:
+	case FEAT_RO:
 	case FEAT_TEST_DUMMY_ENCRYPTION_V2:
 	case FEAT_ENCRYPTED_CASEFOLD:
+	case FEAT_DEDUP:
 		return sprintf(buf, "supported\n");
 	}
 	return 0;
@@ -540,6 +691,10 @@ F2FS_RW_ATTR(SM_INFO, f2fs_sm_info, min_ssr_sections, min_ssr_sections);
 F2FS_RW_ATTR(NM_INFO, f2fs_nm_info, ram_thresh, ram_thresh);
 F2FS_RW_ATTR(NM_INFO, f2fs_nm_info, ra_nid_pages, ra_nid_pages);
 F2FS_RW_ATTR(NM_INFO, f2fs_nm_info, dirty_nats_ratio, dirty_nats_ratio);
+#ifdef CONFIG_F2FS_APPBOOST
+F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, appboost, appboost);
+F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, appboost_max_blocks, appboost_max_blocks);
+#endif
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, max_victim_search, max_victim_search);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, migration_granularity, migration_granularity);
 F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, dir_level, dir_level);
@@ -604,8 +759,20 @@ F2FS_FEATURE_RO_ATTR(sb_checksum, FEAT_SB_CHECKSUM);
 #ifdef CONFIG_UNICODE
 F2FS_FEATURE_RO_ATTR(casefold, FEAT_CASEFOLD);
 #endif
+F2FS_FEATURE_RO_ATTR(readonly, FEAT_RO);
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 F2FS_FEATURE_RO_ATTR(compression, FEAT_COMPRESSION);
+F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, compr_written_block, compr_written_block);
+F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, compr_saved_block, compr_saved_block);
+F2FS_RW_ATTR(F2FS_SBI, f2fs_sb_info, compr_new_inode, compr_new_inode);
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+F2FS_RW_ATTR(COMP_EXT, f2fs_mount_info, compress_layout, compress_layout);
+F2FS_RW_ATTR(COMP_EXT, f2fs_mount_info, compress_extension, extensions);
+F2FS_RW_ATTR(COMP_EXT, f2fs_mount_info, compress_log_size, compress_log_size);
+#endif
+#endif
+#ifdef CONFIG_F2FS_FS_DEDUP
+F2FS_FEATURE_RO_ATTR(dedup, FEAT_DEDUP);
 #endif
 
 #define ATTR_LIST(name) (&f2fs_attr_##name.attr)
@@ -627,6 +794,10 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(min_seq_blocks),
 	ATTR_LIST(min_hot_blocks),
 	ATTR_LIST(min_ssr_sections),
+#ifdef CONFIG_F2FS_APPBOOST
+	ATTR_LIST(appboost),
+	ATTR_LIST(appboost_max_blocks),
+#endif
 	ATTR_LIST(max_victim_search),
 	ATTR_LIST(migration_granularity),
 	ATTR_LIST(dir_level),
@@ -667,6 +838,16 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(moved_blocks_background),
 	ATTR_LIST(avg_vblocks),
 #endif
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	ATTR_LIST(compr_written_block),
+	ATTR_LIST(compr_saved_block),
+	ATTR_LIST(compr_new_inode),
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	ATTR_LIST(compress_layout),
+	ATTR_LIST(compress_extension),
+	ATTR_LIST(compress_log_size),
+#endif
+#endif
 	NULL,
 };
 ATTRIBUTE_GROUPS(f2fs);
@@ -697,8 +878,12 @@ static struct attribute *f2fs_feat_attrs[] = {
 #ifdef CONFIG_UNICODE
 	ATTR_LIST(casefold),
 #endif
+	ATTR_LIST(readonly),
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	ATTR_LIST(compression),
+#endif
+#ifdef CONFIG_F2FS_FS_DEDUP
+	ATTR_LIST(dedup),
 #endif
 	NULL,
 };

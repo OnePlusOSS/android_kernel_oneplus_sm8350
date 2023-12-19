@@ -155,6 +155,17 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 	/* The only possible pmd mapping has been handled on last iteration */
 	if (pvmw->pmd && !pvmw->pte)
 		return not_found(pvmw);
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	/*
+	 * The only possible cont-pte mapping has been handled on last iteration
+	 * and we are reclaiming file-64KB thp as a whole and don't reclaim pages
+	 * double-mapped
+	 */
+	if (pvmw->pmd && pvmw->pte &&
+			ContPteHugePageHead(pvmw->page) &&
+			pte_cont(READ_ONCE(*pvmw->pte)))
+		return not_found(pvmw);
+#endif
 
 	if (unlikely(PageHuge(page))) {
 		/* The only possible mapping was handled on last iteration */

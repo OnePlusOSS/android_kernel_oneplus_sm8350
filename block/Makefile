@@ -39,3 +39,7 @@ obj-$(CONFIG_BLK_PM)		+= blk-pm.o
 obj-$(CONFIG_BLK_INLINE_ENCRYPTION)	+= keyslot-manager.o bio-crypt-ctx.o \
 					   blk-crypto.o
 obj-$(CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK)	+= blk-crypto-fallback.o
+#ifdef OPLUS_FEATURE_HEALTHINFO
+obj-$(CONFIG_OPLUS_HEALTHINFO) += healthinfo/
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+

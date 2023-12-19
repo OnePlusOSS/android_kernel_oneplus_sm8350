@@ -187,6 +187,6 @@ static struct platform_driver kdwc3_driver = {
 module_platform_driver(kdwc3_driver);
 
 MODULE_ALIAS("platform:keystone-dwc3");
-MODULE_AUTHOR("WingMan Kwok <w-kwok2@ti.com>");
+MODULE_AUTHOR("WingMan Kwok");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 KEYSTONE Glue Layer");

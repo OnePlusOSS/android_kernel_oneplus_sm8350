@@ -2719,7 +2719,12 @@ int test_clear_page_writeback(struct page *page)
 	int ret;
 
 	memcg = lock_page_memcg(page);
-	lruvec = mem_cgroup_page_lruvec(page, page_pgdat(page));
+#if defined(CONFIG_CONT_PTE_HUGEPAGE) && CONFIG_CONT_PTE_HUGEPAGE_LRU
+	if (ContPteCMAHugePageHead(page))
+		lruvec = mem_cgroup_chp_page_lruvec(page, page_pgdat(page));
+	else
+#endif
+		lruvec = mem_cgroup_page_lruvec(page, page_pgdat(page));
 	if (mapping && mapping_use_writeback_tags(mapping)) {
 		struct inode *inode = mapping->host;
 		struct backing_dev_info *bdi = inode_to_bdi(inode);

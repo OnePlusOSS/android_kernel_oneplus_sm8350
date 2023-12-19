@@ -1953,22 +1953,27 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 	u16 peers_tol = msg_link_tolerance(hdr);
 	u16 peers_prio = msg_linkprio(hdr);
 	u16 rcv_nxt = l->rcv_nxt;
-	u16 dlen = msg_data_sz(hdr);
+	u32 dlen = msg_data_sz(hdr), glen = 0;
 	int mtyp = msg_type(hdr);
 	bool reply = msg_probe(hdr);
-	u16 glen = 0;
 	void *data;
 	char *if_name;
 	int rc = 0;
 
 	trace_tipc_proto_rcv(skb, false, l->name);
+
+	if (dlen > U16_MAX)
+		goto exit;
+
 	if (tipc_link_is_blocked(l) || !xmitq)
 		goto exit;
 
 	if (tipc_own_addr(l->net) > msg_prevnode(hdr))
 		l->net_plane = msg_net_plane(hdr);
 
-	skb_linearize(skb);
+	if (skb_linearize(skb))
+		goto exit;
+
 	hdr = buf_msg(skb);
 	data = msg_data(hdr);
 
@@ -2030,6 +2035,17 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 		break;
 
 	case STATE_MSG:
+		/* Receive Gap ACK blocks from peer if any */
+		if (l->peer_caps & TIPC_GAP_ACK_BLOCK) {
+			ga = (struct tipc_gap_ack_blks *)data;
+			glen = ntohs(ga->len);
+			/* sanity check: if failed, ignore Gap ACK blocks */
+			if (glen != tipc_gap_ack_blks_sz(ga->gack_cnt))
+				ga = NULL;
+		}
+		if(glen > dlen)
+			break;
+
 		l->rcv_nxt_state = msg_seqno(hdr) + 1;
 
 		/* Update own tolerance if peer indicates a non-zero value */
@@ -2053,15 +2069,6 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 			if (l->state == LINK_ESTABLISHING)
 				rc = TIPC_LINK_UP_EVT;
 			break;
-		}
-
-		/* Receive Gap ACK blocks from peer if any */
-		if (l->peer_caps & TIPC_GAP_ACK_BLOCK) {
-			ga = (struct tipc_gap_ack_blks *)data;
-			glen = ntohs(ga->len);
-			/* sanity check: if failed, ignore Gap ACK blocks */
-			if (glen != tipc_gap_ack_blks_sz(ga->gack_cnt))
-				ga = NULL;
 		}
 
 		tipc_mon_rcv(l->net, data + glen, dlen - glen, l->addr,

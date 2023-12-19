@@ -519,7 +519,7 @@ static void throtl_pd_init(struct blkg_policy_data *pd)
 {
 	struct throtl_grp *tg = pd_to_tg(pd);
 	struct blkcg_gq *blkg = tg_to_blkg(tg);
-	struct throtl_data *td = blkg->q->td;
+	struct throtl_data *td = (struct throtl_data *)(blkg->q->write_hints[BLK_RQ_REV_THROTL]);
 	struct throtl_service_queue *sq = &tg->service_queue;
 
 	/*
@@ -1720,7 +1720,7 @@ static struct cftype throtl_files[] = {
 
 static void throtl_shutdown_wq(struct request_queue *q)
 {
-	struct throtl_data *td = q->td;
+	struct throtl_data *td = (struct throtl_data *)(q->write_hints[BLK_RQ_REV_THROTL]);
 
 	cancel_work_sync(&td->dispatch_work);
 }
@@ -2336,7 +2336,7 @@ static void tg_drain_bios(struct throtl_service_queue *parent_sq)
 void blk_throtl_drain(struct request_queue *q)
 	__releases(&q->queue_lock) __acquires(&q->queue_lock)
 {
-	struct throtl_data *td = q->td;
+	struct throtl_data *td = (struct throtl_data *)(q->write_hints[BLK_RQ_REV_THROTL]);
 	struct blkcg_gq *blkg;
 	struct cgroup_subsys_state *pos_css;
 	struct bio *bio;
@@ -2393,7 +2393,7 @@ int blk_throtl_init(struct request_queue *q)
 	INIT_WORK(&td->dispatch_work, blk_throtl_dispatch_work_fn);
 	throtl_service_queue_init(&td->service_queue);
 
-	q->td = td;
+	q->write_hints[BLK_RQ_REV_THROTL] = (u64)td;
 	td->queue = q;
 
 	td->limit_valid[LIMIT_MAX] = true;
@@ -2413,12 +2413,14 @@ int blk_throtl_init(struct request_queue *q)
 
 void blk_throtl_exit(struct request_queue *q)
 {
-	BUG_ON(!q->td);
+	struct throtl_data *td = (struct throtl_data *)(q->write_hints[BLK_RQ_REV_THROTL]);
+	BUG_ON(!td);
+	del_timer_sync(&td->service_queue.pending_timer);
 	throtl_shutdown_wq(q);
 	blkcg_deactivate_policy(q, &blkcg_policy_throtl);
-	free_percpu(q->td->latency_buckets[READ]);
-	free_percpu(q->td->latency_buckets[WRITE]);
-	kfree(q->td);
+	free_percpu(td->latency_buckets[READ]);
+	free_percpu(td->latency_buckets[WRITE]);
+	kfree(td);
 }
 
 void blk_throtl_register_queue(struct request_queue *q)
@@ -2426,7 +2428,7 @@ void blk_throtl_register_queue(struct request_queue *q)
 	struct throtl_data *td;
 	int i;
 
-	td = q->td;
+	td = (struct throtl_data *)(q->write_hints[BLK_RQ_REV_THROTL]);
 	BUG_ON(!td);
 
 	if (blk_queue_nonrot(q)) {

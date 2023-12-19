@@ -160,6 +160,15 @@ static void move_ptes(struct vm_area_struct *vma, pmd_t *old_pmd,
 				   new_pte++, new_addr += PAGE_SIZE) {
 		if (pte_none(*old_pte))
 			continue;
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+		/* in mremap case, new_addres might not be aligned */
+		if (pte_cont(*old_pte)) {
+#if CONFIG_CHP_ABMORMAL_PTES_DEBUG
+			{volatile bool __maybe_unused x = commit_chp_abnormal_ptes_record(DOUBLE_MAP_REASON_MOVE_PTES);}
+#endif
+			__split_huge_cont_pte(vma, old_pte, old_addr, false, NULL, old_ptl);
+		}
+#endif
 
 		pte = ptep_get_and_clear(mm, old_addr, old_pte);
 		/*
@@ -246,6 +255,9 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 	struct mmu_notifier_range range;
 	pmd_t *old_pmd, *new_pmd;
 
+	if (!len)
+		return 0;
+
 	old_end = old_addr + len;
 	flush_cache_range(vma, old_addr, old_end);
 
@@ -290,12 +302,10 @@ unsigned long move_page_tables(struct vm_area_struct *vma,
 			 */
 			bool moved;
 
-			if (need_rmap_locks)
-				take_rmap_locks(vma);
+			take_rmap_locks(vma);
 			moved = move_normal_pmd(vma, old_addr, new_addr,
 					old_end, old_pmd, new_pmd);
-			if (need_rmap_locks)
-				drop_rmap_locks(vma);
+			drop_rmap_locks(vma);
 			if (moved)
 				continue;
 #endif

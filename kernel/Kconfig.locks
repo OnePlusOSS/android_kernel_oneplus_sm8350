@@ -259,3 +259,10 @@ config ARCH_HAS_MMIOWB
 config MMIOWB
 	def_bool y if ARCH_HAS_MMIOWB
 	depends on SMP
+
+config LOCKING_PROTECT
+	bool "locking protect"
+	default n
+	depends on OPLUS_FEATURE_SCHED_ASSIST
+	help
+	  protect locking protect

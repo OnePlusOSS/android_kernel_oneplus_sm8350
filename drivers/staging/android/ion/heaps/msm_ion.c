@@ -654,6 +654,10 @@ static struct platform_driver msm_ion_driver = {
 
 static int __init msm_ion_init(void)
 {
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	msm_ion_init_sysfs();
+#endif
+
 	return platform_driver_register(&msm_ion_driver);
 }
 subsys_initcall_sync(msm_ion_init);

@@ -486,3 +486,24 @@ config HAVE_CBPF_JIT
 # Extended BPF JIT (eBPF)
 config HAVE_EBPF_JIT
 	bool
+
+source "net/oplus_connectivity_routerboost/Kconfig"
+
+source "net/oplus_connectivity_sla/Kconfig"
+
+source "net/oplus_connectivity_luckymoney/Kconfig"
+
+config OPLUS_BUG_STABILITY
+	bool "add for disable tcp random timestamp,some networks limit tcp syn before login"
+
+source "net/oplus_connectivity_dhcp/Kconfig"
+
+source "net/oplus_score/Kconfig"
+
+source "net/oplus_apps_monitor/Kconfig"
+
+source "net/oplus_nwpower/Kconfig"
+
+source "net/oplus_wificapcenter/Kconfig"
+
+source "net/oplus_modules/Kconfig"

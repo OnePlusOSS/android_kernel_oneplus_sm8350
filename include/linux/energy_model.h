@@ -6,6 +6,7 @@
 #include <linux/kobject.h>
 #include <linux/rcupdate.h>
 #include <linux/sched/cpufreq.h>
+#include <linux/cpufreq.h>
 #include <linux/sched/topology.h>
 #include <linux/types.h>
 
@@ -98,6 +99,13 @@ static inline unsigned long em_pd_energy(struct em_perf_domain *pd,
 	unsigned long freq, scale_cpu;
 	struct em_cap_state *cs;
 	int i, cpu;
+#if defined(CONFIG_OPLUS_FEATURE_SUGOV_TL) || defined(CONFIG_OPLUS_UAG_USE_TL)
+	struct cpufreq_policy policy;
+	int ret;
+	unsigned long raw_util = max_util;
+	unsigned int first_cpu;
+	int cluster_id;
+#endif
 
 	if (!sum_util)
 		return 0;
@@ -110,7 +118,23 @@ static inline unsigned long em_pd_energy(struct em_perf_domain *pd,
 	cpu = cpumask_first(to_cpumask(pd->cpus));
 	scale_cpu = arch_scale_cpu_capacity(cpu);
 	cs = &pd->table[pd->nr_cap_states - 1];
+#if defined(CONFIG_OPLUS_FEATURE_SUGOV_TL) || defined(CONFIG_OPLUS_UAG_USE_TL)
+	ret = cpufreq_get_policy(&policy, cpu);
+	if (!ret)
+	{
+		first_cpu = cpumask_first(policy.related_cpus);
+		cluster_id = topology_physical_package_id(first_cpu);
+		g_em_map_util_freq.cem_map_util_freq[cluster_id].pgov_map_func(NULL, max_util, max_util,
+			max_util, &max_util, &policy, NULL);
+		max_util = min(max_util, scale_cpu);
+	}
+	if (max_util == raw_util)
+		freq = map_util_freq(max_util, cs->frequency, scale_cpu);
+	else
+		freq = cs->frequency * max_util / scale_cpu;
+#else
 	freq = map_util_freq(max_util, cs->frequency, scale_cpu);
+#endif
 
 	/*
 	 * Find the lowest capacity state of the Energy Model above the

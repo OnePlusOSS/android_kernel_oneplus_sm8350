@@ -189,24 +189,12 @@ static int queue_write_hint_show(void *data, struct seq_file *m)
 	return 0;
 }
 
-static ssize_t queue_write_hint_store(void *data, const char __user *buf,
-				      size_t count, loff_t *ppos)
-{
-	struct request_queue *q = data;
-	int i;
-
-	for (i = 0; i < BLK_MAX_WRITE_HINTS; i++)
-		q->write_hints[i] = 0;
-
-	return count;
-}
-
 static const struct blk_mq_debugfs_attr blk_mq_debugfs_queue_attrs[] = {
 	{ "poll_stat", 0400, queue_poll_stat_show },
 	{ "requeue_list", 0400, .seq_ops = &queue_requeue_list_seq_ops },
 	{ "pm_only", 0600, queue_pm_only_show, NULL },
 	{ "state", 0600, queue_state_show, queue_state_write },
-	{ "write_hints", 0600, queue_write_hint_show, queue_write_hint_store },
+	{ "write_hints", 0400, queue_write_hint_show, NULL }, // stop to use queue_write_hint_store
 	{ "zone_wlock", 0400, queue_zone_wlock_show, NULL },
 	{ },
 };
@@ -882,6 +870,9 @@ void blk_mq_debugfs_register_hctx(struct request_queue *q,
 	struct blk_mq_ctx *ctx;
 	char name[20];
 	int i;
+
+	if (!q->debugfs_dir)
+		return;
 
 	snprintf(name, sizeof(name), "hctx%u", hctx->queue_num);
 	hctx->debugfs_dir = debugfs_create_dir(name, q->debugfs_dir);

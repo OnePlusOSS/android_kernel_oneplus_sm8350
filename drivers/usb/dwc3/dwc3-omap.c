@@ -242,7 +242,7 @@ static void dwc3_omap_set_mailbox(struct dwc3_omap *omap,
 		break;
 
 	case OMAP_DWC3_ID_FLOAT:
-		if (omap->vbus_reg)
+		if (omap->vbus_reg && regulator_is_enabled(omap->vbus_reg))
 			regulator_disable(omap->vbus_reg);
 		val = dwc3_omap_read_utmi_ctrl(omap);
 		val |= USBOTGSS_UTMI_OTG_CTRL_IDDIG;
@@ -627,6 +627,6 @@ static struct platform_driver dwc3_omap_driver = {
 module_platform_driver(dwc3_omap_driver);
 
 MODULE_ALIAS("platform:omap-dwc3");
-MODULE_AUTHOR("Felipe Balbi <balbi@ti.com>");
+MODULE_AUTHOR("Felipe Balbi");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DesignWare USB3 OMAP Glue Layer");

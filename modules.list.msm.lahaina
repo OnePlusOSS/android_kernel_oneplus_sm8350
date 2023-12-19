@@ -26,6 +26,7 @@ crypto-qti-hwkm.ko
 hwkm.ko
 #ufs-qcom.ko
 qbt_handler.ko
+test-kit.ko
 smem.ko
 socinfo.ko
 dwc3.ko
@@ -42,3 +43,6 @@ usb_f_diag.ko
 usb_f_ccid.ko
 usb_f_cdev.ko
 typec.ko
+ordump.ko
+oplus_mdmfeature.ko
+oplus_subsys_sleep_monitor.ko

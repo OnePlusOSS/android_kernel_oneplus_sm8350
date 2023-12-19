@@ -12,10 +12,14 @@
 #include <linux/memcontrol.h>
 #include <linux/highmem.h>
 
+#ifdef CONFIG_MAPPED_PROTECT
+extern bool update_mapped_mul(struct page *page, bool inc_size);
+#endif
 extern int isolate_lru_page(struct page *page);
 extern void putback_lru_page(struct page *page);
 extern unsigned long reclaim_pages_from_list(struct list_head *page_list,
 					     struct vm_area_struct *vma);
+extern unsigned long reclaim_pages(struct list_head *page_list);
 
 /*
  * The anon_vma heads a list of private "related" vmas, to scan if
@@ -43,13 +47,7 @@ struct anon_vma {
 	 */
 	atomic_t refcount;
 
-	/*
-	 * Count of child anon_vmas and VMAs which points to this anon_vma.
-	 *
-	 * This counter is used for making decision about reusing anon_vma
-	 * instead of forking new one. See comments in function anon_vma_clone.
-	 */
-	unsigned degree;
+	unsigned degree;		/* ANDROID: KABI preservation, DO NOT USE! */
 
 	struct anon_vma *parent;	/* Parent of this anon_vma */
 
@@ -64,6 +62,24 @@ struct anon_vma {
 
 	/* Interval tree of private "related" vmas */
 	struct rb_root_cached rb_root;
+	/*
+	 * ANDROID: KABI preservation, it's safe to put these at the end of this structure as it's
+	 * only passed by a pointer everywhere, the size and internal structures are local to the
+	 * core kernel.
+	 */
+#ifndef __GENKSYMS__
+	/*
+	 * Count of child anon_vmas. Equals to the count of all anon_vmas that
+	 * have ->parent pointing to this one, including itself.
+	 *
+	 * This counter is used for making decision about reusing anon_vma
+	 * instead of forking new one. See comments in function anon_vma_clone.
+	 */
+	unsigned long num_children;
+	/* Count of VMAs whose ->anon_vma pointer points to this object. */
+	unsigned long num_active_vmas;
+#endif
+
 };
 
 /*
@@ -200,6 +216,12 @@ void hugepage_add_new_anon_rmap(struct page *, struct vm_area_struct *,
 
 static inline void page_dup_rmap(struct page *page, bool compound)
 {
+#ifdef CONFIG_MAPPED_PROTECT
+	if (!compound) {
+		update_mapped_mul(page, true);
+		return;
+	}
+#endif
 	atomic_inc(compound ? compound_mapcount_ptr(page) : &page->_mapcount);
 }
 

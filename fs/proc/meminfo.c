@@ -25,6 +25,21 @@
 #include <linux/seq_buf.h>
 #endif
 
+//#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+#include <linux/healthinfo/ion.h>
+#endif
+//#endif /* OPLUS_FEATURE_HEALTHINFO */
+
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+extern unsigned long gpu_total(void);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#ifdef CONFIG_HYBRIDSWAP
+#include <trace/hooks/vh_vmscan.h>
+#endif
+
 void __attribute__((weak)) arch_report_meminfo(struct seq_file *m)
 {
 }
@@ -64,7 +79,9 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	unsigned long pages[NR_LRU_LISTS];
 	unsigned long sreclaimable, sunreclaim;
 	int lru;
-
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	int chp_pool_pages;
+#endif
 	si_meminfo(&i);
 	si_swapinfo(&i);
 	committed = percpu_counter_read_positive(&vm_committed_as);
@@ -84,6 +101,16 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 #endif
 
 	sreclaimable = global_node_page_state(NR_SLAB_RECLAIMABLE);
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	chp_pool_pages = cont_pte_pool_total_pages();
+	chp_pool_pages -= min(chp_pool_pages / 2, cont_pte_pool_high());
+	sreclaimable += chp_pool_pages;
+#endif
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	chp_pool_pages = cont_pte_pool_total_pages();
+	chp_pool_pages -= min(chp_pool_pages / 2, cont_pte_pool_high());
+	sreclaimable += chp_pool_pages;
+#endif
 	sunreclaim = global_node_page_state(NR_SLAB_UNRECLAIMABLE);
 
 	show_val_kb(m, "MemTotal:       ", i.totalram);
@@ -160,16 +187,31 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 #endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	show_val_kb(m, "AnonHugePages:  ",
 		    global_node_page_state(NR_ANON_THPS) * HPAGE_PMD_NR);
+#else
+	show_val_kb(m, "AnonHugePages:  ",
+		    global_node_page_state(NR_ANON_THPS) * HPAGE_CONT_PTE_NR);
+#endif
 	show_val_kb(m, "ShmemHugePages: ",
 		    global_node_page_state(NR_SHMEM_THPS) * HPAGE_PMD_NR);
 	show_val_kb(m, "ShmemPmdMapped: ",
 		    global_node_page_state(NR_SHMEM_PMDMAPPED) * HPAGE_PMD_NR);
+#ifndef CONFIG_CONT_PTE_HUGEPAGE
 	show_val_kb(m, "FileHugePages:  ",
 		    global_node_page_state(NR_FILE_THPS) * HPAGE_PMD_NR);
 	show_val_kb(m, "FilePmdMapped:  ",
 		    global_node_page_state(NR_FILE_PMDMAPPED) * HPAGE_PMD_NR);
+#else
+	show_val_kb(m, "FileHugePages:  ",
+			global_node_page_state(NR_FILE_THPS) * HPAGE_CONT_PTE_NR);
+	show_val_kb(m, "FilePmdMapped:  ",
+			global_node_page_state(NR_FILE_PMDMAPPED) * HPAGE_CONT_PTE_NR);
+	show_val_kb(m, "HugePagePool:   ", cont_pte_pool_total_pages());
+	show_val_kb(m, "DoubleMapTHP:   ",
+			 atomic_long_read(&cont_pte_double_map_count) * HPAGE_CONT_PTE_NR);
+#endif
 #endif
 
 #ifdef CONFIG_CMA
@@ -182,7 +224,26 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 		hugetlb_report_meminfo(m);
 		arch_report_meminfo(m);
 	}
-
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#if defined CONFIG_ION && defined CONFIG_OPLUS_HEALTHINFO
+	show_val_kb(m, "IonTotalCache:   ", global_zone_page_state(NR_IONCACHE_PAGES));
+	show_val_kb(m, "IonTotalUsed:   ", ion_total() >> PAGE_SHIFT);
+#ifdef CONFIG_OPLUS_ION_BOOSTPOOL
+	show_val_kb(m, "RsvPool:        ", atomic64_read(&boost_pool_pages));
+#endif /* CONFIG_OPLUS_ION_BOOSTPOOL */
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_HEALTHINFO
+	show_val_kb(m, "GPUTotalUsed:   ", gpu_total() >> PAGE_SHIFT);
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+#ifdef CONFIG_HYBRIDSWAP
+	trace_android_vh_meminfo_proc_show(m);
+#endif
+#ifdef CONFIG_OPLUS_SENSITIVE_MEM_ALLOC_OPT
+	show_val_kb(m, "OMemFree:    ", (unsigned long)oplus_sensitive_mem_pages(3, 0));
+#endif
 	return 0;
 }
 

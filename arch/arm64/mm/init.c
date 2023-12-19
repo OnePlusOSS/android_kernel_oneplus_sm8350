@@ -556,6 +556,10 @@ void __init arm64_memblock_init(void)
 	dma_contiguous_reserve(arm64_dma_phys_limit);
 }
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+extern void __init cont_pte_cma_reserve(void);
+#endif
+
 void __init bootmem_init(void)
 {
 	unsigned long min, max;
@@ -574,6 +578,10 @@ void __init bootmem_init(void)
 	 * done after the fixed reservations.
 	 */
 	memblocks_present();
+
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+	cont_pte_cma_reserve();
+#endif
 
 	sparse_init();
 	zone_sizes_init(min, max);

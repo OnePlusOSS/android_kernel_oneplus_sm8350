@@ -521,7 +521,8 @@ static int icnss_fw_debug_show(struct seq_file *s, void *data)
 	seq_puts(s, "  VAL: 2 (CCPM test)\n");
 	seq_puts(s, "  VAL: 3 (Trigger Recovery)\n");
 	seq_puts(s, "  VAL: 4 (allow recursive recovery)\n");
-	seq_puts(s, "  VAL: 3 (Disallow recursive recovery)\n");
+	seq_puts(s, "  VAL: 5 (Disallow recursive recovery)\n");
+	seq_puts(s, "  VAL: 6 (Trigger power supply callback)\n");
 
 	seq_puts(s, "\nCMD: dynamic_feature_mask\n");
 	seq_puts(s, "  VAL: (64 bit feature mask)\n");
@@ -682,6 +683,9 @@ static ssize_t icnss_fw_debug_write(struct file *fp,
 		case 5:
 			icnss_disallow_recursive_recovery(&priv->pdev->dev);
 			break;
+		case 6:
+			power_supply_changed(priv->batt_psy);
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -766,7 +770,7 @@ static int icnss_control_params_debug_show(struct seq_file *s, void *data)
 
 	seq_puts(s, "\nCurrent value:\n");
 
-	seq_printf(s, "qmi_timeout: %u\n", priv->ctrl_params.qmi_timeout);
+	seq_printf(s, "qmi_timeout: %u\n", jiffies_to_msecs(priv->ctrl_params.qmi_timeout));
 
 	return 0;
 }

@@ -54,9 +54,15 @@ extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
  * page table entry, taking care of 52-bit addresses.
  */
 #ifdef CONFIG_ARM64_PA_BITS_52
-#define __pte_to_phys(pte)	\
-	((pte_val(pte) & PTE_ADDR_LOW) | ((pte_val(pte) & PTE_ADDR_HIGH) << 36))
-#define __phys_to_pte_val(phys)	(((phys) | ((phys) >> 36)) & PTE_ADDR_MASK)
+static inline phys_addr_t __pte_to_phys(pte_t pte)
+{
+	return (pte_val(pte) & PTE_ADDR_LOW) |
+		((pte_val(pte) & PTE_ADDR_HIGH) << 36);
+}
+static inline pteval_t __phys_to_pte_val(phys_addr_t phys)
+{
+	return (phys | (phys >> 36)) & PTE_ADDR_MASK;
+}
 #else
 #define __pte_to_phys(pte)	(pte_val(pte) & PTE_ADDR_MASK)
 #define __phys_to_pte_val(phys)	(phys)
@@ -268,7 +274,10 @@ static inline void __check_racy_pte_update(struct mm_struct *mm, pte_t *ptep,
 	 * (ptep_set_access_flags safely changes valid ptes without going
 	 * through an invalid entry).
 	 */
-	VM_WARN_ONCE(!pte_young(pte),
+	 /*
+	  * split cont_pte(remove cont bit in pte ) will not change page young
+	  */
+	VM_WARN_ONCE(!pte_young(pte) && !IS_ENABLED(CONFIG_CONT_PTE_HUGEPAGE),
 		     "%s: racy access flag clearing: 0x%016llx -> 0x%016llx",
 		     __func__, pte_val(old_pte), pte_val(pte));
 	VM_WARN_ONCE(pte_write(old_pte) && !pte_dirty(pte),
@@ -284,6 +293,13 @@ static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 
 	__check_racy_pte_update(mm, ptep, pte);
 
+#ifdef CONFIG_CONT_PTE_HUGEPAGE
+#define UNALIGNED_CONT_PTE_WARN WARN_ON
+	/* 16 ptes of cont_pte should be set as a whole by copied cset_pte_at */
+	WARN_ON_ONCE((pte_cont(pte) || pte_cont(*ptep)) && current->mm);
+	UNALIGNED_CONT_PTE_WARN(pte_cont(pte) && ((pte_pfn(pte) & (CONT_PTES - 1)) !=
+			((unsigned long)ptep & (sizeof(pte) * CONT_PTES - 1)) / sizeof(pte)));
+#endif
 	set_pte(ptep, pte);
 }
 

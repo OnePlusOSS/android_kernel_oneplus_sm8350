@@ -16,6 +16,9 @@
 #include "kgsl_pwrscale.h"
 #include "kgsl_sysfs.h"
 #include "kgsl_trace.h"
+#ifdef CONFIG_OPLUS_GPU_FREQ_TRACE_POINT
+#include "kgsl_pwrtrace.h"
+#endif
 #include "kgsl_util.h"
 
 #define UPDATE_BUSY_VAL		1000000
