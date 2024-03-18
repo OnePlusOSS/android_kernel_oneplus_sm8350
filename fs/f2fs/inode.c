@@ -515,15 +515,6 @@ static int do_read_inode(struct inode *inode)
 			fi->i_compress_flag = le16_to_cpu(ri->i_compress_flag);
 			fi->i_cluster_size = 1 << fi->i_log_cluster_size;
 			set_inode_flag(inode, FI_COMPRESSED_FILE);
-#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
-			if (ri->i_compr_blocks || is_inode_flag_set(inode, FI_COMPRESS_RELEASED)) {
-				set_inode_flag(inode, FI_ENABLE_COMPRESS);
-				if (!is_sbi_flag_set(sbi, SBI_POR_DOING) &&
-				    !is_inode_flag_set(inode, FI_COMPRESS_RELEASED)) {
-					f2fs_delay_release_compress_blocks(inode);
-				}
-			}
-#endif
 		}
 	}
 
@@ -870,15 +861,6 @@ void f2fs_evict_inode(struct inode *inode)
 
 	if (inode->i_nlink || is_bad_inode(inode))
 		goto no_delete;
-
-#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
-	if (f2fs_compressed_file(inode) &&
-	    delayed_work_pending(&F2FS_I(inode)->release_dwork)) {
-		bool pending;
-		pending = cancel_delayed_work_sync(&F2FS_I(inode)->release_dwork);
-		f2fs_bug_on(sbi, pending);
-	}
-#endif
 
 	err = dquot_initialize(inode);
 	if (err) {

@@ -302,23 +302,23 @@ static ssize_t f2fs_sbi_show(struct f2fs_attr *a,
 	if (!strcmp(a->attr.name, "compress_extension")) {
 		int len = 0, i;
 
-		down_read(&sbi->sb_lock);
+		f2fs_down_read(&sbi->sb_lock);
 		for (i = 0; i < F2FS_OPTION(sbi).compress_ext_cnt; i++) {
 			if (!strlen(F2FS_OPTION(sbi).extensions[i]))
 				continue;
 			len += scnprintf(buf + len, PAGE_SIZE - len, "%s\n",
 					 F2FS_OPTION(sbi).extensions[i]);
 		}
-		up_read(&sbi->sb_lock);
+		f2fs_up_read(&sbi->sb_lock);
 		return len;
 	}
 
 	if (!strcmp(a->attr.name, "compress_log_size")) {
 		int log_size;
 
-		down_read(&sbi->sb_lock);
+		f2fs_down_read(&sbi->sb_lock);
 		log_size = F2FS_OPTION(sbi).compress_log_size;
-		up_read(&sbi->sb_lock);
+		f2fs_up_read(&sbi->sb_lock);
 		return sysfs_emit(buf, "%d\n", log_size);
 	}
 #endif
@@ -363,7 +363,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 		if (strlen(name) >= F2FS_EXTENSION_LEN)
 			return -EINVAL;
 
-		down_write(&sbi->sb_lock);
+		f2fs_down_write(&sbi->sb_lock);
 
 		ret = f2fs_update_extension_list(sbi, name, hot, set);
 		if (ret)
@@ -373,7 +373,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 		if (ret)
 			f2fs_update_extension_list(sbi, name, hot, !set);
 out:
-		up_write(&sbi->sb_lock);
+		f2fs_up_write(&sbi->sb_lock);
 		return ret ? ret : count;
 	}
 
@@ -398,7 +398,7 @@ out:
 		}
 
 		ext = F2FS_OPTION(sbi).extensions;
-		down_write(&sbi->sb_lock);
+		f2fs_down_write(&sbi->sb_lock);
 		memset(ext, 0, sizeof(F2FS_OPTION(sbi).extensions));
 		memcpy(ext, extensions, ext_cnt * F2FS_EXTENSION_LEN);
 		F2FS_OPTION(sbi).compress_ext_cnt = ext_cnt;
@@ -406,7 +406,7 @@ out:
 		 * no need to persist the new extensions since RUS could
 		 * update it manually
 		 */
-		up_write(&sbi->sb_lock);
+		f2fs_up_write(&sbi->sb_lock);
 		return count;
 	}
 #endif
@@ -530,9 +530,9 @@ out:
 	if (!strcmp(a->attr.name, "compress_log_size")) {
 		if (t < MIN_COMPRESS_LOG_SIZE || t > MAX_COMPRESS_LOG_SIZE)
 			return -EINVAL;
-		down_write(&sbi->sb_lock);
+		f2fs_down_write(&sbi->sb_lock);
 		F2FS_OPTION(sbi).compress_log_size = (unsigned char)t;
-		up_write(&sbi->sb_lock);
+		f2fs_up_write(&sbi->sb_lock);
 		return count;
 	}
 #endif

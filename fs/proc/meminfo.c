@@ -106,11 +106,6 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	chp_pool_pages -= min(chp_pool_pages / 2, cont_pte_pool_high());
 	sreclaimable += chp_pool_pages;
 #endif
-#ifdef CONFIG_CONT_PTE_HUGEPAGE
-	chp_pool_pages = cont_pte_pool_total_pages();
-	chp_pool_pages -= min(chp_pool_pages / 2, cont_pte_pool_high());
-	sreclaimable += chp_pool_pages;
-#endif
 	sunreclaim = global_node_page_state(NR_SLAB_UNRECLAIMABLE);
 
 	show_val_kb(m, "MemTotal:       ", i.totalram);

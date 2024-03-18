@@ -961,7 +961,7 @@ config DYNAMIC_TUNNING_SWAPPINESS
 config CONT_PTE_HUGEPAGE
 	bool "Cont Pte Hugepage support"
 	select TRANSPARENT_HUGEPAGE
-	default n
+	default y
 	help
 	  Try to THP-like Hugepages based on ARM64 cont-pte.
 
