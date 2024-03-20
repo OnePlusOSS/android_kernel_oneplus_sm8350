@@ -1261,17 +1261,17 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 	/* Initialize f2fs-specific inode info */
 	atomic_set(&fi->dirty_pages, 0);
 	atomic_set(&fi->i_compr_blocks, 0);
-	init_rwsem(&fi->i_sem);
+	init_f2fs_rwsem(&fi->i_sem);
 	spin_lock_init(&fi->i_size_lock);
 	INIT_LIST_HEAD(&fi->dirty_list);
 	INIT_LIST_HEAD(&fi->gdirty_list);
 	INIT_LIST_HEAD(&fi->inmem_ilist);
 	INIT_LIST_HEAD(&fi->inmem_pages);
 	mutex_init(&fi->inmem_lock);
-	init_rwsem(&fi->i_gc_rwsem[READ]);
-	init_rwsem(&fi->i_gc_rwsem[WRITE]);
-	init_rwsem(&fi->i_mmap_sem);
-	init_rwsem(&fi->i_xattr_sem);
+	init_f2fs_rwsem(&fi->i_gc_rwsem[READ]);
+	init_f2fs_rwsem(&fi->i_gc_rwsem[WRITE]);
+	init_f2fs_rwsem(&fi->i_mmap_sem);
+	init_f2fs_rwsem(&fi->i_xattr_sem);
 
 	/* Will be used by directory only */
 	fi->i_dir_level = F2FS_SB(sb)->dir_level;
@@ -1507,11 +1507,6 @@ static void f2fs_put_super(struct super_block *sb)
 	f2fs_destroy_node_manager(sbi);
 	f2fs_destroy_segment_manager(sbi);
 
-#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
-	if (sbi->delay_release_wq)
-		destroy_workqueue(sbi->delay_release_wq);
-#endif
-
 	f2fs_destroy_post_read_wq(sbi);
 
 	kvfree(sbi->ckpt);
@@ -1562,9 +1557,9 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 
 		cpc.reason = __get_cp_reason(sbi);
 
-		down_write(&sbi->gc_lock);
+		f2fs_down_write(&sbi->gc_lock);
 		err = f2fs_write_checkpoint(sbi, &cpc);
-		up_write(&sbi->gc_lock);
+		f2fs_up_write(&sbi->gc_lock);
 	}
 	f2fs_trace_ios(NULL, 1);
 
@@ -1954,12 +1949,12 @@ static void default_options(struct f2fs_sb_info *sbi)
 #ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
 	F2FS_OPTION(sbi).compress_mode = COMPR_MODE_USER;
 	F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_OUTPUT;
-	strcpy(F2FS_OPTION(sbi).extensions[i++], "odex");
-	strcpy(F2FS_OPTION(sbi).extensions[i++], "vdex");
-	strcpy(F2FS_OPTION(sbi).extensions[i++], "so");
-	strcpy(F2FS_OPTION(sbi).extensions[i++], "dex");
-	strcpy(F2FS_OPTION(sbi).extensions[i++], "wxapkg");
-	strcpy(F2FS_OPTION(sbi).extensions[i++], "js");
+	//strcpy(F2FS_OPTION(sbi).extensions[i++], "odex");
+	//strcpy(F2FS_OPTION(sbi).extensions[i++], "vdex");
+	//strcpy(F2FS_OPTION(sbi).extensions[i++], "so");
+	//strcpy(F2FS_OPTION(sbi).extensions[i++], "dex");
+	//strcpy(F2FS_OPTION(sbi).extensions[i++], "wxapkg");
+	//strcpy(F2FS_OPTION(sbi).extensions[i++], "js");
 	F2FS_OPTION(sbi).compress_ext_cnt = (unsigned char)i;
 #else
 	F2FS_OPTION(sbi).compress_mode = COMPR_MODE_FS;
@@ -2013,7 +2008,7 @@ static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 	f2fs_update_time(sbi, DISABLE_TIME);
 
 	while (!f2fs_time_over(sbi, DISABLE_TIME)) {
-		down_write(&sbi->gc_lock);
+		f2fs_down_write(&sbi->gc_lock);
 		err = f2fs_gc(sbi, true, false, NULL_SEGNO);
 		if (err == -ENODATA) {
 			err = 0;
@@ -2035,7 +2030,7 @@ static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 		goto restore_flag;
 	}
 
-	down_write(&sbi->gc_lock);
+	f2fs_down_write(&sbi->gc_lock);
 	cpc.reason = CP_PAUSE;
 	set_sbi_flag(sbi, SBI_CP_DISABLED);
 	err = f2fs_write_checkpoint(sbi, &cpc);
@@ -2047,7 +2042,7 @@ static int f2fs_disable_checkpoint(struct f2fs_sb_info *sbi)
 	spin_unlock(&sbi->stat_lock);
 
 out_unlock:
-	up_write(&sbi->gc_lock);
+	f2fs_up_write(&sbi->gc_lock);
 restore_flag:
 	sbi->sb->s_flags = s_flags;	/* Restore SB_RDONLY status */
 	return err;
@@ -2067,12 +2062,12 @@ static void f2fs_enable_checkpoint(struct f2fs_sb_info *sbi)
 	if (unlikely(retry < 0))
 		f2fs_warn(sbi, "checkpoint=enable has some unwritten data.");
 
-	down_write(&sbi->gc_lock);
+	f2fs_down_write(&sbi->gc_lock);
 	f2fs_dirty_to_prefree(sbi);
 
 	clear_sbi_flag(sbi, SBI_CP_DISABLED);
 	set_sbi_flag(sbi, SBI_IS_DIRTY);
-	up_write(&sbi->gc_lock);
+	f2fs_up_write(&sbi->gc_lock);
 
 	f2fs_sync_fs(sbi->sb, 1);
 }
@@ -2560,11 +2555,11 @@ int f2fs_quota_sync(struct super_block *sb, int type)
 		 *			      down_read(quota_sem)
 		 */
 		f2fs_lock_op(sbi);
-		down_read(&sbi->quota_sem);
+		f2fs_down_read(&sbi->quota_sem);
 
 		ret = f2fs_quota_sync_file(sbi, cnt);
 
-		up_read(&sbi->quota_sem);
+		f2fs_up_read(&sbi->quota_sem);
 		f2fs_unlock_op(sbi);
 
 		if (!f2fs_sb_has_quota_ino(sbi))
@@ -2690,11 +2685,11 @@ static int f2fs_dquot_commit(struct dquot *dquot)
 	struct f2fs_sb_info *sbi = F2FS_SB(dquot->dq_sb);
 	int ret;
 
-	down_read_nested(&sbi->quota_sem, SINGLE_DEPTH_NESTING);
+	f2fs_down_read_nested(&sbi->quota_sem, SINGLE_DEPTH_NESTING);
 	ret = dquot_commit(dquot);
 	if (ret < 0)
 		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
-	up_read(&sbi->quota_sem);
+	f2fs_up_read(&sbi->quota_sem);
 	return ret;
 }
 
@@ -2703,11 +2698,11 @@ static int f2fs_dquot_acquire(struct dquot *dquot)
 	struct f2fs_sb_info *sbi = F2FS_SB(dquot->dq_sb);
 	int ret;
 
-	down_read(&sbi->quota_sem);
+	f2fs_down_read(&sbi->quota_sem);
 	ret = dquot_acquire(dquot);
 	if (ret < 0)
 		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
-	up_read(&sbi->quota_sem);
+	f2fs_up_read(&sbi->quota_sem);
 	return ret;
 }
 
@@ -3427,14 +3422,14 @@ static void init_sb_info(struct f2fs_sb_info *sbi)
 
 	INIT_LIST_HEAD(&sbi->s_list);
 	mutex_init(&sbi->umount_mutex);
-	init_rwsem(&sbi->io_order_lock);
+	init_f2fs_rwsem(&sbi->io_order_lock);
 	spin_lock_init(&sbi->cp_lock);
 
 	sbi->dirty_device = 0;
 	spin_lock_init(&sbi->dev_lock);
 
-	init_rwsem(&sbi->sb_lock);
-	init_rwsem(&sbi->pin_sem);
+	init_f2fs_rwsem(&sbi->sb_lock);
+	init_f2fs_rwsem(&sbi->pin_sem);
 }
 
 static int init_percpu_info(struct f2fs_sb_info *sbi)
@@ -3847,7 +3842,7 @@ try_onemore:
 #endif
 
 #ifdef CONFIG_F2FS_APPBOOST
-	sbi->appboost = 1;
+	sbi->appboost = 0;
 #define APPBOOST_MAX_BLOCKS 51200
 	sbi->appboost_max_blocks = APPBOOST_MAX_BLOCKS;
 #endif
@@ -3869,11 +3864,11 @@ try_onemore:
 
 	/* init f2fs-specific super block info */
 	sbi->valid_super_block = valid_super_block;
-	init_rwsem(&sbi->gc_lock);
+	init_f2fs_rwsem(&sbi->gc_lock);
 	mutex_init(&sbi->writepages);
-	init_rwsem(&sbi->cp_global_sem);
-	init_rwsem(&sbi->node_write);
-	init_rwsem(&sbi->node_change);
+	init_f2fs_rwsem(&sbi->cp_global_sem);
+	init_f2fs_rwsem(&sbi->node_write);
+	init_f2fs_rwsem(&sbi->node_change);
 
 	/* disallow all the data/node/meta page writes */
 	set_sbi_flag(sbi, SBI_POR_DOING);
@@ -3899,18 +3894,18 @@ try_onemore:
 		}
 
 		for (j = HOT; j < n; j++) {
-			init_rwsem(&sbi->write_io[i][j].io_rwsem);
+			init_f2fs_rwsem(&sbi->write_io[i][j].io_rwsem);
 			sbi->write_io[i][j].sbi = sbi;
 			sbi->write_io[i][j].bio = NULL;
 			spin_lock_init(&sbi->write_io[i][j].io_lock);
 			INIT_LIST_HEAD(&sbi->write_io[i][j].io_list);
 			INIT_LIST_HEAD(&sbi->write_io[i][j].bio_list);
-			init_rwsem(&sbi->write_io[i][j].bio_list_lock);
+			init_f2fs_rwsem(&sbi->write_io[i][j].bio_list_lock);
 		}
 	}
 
-	init_rwsem(&sbi->cp_rwsem);
-	init_rwsem(&sbi->quota_sem);
+	init_f2fs_rwsem(&sbi->cp_rwsem);
+	init_f2fs_rwsem(&sbi->quota_sem);
 	init_waitqueue_head(&sbi->cp_wait);
 	init_sb_info(sbi);
 
@@ -3935,16 +3930,6 @@ try_onemore:
 	err = f2fs_init_page_array_cache(sbi);
 	if (err)
 		goto free_xattr_cache;
-
-#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
-	sbi->delay_release_wq = alloc_workqueue("f2fs_delay_release_wq",
-						WQ_UNBOUND | WQ_HIGHPRI,
-						num_online_cpus());
-	if (!sbi->delay_release_wq) {
-		err = -ENOMEM;
-		goto free_xattr_cache;
-	}
-#endif
 
 	/* get an inode for meta space */
 	sbi->meta_inode = f2fs_iget(sb, F2FS_META_INO(sbi));
@@ -4294,12 +4279,6 @@ static void kill_f2fs_super(struct super_block *sb)
 		f2fs_stop_discard_thread(sbi);
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
-#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
-		if (sbi->delay_release_wq) {
-			destroy_workqueue(sbi->delay_release_wq);
-			sbi->delay_release_wq = NULL;
-		}
-#endif
 		/*
 		 * latter evict_inode() can bypass checking and invalidating
 		 * compress inode cache.
