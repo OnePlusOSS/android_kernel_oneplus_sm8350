@@ -1143,9 +1143,10 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				break;
 			}
 			name = match_strdup(&args[0]);
-			if (!strcmp(name, "fixed-input")) {
+			/* fix coverity error: Dereference null return value name*/
+			if (name && !strcmp(name, "fixed-input")) {
 				F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_INPUT;
-			} else if (!strcmp(name, "fixed-output")) {
+			} else if (name && !strcmp(name, "fixed-output")) {
 				if (F2FS_OPTION(sbi).compress_algorithm != COMPRESS_LZ4 ||
 				    F2FS_OPTION(sbi).compress_level != 0) {
 					f2fs_err(sbi, "fixed-output compress layout can only work on lz4");
@@ -1949,8 +1950,8 @@ static void default_options(struct f2fs_sb_info *sbi)
 #ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
 	F2FS_OPTION(sbi).compress_mode = COMPR_MODE_USER;
 	F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_OUTPUT;
-	//strcpy(F2FS_OPTION(sbi).extensions[i++], "odex");
-	//strcpy(F2FS_OPTION(sbi).extensions[i++], "vdex");
+	strcpy(F2FS_OPTION(sbi).extensions[i++], "odex");
+	strcpy(F2FS_OPTION(sbi).extensions[i++], "vdex");
 	//strcpy(F2FS_OPTION(sbi).extensions[i++], "so");
 	//strcpy(F2FS_OPTION(sbi).extensions[i++], "dex");
 	//strcpy(F2FS_OPTION(sbi).extensions[i++], "wxapkg");

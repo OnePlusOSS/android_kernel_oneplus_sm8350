@@ -1519,7 +1519,8 @@ static int __dwc3_gadget_kick_transfer(struct dwc3_ep *dep)
 			dwc3_gadget_move_cancelled_request(req);
 
 		/* If ep isn't started, then there's no end transfer pending */
-		if (!(dep->flags & DWC3_EP_END_TRANSFER_PENDING))
+		if ((dep->flags & DWC3_EP_TRANSFER_STARTED) &&
+		    !(dep->flags & DWC3_EP_END_TRANSFER_PENDING))
 			dwc3_gadget_ep_cleanup_cancelled_requests(dep);
 
 		return ret;
@@ -2343,13 +2344,7 @@ static int dwc3_device_core_soft_reset(struct dwc3 *dwc)
 
 done:
 	/* phy sync delay as per data book */
-	msleep(50);
-
-	/*
-	 * Soft reset clears the block on the doorbell,
-	 * set it back to prevent unwanted writes to the doorbell.
-	 */
-	dwc3_notify_event(dwc, DWC3_CONTROLLER_NOTIFY_CLEAR_DB, 0);
+	mb();
 
 	return 0;
 }
@@ -2583,9 +2578,6 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 
 	/* prevent pending bh to run later */
 	flush_work(&dwc->bh_work);
-
-	if (is_on)
-		dwc3_device_core_soft_reset(dwc);
 
 	dwc3_notify_event(dwc, DWC3_CONTROLLER_PULLUP, is_on);
 
@@ -3653,7 +3645,11 @@ int dwc3_stop_active_transfer(struct dwc3_ep *dep, bool force, bool interrupt)
 	WARN_ON_ONCE(ret);
 	dep->resource_index = 0;
 
-	dbg_log_string("%s(%d): endxfer ret:%d", dep->name, dep->number, ret);
+	if (ret == -ETIMEDOUT) {
+		dbg_log_string("%s(%d): endxfer ret:%d",
+				dep->name, dep->number, ret);
+		return ret;
+	}
 
 	if (!interrupt)
 		dep->flags &= ~DWC3_EP_TRANSFER_STARTED;

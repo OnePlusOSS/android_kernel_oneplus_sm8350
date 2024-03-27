@@ -291,6 +291,10 @@ static int dwc3_core_soft_reset(struct dwc3 *dwc)
 	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST)
 		return 0;
 
+
+	reg = dwc3_readl(dwc->regs, DWC3_GSTS);
+	pr_err("K: GSTS before dctl reset: 0x%x", reg);
+
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	reg |= DWC3_DCTL_CSFTRST;
 	dwc3_writel(dwc->regs, DWC3_DCTL, reg);
@@ -450,6 +454,16 @@ static int dwc3_alloc_event_buffers(struct dwc3 *dwc, unsigned length)
 int dwc3_event_buffers_setup(struct dwc3 *dwc)
 {
 	struct dwc3_event_buffer	*evt;
+	u32 reg;
+
+	reg = dwc3_readl(dwc->regs, DWC3_GSTS);
+	pr_err("K: GSTS before ev buf setup: 0x%x", reg);
+
+	if (reg & DWC3_GSTS_CSR_TIMEOUT) {
+		dwc3_writel(dwc->regs, DWC3_GSTS, reg);
+		reg = dwc3_readl(dwc->regs, DWC3_GSTS);
+		pr_err("K: GSTS after clearing the timeout bit: 0x%x", reg);
+	}
 
 	evt = dwc->ev_buf;
 	evt->lpos = 0;

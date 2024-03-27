@@ -23,6 +23,7 @@ static int __init game_ctrl_init(void)
 	cpu_load_init();
 	cpufreq_limits_init();
 	task_util_init();
+	vt_cpufreq_init();
 	rt_info_init();
 	dstate_dump_init();
 

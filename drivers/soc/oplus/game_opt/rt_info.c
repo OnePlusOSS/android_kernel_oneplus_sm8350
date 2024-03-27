@@ -18,6 +18,8 @@
 #include <linux/slab.h>
 #include <linux/gfp.h>
 #include <linux/spinlock.h>
+#include <linux/uaccess.h>
+#include <linux/sched/task.h>
 
 #include "game_ctrl.h"
 
@@ -271,7 +273,7 @@ static int rt_info_show(struct seq_file *m, void *v)
 		num1 = min(num1, MAX_TASK_NR);
 		for (i = 0; i < num1; i++) {
 			if (get_task_name(results1[i].waker_tid, waker_name)) {
-				len += snprintf(page + len, RT_PAGE_SIZE - len, "%d;%s;%d;%d;%d\n",
+				len += snprintf(page + len, RT_PAGE_SIZE - len, "%d;%s;%d;%llu;%d\n",
 					results1[i].waker_tid, waker_name, wakee1_tid,
 					results1[i].total, results1[i].increment);
 			}
@@ -282,7 +284,7 @@ static int rt_info_show(struct seq_file *m, void *v)
 		num2 = min(num2, MAX_TASK_NR);
 		for (i = 0; i < num2; i++) {
 			if (get_task_name(results2[i].waker_tid, waker_name)) {
-				len += snprintf(page + len, RT_PAGE_SIZE - len, "%d;%s;%d;%d;%d\n",
+				len += snprintf(page + len, RT_PAGE_SIZE - len, "%d;%s;%d;%llu;%d\n",
 					results2[i].waker_tid, waker_name, wakee2_tid,
 					results2[i].total, results2[i].increment);
 			}

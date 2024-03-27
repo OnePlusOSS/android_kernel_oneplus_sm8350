@@ -16,10 +16,12 @@
 #include <linux/proc_fs.h>
 #include <linux/cpufreq.h>
 #include <linux/sched/cpufreq.h>
+#include <linux/sched/task.h>
 
 #include <trace/hooks/sched.h>
 
 #include "game_ctrl.h"
+#include "../../../../kernel/sched/sched.h"
 
 struct task_runtime_info {
 	struct list_head node;

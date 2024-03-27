@@ -3250,6 +3250,9 @@ retry:
 	while (!done && !retry && (index <= end)) {
 		nr_pages = find_get_pages_range_tag(mapping, &index, end,
 				tag, max_pages, pages);
+		/* fix coverity error: Dereferencing a pointer that might be NULL pages */
+		if (!pages)
+			break;
 		if (nr_pages == 0)
 			break;
 

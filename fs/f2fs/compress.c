@@ -1274,7 +1274,7 @@ static int f2fs_fixed_output_decompress_cluster(struct decompress_io_ctx *dic)
 	for (blkidx = 0; blkidx < dic->nr_cpages; blkidx++) {
 		int end_ofs = 0;
 		bool copied = false;
-		unsigned int lstart = -1, lend, count = 0, last;
+		unsigned int lstart = -1, lend = 0, count = 0, last;
 		void *unmap_addr = NULL;
 
 		if (!dic->cpages[blkidx])
@@ -1294,6 +1294,12 @@ static int f2fs_fixed_output_decompress_cluster(struct decompress_io_ctx *dic)
 			count++;
 			if (dic->rpages[i])
 				lend = lstart + count;
+		}
+
+		/*fix coverity error: Out-of-bounds read array dic->di*/
+		if(lstart >= dic->cluster_size) {
+			f2fs_bug_on(sbi, 1);
+			return -EIO;
 		}
 
 		/* should consider last cluster is not full, di[lstart + count]

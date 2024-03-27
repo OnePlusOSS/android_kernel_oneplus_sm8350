@@ -3129,7 +3129,7 @@ void __init cont_pte_cma_reserve(void)
 			cont_pte_pool_cma_size = ALIGN_DOWN((memblock_phys_mem_size() - memblock_reserved_size()) * 1 / 4 + SZ_1G,
 					CONT_PTE_CMA_CHUNK_SIZE);
 		else
-			cont_pte_pool_cma_size = ALIGN_DOWN((memblock_phys_mem_size() - memblock_reserved_size()) * 1 / 4,
+			cont_pte_pool_cma_size = ALIGN_DOWN((memblock_phys_mem_size() - memblock_reserved_size()) * 1 / 4 + SZ_512M,
 					CONT_PTE_CMA_CHUNK_SIZE);
 	}
 

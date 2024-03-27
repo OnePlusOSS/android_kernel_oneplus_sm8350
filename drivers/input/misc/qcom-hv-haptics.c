@@ -13,6 +13,7 @@
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
+#include <linux/input/qcom-hv-haptics.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/module.h>
@@ -608,6 +609,7 @@ struct haptics_chip {
 	struct device_node		*pbs_node;
 	struct class			hap_class;
 	struct regulator		*hpwr_vreg;
+	struct notifier_block		hbst_off_notifier;
 	struct hrtimer			hbst_off_timer;
 	int				fifo_empty_irq;
 	u32				hpwr_voltage_mv;
@@ -731,6 +733,20 @@ static bool is_haptics_external_powered(struct haptics_chip *chip)
 	/* Powered by HBOOST */
 	return false;
 }
+
+static RAW_NOTIFIER_HEAD(hbst_off_notifier);
+
+int register_hbst_off_notifier(struct notifier_block *nb)
+{
+	return raw_notifier_chain_register(&hbst_off_notifier, nb);
+}
+EXPORT_SYMBOL(register_hbst_off_notifier);
+
+int unregister_hbst_off_notifier(struct notifier_block *nb)
+{
+	return raw_notifier_chain_unregister(&hbst_off_notifier, nb);
+}
+EXPORT_SYMBOL(unregister_hbst_off_notifier);
 
 static int haptics_read(struct haptics_chip *chip,
 		u16 base, u8 offset, u8 *val, u32 length)
@@ -5826,15 +5842,17 @@ static enum hrtimer_restart haptics_disable_hbst_timer(struct hrtimer *timer)
 	struct haptics_chip *chip = container_of(timer,
 			struct haptics_chip, hbst_off_timer);
 	int rc;
+	int hbst_disabled = 1;
 
 	rc = haptics_boost_vreg_enable(chip, false);
-	if (rc < 0)
+	if (rc < 0) {
 		dev_err(chip->dev, "disable boost vreg failed, rc=%d\n", rc);
+	} else {
 #ifndef OPLUS_FEATURE_CHG_BASIC
-	else
 		dev_dbg(chip->dev, "boost vreg is disabled\n");
 #endif
-
+		rc = raw_notifier_call_chain(&hbst_off_notifier, HBST_OFF, &hbst_disabled);
+	}
 	return HRTIMER_NORESTART;
 }
 

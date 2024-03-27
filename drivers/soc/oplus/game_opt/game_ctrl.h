@@ -5,7 +5,8 @@
 
 #ifndef __GAME_CTRL_H__
 #define __GAME_CTRL_H__
-#include "../../../../kernel/sched/sched.h"
+#include <linux/types.h>
+#include <linux/sched.h>
 
 #define GAME_CTRL_MAGIC 'x'
 
@@ -69,10 +70,16 @@ struct cpu_freq_info {
 
 extern struct proc_dir_entry *game_opt_dir;
 
+struct cpufreq_policy;
+struct task_struct;
+struct cpumask;
+
 int cpu_load_init(void);
 int cpufreq_limits_init(void);
 int task_util_init(void);
 int rt_info_init(void);
+int vt_cpufreq_init(void);
+extern void show_cpuinfo_max_freq_hook(struct cpufreq_policy *policy, unsigned int *max_freq);
 void rt_task_dead(struct task_struct *task);
 int dstate_dump_init(void);
 void set_dstate_interested_threads(pid_t *tids, int num);

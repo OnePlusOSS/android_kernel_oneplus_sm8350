@@ -8,6 +8,7 @@
 #include <linux/proc_fs.h>
 #include <linux/errno.h>
 #include <linux/stacktrace.h>
+#include <linux/uaccess.h>
 
 #include "game_ctrl.h"
 
@@ -72,7 +73,7 @@ static void g_dstate_dump_stack(struct task_struct *task, u64 delay_ms)
 	wakee_nr_entries = wakee_dummy.nr_entries;
 	caller = (void *)get_wchan(task);
 
-	snprintf(buf, sizeof(buf), "delay_ms=%d, waker_nr_entries=%d, wakee_nr_entries=%d"
+	snprintf(buf, sizeof(buf), "delay_ms=%llu, waker_nr_entries=%d, wakee_nr_entries=%d"
 		", waker:%s tid:%d pid:%d, wakee:%s tid:%d pid:%d, blocked_func=%pS\n",
 		delay_ms, waker_nr_entries, wakee_nr_entries,
 		current->comm, current->pid, current->tgid, task->comm, task->pid, task->tgid, caller);

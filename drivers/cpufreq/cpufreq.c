@@ -47,6 +47,10 @@
 #include <linux/sched_info/osi_freq.h>
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GAME_OPT)
+#include "../soc/oplus/game_opt/game_ctrl.h"
+#endif
+
 static LIST_HEAD(cpufreq_policy_list);
 
 /* Macros to iterate over CPU policies */
@@ -745,6 +749,10 @@ static ssize_t show_cpuinfo_max_freq(struct cpufreq_policy *policy, char *buf)
 		freq = cpuinfo_max_freq_cached << 1;
 	else
 		freq = policy->cpuinfo.max_freq;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_GAME_OPT)
+	show_cpuinfo_max_freq_hook(policy, &freq);
+#endif
 
 	return scnprintf(buf, PAGE_SIZE, "%u\n", freq);
 }
