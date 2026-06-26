@@ -1,0 +1,79 @@
+name: Build OnePlus 9 (lemonade) Kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1️⃣ Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 2️⃣ Install Deps
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            bc bison flex libssl-dev make cpio ccache \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi \
+            clang lld
+
+      - name: 3️⃣ Pick defconfig (Lahaina = SM8350, 一加9/9Pro/9R 共用)
+        run: |
+          # 一加9标准版(lemonade)和9Pro(lemonadep)共用 lahaina 平台 config
+          # 差别在 DTB，不是 defconfig
+          DEFCONFIG="vendor/lahaina_GKI.config"
+          
+          ls arch/arm64/configs/vendor/ | grep -i lahaina
+          
+          if [ ! -f "arch/arm64/configs/$DEFCONFIG" ]; then
+            echo "❌ $DEFCONFIG not found, check list above"
+            exit 1
+          fi
+          
+          make O=out ARCH=arm64 $DEFCONFIG
+
+      - name: 4️⃣ Build
+        run: |
+          make -j$(nproc) O=out ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip
+
+      - name: 5️⃣ Package (一加9 标准版 = lemonade)
+        run: |
+          mkdir -p kernel_out
+          
+          # 内核镜像
+          cp out/arch/arm64/boot/Image.gz-dtb kernel_out/ 2>/dev/null || \
+          cp out/arch/arm64/boot/Image.gz kernel_out/ 2>/dev/null || \
+          cp out/arch/arm64/boot/Image kernel_out/ 2>/dev/null || true
+          
+          # DTB：一加9标准版对应 lemonade，9Pro 才是 lemonadep
+          # 把 lemonade dtb 也单独拷出来方便排查
+          find out/arch/arm64/boot/dts -name "sm8350*lemonade*.dtb" -exec cp {} kernel_out/ \;
+          
+          ls -lh kernel_out/
+
+      - name: 6️⃣ Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-lemonade
+          path: kernel_out/**
+
